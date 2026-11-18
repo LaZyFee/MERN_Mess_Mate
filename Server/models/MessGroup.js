@@ -15,6 +15,7 @@ const entrySchema = new mongoose.Schema({
 
 const messGroupSchema = new mongoose.Schema({
     name: { type: String, required: true },
+    code: { type: String, unique: true, index: true }, // join code, e.g. "MM-7K2QPX"
     admin: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     members: [{
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -35,6 +36,7 @@ const messGroupSchema = new mongoose.Schema({
 messGroupSchema.index({ admin: 1 });
 messGroupSchema.index({ 'members.user': 1 });
 messGroupSchema.index({ 'entries.date': 1 });
+messGroupSchema.index({ createdAt: -1 });
 
 const MessGroup = mongoose.model('MessGroup', messGroupSchema);
 export default MessGroup;

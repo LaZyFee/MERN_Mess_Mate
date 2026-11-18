@@ -6,6 +6,9 @@ const auth = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (!decoded?.user?.id || !/^[0-9a-fA-F]{24}$/.test(decoded.user.id)) {
+            return res.status(401).json({ msg: 'Token is not valid' });
+        }
         req.user = decoded.user;
         next();
     } catch (err) {
