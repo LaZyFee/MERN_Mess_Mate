@@ -26,6 +26,15 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: "",
     },
+    // Recipient consent for automated notifications (Doc §13)
+    whatsappConsent: {
+        type: Boolean,
+        default: true,
+    },
+    whatsappConsentAt: {
+        type: Date,
+        default: Date.now,
+    },
     password: {
         type: String,
         required: function () {
@@ -38,7 +47,6 @@ const userSchema = new mongoose.Schema({
     },
     messGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MessGroup' }],
 });
-
 
 userSchema.plugin(uniqueValidator);
 

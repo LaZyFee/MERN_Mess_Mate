@@ -5,7 +5,7 @@ import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema,
 import { validate } from '../validation/validate.js';
 import {
     signAccessToken, signRefreshToken, saveRefreshToken, clearRefreshToken,
-    verifyRefreshToken, randomToken,
+    verifyRefreshToken, randomToken, setRefreshTokenCookie, clearRefreshTokenCookie, getCookie,
 } from '../utils/tokens.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../utils/mailer.js';
 
@@ -22,11 +22,12 @@ const sendAuthResponse = async (res, user, status = 200) => {
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
     await saveRefreshToken(User, user.id, refreshToken);
+    setRefreshTokenCookie(res, refreshToken);
 
     res.status(status).json({
         user: safeUser(user),
         accessToken,
-        refreshToken, // client stores this and POSTs it to /refresh when access expires
+        refreshToken, // client stores this or relies on HttpOnly cookie
     });
 };
 
@@ -89,27 +90,28 @@ export const login = [
 // POST /api/users/refresh — exchange a valid refresh token for a new access token (rotation)
 export const refresh = async (req, res, next) => {
     try {
-        const { refreshToken } = req.body;
+        const refreshToken = req.body?.refreshToken || getCookie(req, 'refreshToken');
         if (!refreshToken) return res.status(400).json({ msg: 'Refresh token required' });
 
         const user = await verifyRefreshToken(User, refreshToken);
         if (!user) return res.status(401).json({ msg: 'Invalid or expired refresh token' });
 
-        // Rotate: old token is invalidated, a new pair is issued
+        // Rotate: old token is invalidated, a new pair is issued (and cookie updated)
         await sendAuthResponse(res, user);
     } catch (err) {
         next(err);
     }
 };
 
-// POST /api/users/logout — invalidate the stored refresh token
+// POST /api/users/logout — invalidate the stored refresh token and clear cookie
 export const logout = async (req, res, next) => {
     try {
-        const { refreshToken } = req.body;
+        const refreshToken = req.body?.refreshToken || getCookie(req, 'refreshToken');
         if (refreshToken) {
             const user = await verifyRefreshToken(User, refreshToken);
             if (user) await clearRefreshToken(User, user.id);
         }
+        clearRefreshTokenCookie(res);
         res.json({ msg: 'Logged out' });
     } catch (err) {
         next(err);

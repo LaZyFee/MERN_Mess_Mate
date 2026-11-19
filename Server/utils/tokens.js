@@ -43,3 +43,40 @@ export const verifyRefreshToken = async (User, token) => {
 };
 
 export const randomToken = () => crypto.randomBytes(32).toString('hex');
+
+// Cookie helpers for HttpOnly, SameSite token transport (Doc §15)
+export const getCookie = (req, name) => {
+    const header = req.headers?.cookie;
+    if (!header) return null;
+    const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+};
+
+export const setRefreshTokenCookie = (res, token) => {
+    const isProd = process.env.NODE_ENV === 'production';
+    const maxAge = REFRESH_TTL_DAYS * 24 * 60 * 60; // seconds
+    const sameSite = isProd ? 'Strict' : 'Lax';
+    const flags = [
+        `refreshToken=${encodeURIComponent(token)}`,
+        'HttpOnly',
+        'Path=/api/users',
+        `Max-Age=${maxAge}`,
+        `SameSite=${sameSite}`,
+    ];
+    if (isProd) flags.push('Secure');
+    res.setHeader('Set-Cookie', flags.join('; '));
+};
+
+export const clearRefreshTokenCookie = (res) => {
+    const isProd = process.env.NODE_ENV === 'production';
+    const flags = [
+        'refreshToken=',
+        'HttpOnly',
+        'Path=/api/users',
+        'Max-Age=0',
+        'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+        `SameSite=${isProd ? 'Strict' : 'Lax'}`,
+    ];
+    if (isProd) flags.push('Secure');
+    res.setHeader('Set-Cookie', flags.join('; '));
+};

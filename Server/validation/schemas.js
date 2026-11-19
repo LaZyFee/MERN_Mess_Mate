@@ -226,3 +226,183 @@ export const changePasswordSchema = z.object({
     currentPassword: z.string().min(1),
     newPassword: passwordSchema,
 });
+
+// validation schemas (all money fields are integer poisha)
+
+const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId');
+const month = z.string().regex(/^\d{4}-\d{2}$/, 'Month must be YYYY-MM');
+const poisha = z.number().int().min(1, 'Amount must be integer poisha ≥ 1');
+const splitMode = z.enum([
+    'meal_units', 'equal_all', 'equal_selected', 'member_days',
+    'fixed_amounts', 'weighted', 'usage', 'personal',
+]);
+
+export const groupIdParam = z.object({ groupId: objectId });
+export const idParam = z.object({ id: objectId });
+export const monthParam = z.object({ groupId: objectId, month });
+
+// ---- memberships ----
+export const createMembershipSchema = z.object({
+    userId: objectId.nullable().optional(),
+    displayName: z.string().trim().min(1).max(80),
+    startDate: z.string().min(4),
+    endDate: z.string().nullable().optional(),
+    role: z.enum(['owner', 'manager', 'treasurer', 'auditor', 'member']).optional(),
+    room: z.string().max(40).optional(),
+    weight: z.number().int().min(1).optional(),
+    isPlaceholder: z.boolean().optional(),
+});
+export const updateMembershipSchema = z.object({
+    role: z.enum(['owner', 'manager', 'treasurer', 'auditor', 'member']).optional(),
+    room: z.string().max(40).optional(),
+    weight: z.number().int().min(1).optional(),
+    endDate: z.string().nullable().optional(),
+    displayName: z.string().max(80).optional(),
+    linkUserId: objectId.optional(),
+    reason: z.string().max(300).optional(),
+});
+export const departSchema = z.object({
+    at: z.string().optional(),
+    reason: z.string().max(300).optional(),
+});
+
+// ---- policies ----
+export const publishPolicySchema = z.object({
+    effectiveFrom: month,
+    mealWeights: z.object({
+        breakfast: z.number().int().min(0).max(1000).optional(),
+        lunch: z.number().int().min(0).max(1000).optional(),
+        dinner: z.number().int().min(0).max(1000).optional(),
+    }).optional(),
+    allowedPortions: z.array(z.number()).optional(),
+    entryCutoffHour: z.number().int().min(0).max(23).optional(),
+    currency: z.string().optional(),
+    timezone: z.string().optional(),
+    requireExpenseApproval: z.boolean().optional(),
+    reviewGraceDays: z.number().int().min(0).optional(),
+});
+
+// ---- expenses ----
+export const createExpenseSchema = z.object({
+    supplierName: z.string().max(100).optional(),
+    description: z.string().max(200).optional(),
+    date: z.string().min(4),
+    costPeriod: month.optional(),
+    serviceStart: z.string().nullable().optional(),
+    serviceEnd: z.string().nullable().optional(),
+    isPayable: z.boolean().optional(),
+    receiptReference: z.string().max(100).optional(),
+    lines: z.array(z.object({
+        description: z.string().max(200).optional(),
+        categoryId: objectId,
+        amount: poisha,
+        splitMode: splitMode.nullable().optional(),
+        beneficiaries: z.array(objectId).optional(),
+        fixedAmounts: z.array(z.object({ membershipId: objectId, amount: poisha })).optional(),
+        weights: z.array(z.object({ membershipId: objectId, weight: z.number().int().min(1) })).optional(),
+        usageQuantities: z.array(z.object({ membershipId: objectId, quantity: z.number().min(0) })).optional(),
+    })).min(1),
+});
+export const expenseIdParam = z.object({ groupId: objectId, expenseId: objectId });
+export const reasonBody = z.object({ reason: z.string().max(300).optional() });
+
+// ---- money ----
+export const moneySchema = z.object({
+    kind: z.enum(['contribution', 'payout', 'supplier_payment', 'member_settlement', 'transfer', 'fee']),
+    amount: poisha,
+    fromMember: objectId.nullable().optional(),
+    toMember: objectId.nullable().optional(),
+    fromAccount: objectId.nullable().optional(),
+    toAccount: objectId.nullable().optional(),
+    supplierName: z.string().max(100).optional(),
+    method: z.enum(['cash', 'bkash', 'nagad', 'rocket', 'bank', 'other']).optional(),
+    reference: z.string().max(100).optional(),
+    paidAt: z.string().optional(),
+    evidenceUrl: z.string().max(500).optional(),
+});
+export const txIdParam = z.object({ groupId: objectId, txId: objectId });
+export const listMoneyQuery = z.object({
+    status: z.enum(['submitted', 'confirmed', 'rejected', 'reversed']).optional(),
+    kind: z.enum(['contribution', 'payout', 'supplier_payment', 'member_settlement', 'transfer', 'fee']).optional(),
+});
+export const fundSchema = z.object({
+    name: z.string().trim().min(1).max(60),
+    kind: z.enum(['cash', 'wallet', 'bank']),
+    maskedIdentifier: z.string().max(40).optional(),
+});
+export const custodianSchema = z.object({ newCustodianId: objectId });
+export const balanceParam = z.object({ groupId: objectId, membershipId: objectId });
+
+// ---- periods ----
+export const listExpenseQuery = z.object({
+    status: z.enum(['draft', 'submitted', 'approved', 'rejected', 'reversed']).optional(),
+    costPeriod: month.optional(),
+    payable: z.boolean().optional(),
+});
+export const finalizeSchema = z.object({
+    expectedRevision: z.number().int().min(0).optional(),
+    reason: z.string().max(300).optional(),
+});
+export const correctionSchema = z.object({
+    reason: z.string().max(300).optional(),
+    adjustment: z.record(z.string(), z.unknown()).optional(),
+});
+
+// ---- recurring ----
+export const recurringSchema = z.object({
+    name: z.string().trim().min(1).max(80),
+    categoryId: objectId.optional(),
+    amount: poisha,
+    splitMode: splitMode.optional(),
+    beneficiaries: z.array(objectId).optional(),
+    fixedAmounts: z.array(z.object({ membershipId: objectId, amount: poisha })).optional(),
+    weights: z.array(z.object({ membershipId: objectId, weight: z.number().int().min(1) })).optional(),
+    supplierName: z.string().max(100).optional(),
+    dueDayOfMonth: z.number().int().min(1).max(31).optional(),
+    effectiveFrom: month,
+    effectiveTo: month.nullable().optional(),
+});
+export const generateSchema = z.object({ costPeriod: month });
+export const ruleIdParam = z.object({ groupId: objectId, ruleId: objectId });
+
+// ---- reconciliation ----
+export const reconciliationSchema = z.object({
+    accountId: objectId,
+    asOf: z.string().optional(),
+    actualBalance: z.number().int(),
+});
+export const listReconciliationQuery = z.object({ accountId: objectId.optional() });
+export const resolveReconciliationSchema = z.object({
+    resolution: z.enum(['adjusted', 'accepted_shortage', 'found_cash', 'none']),
+    explanation: z.string().max(500).optional(),
+});
+export const recIdParam = z.object({ groupId: objectId, recId: objectId });
+
+// ---- disputes ----
+export const disputeSchema = z.object({
+    targetType: z.enum(['expense', 'money_transaction', 'statement_item']),
+    targetId: objectId,
+    reason: z.string().trim().min(1).max(1000),
+    statementId: objectId.optional(),
+    membershipId: objectId.optional(),
+});
+export const disputeIdParam = z.object({ groupId: objectId, disputeId: objectId });
+export const disputeRespondSchema = z.object({ text: z.string().min(1).max(1000) });
+export const disputeResolveSchema = z.object({
+    rejected: z.boolean().optional(),
+    note: z.string().max(500).optional(),
+    correctionJournalId: objectId.optional(),
+});
+export const disputeListQuery = z.object({ status: z.enum(['open', 'resolved', 'rejected']).optional() });
+
+// ---- notifications ----
+export const outboxQuery = z.object({
+    statementId: objectId.optional(),
+    state: z.enum(['pending', 'processing', 'sent', 'failed', 'skipped', 'not_configured']).optional(),
+});
+export const messageIdParam = z.object({ groupId: objectId, messageId: objectId });
+export const manualShareSchema = z.object({ statementId: objectId.optional() });
+
+// ---- sessions ----
+export const familyIdParam = z.object({ familyId: z.string().min(8) });
+export const revokeAllSchema = z.object({ exceptFamilyId: z.string().optional() });

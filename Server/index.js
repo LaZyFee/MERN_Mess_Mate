@@ -7,12 +7,27 @@ import connectDB from './config/db.js';
 import './config/passportJs.js';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
+import csrfProtection from './middleware/csrf.js';
 import userRouter from './routes/userRoutes.js';
 import messGroupRouter from './routes/messGroupRoutes.js';
 import mealRouter from './routes/mealRoutes.js';
 import expenseRouter from './routes/expenseRoutes.js';
 import summaryRouter from './routes/summaryRoutes.js';
 import statsRouter from './routes/statsRoutes.js';
+import membershipRoutes from './routes/membershipRoutes.js';
+import policyRoutes from './routes/policyRoutes.js';
+import periodRoutes from './routes/periodRoutes.js';
+import moneyRoutes from './routes/moneyRoutes.js';
+import statementRoutes from './routes/statementRoutes.js';
+import recurringRoutes from './routes/recurringRoutes.js';
+import reconciliationRoutes from './routes/reconciliationRoutes.js';
+import disputeRoutes from './routes/disputeRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import sessionRoutes from './routes/sessionRoutes.js';
+import attachmentRoutes from './routes/attachmentRoutes.js';
+import depositAssetRoutes from './routes/depositAssetRoutes.js';
+import { startOutboxWorker } from './services/outboxWorker.js';
+import { startScheduler } from './services/schedulerService.js';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -61,6 +76,7 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 // NoSQL injection sanitization is done in Server/validation/validate.js
 // (express-mongo-sanitize middleware reassigns req.query, which Express 5 forbids)
 app.use(hpp()); // HTTP parameter pollution defense
+app.use(csrfProtection); // CSRF protection for cookie-authenticated mutations
 
 // ---------- Session (only used for the Google OAuth handshake) ----------
 app.use(
@@ -87,6 +103,18 @@ app.use('/api/meals', generalLimiter, mealRouter);
 app.use('/api/expenses', generalLimiter, expenseRouter);
 app.use('/api/summary', generalLimiter, summaryRouter);
 app.use('/api/stats', generalLimiter, statsRouter);
+app.use('/api/memberships', generalLimiter, membershipRoutes);
+app.use('/api/policies', generalLimiter, policyRoutes);
+app.use('/api/periods', generalLimiter, periodRoutes);
+app.use('/api/money', generalLimiter, moneyRoutes);
+app.use('/api/statements', generalLimiter, statementRoutes);
+app.use('/api/recurring', generalLimiter, recurringRoutes);
+app.use('/api/reconciliation', generalLimiter, reconciliationRoutes);
+app.use('/api/disputes', generalLimiter, disputeRoutes);
+app.use('/api/notifications', generalLimiter, notificationRoutes);
+app.use('/api/sessions', generalLimiter, sessionRoutes);
+app.use('/api/attachments', generalLimiter, attachmentRoutes);
+app.use('/api/assets', generalLimiter, depositAssetRoutes);
 
 // ---------- Socket.IO (JWT-authenticated realtime updates) ----------
 const httpServer = createServer(app);
@@ -133,3 +161,9 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Background delivery worker (notification outbox → email/WhatsApp)
+startOutboxWorker();
+
+// Background scheduler (recurring rule draft generation & deadline reminders)
+startScheduler();

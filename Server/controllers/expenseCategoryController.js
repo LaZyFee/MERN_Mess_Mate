@@ -4,6 +4,56 @@ import MessGroup from '../models/MessGroup.js';
 import { categorySchema, categoryIdParamSchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 
+// Predefined editable Bangladesh household presets (Doc §6)
+export const BANGLADESH_PRESET_CATEGORIES = [
+    { name: 'Bazar / Groceries', splitMode: 'meal_units', isFoodPool: true, icon: '🛒' },
+    { name: 'Rice (Chal)', splitMode: 'meal_units', isFoodPool: true, icon: '🍚' },
+    { name: 'Fish, Meat & Vegetables', splitMode: 'meal_units', isFoodPool: true, icon: '🥩' },
+    { name: 'Cooking Oil & Spices', splitMode: 'meal_units', isFoodPool: true, icon: '🫒' },
+    { name: 'Cooking Gas / LPG', splitMode: 'meal_units', isFoodPool: false, icon: '🔥' },
+    { name: 'Cook / Helper Salary', splitMode: 'equal_all', isFoodPool: false, icon: '🧑‍🍳' },
+    { name: 'Apartment Rent', splitMode: 'equal_all', isFoodPool: false, icon: '🏠' },
+    { name: 'Electricity Bill', splitMode: 'member_days', isFoodPool: false, icon: '⚡' },
+    { name: 'Water Bill', splitMode: 'member_days', isFoodPool: false, icon: '💧' },
+    { name: 'Wi-Fi / Internet', splitMode: 'equal_all', isFoodPool: false, icon: '📶' },
+    { name: 'Waste / Cleaning', splitMode: 'equal_all', isFoodPool: false, icon: '🧹' },
+    { name: 'Common Supplies & Toiletries', splitMode: 'equal_all', isFoodPool: false, icon: '🧻' },
+    { name: 'Repairs & Maintenance', splitMode: 'equal_all', isFoodPool: false, icon: '🔧' },
+    { name: 'Personal Purchases', splitMode: 'personal', isFoodPool: false, icon: '👤' },
+];
+
+/**
+ * Seed Bangladesh preset categories for a mess group if not already present.
+ */
+export const seedDefaultCategories = async ({ groupId, userId }) => {
+    const existing = await ExpenseCategory.find({ groupId }).select('name').lean();
+    const existingNames = new Set(existing.map(c => c.name.toLowerCase().trim()));
+
+    const toInsert = BANGLADESH_PRESET_CATEGORIES
+        .filter(preset => !existingNames.has(preset.name.toLowerCase().trim()))
+        .map(preset => ({
+            ...preset,
+            groupId,
+            createdBy: userId,
+        }));
+
+    if (toInsert.length > 0) {
+        return await ExpenseCategory.insertMany(toInsert);
+    }
+    return [];
+};
+
+// POST /api/messgroups/categories/:groupId/seed — admin endpoint to seed preset categories
+export const seedCategoriesEndpoint = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const seeded = await seedDefaultCategories({ groupId, userId: req.user.id });
+        res.status(201).json({ msg: `Seeded ${seeded.length} preset categories`, count: seeded.length });
+    } catch (err) {
+        next(err);
+    }
+};
+
 // POST /api/messgroups/categories/:groupId  (admin) — create a category
 export const createCategory = [
     validate(categorySchema),

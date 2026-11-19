@@ -6,7 +6,7 @@ import {
     removeMember, inviteByEmail, pdfExport,
 } from '../controllers/messGroupController.js';
 import { upsertPaymentNote, getPaymentNote, getAllPaymentNotes } from '../controllers/paymentNoteController.js';
-import { createCategory, getCategories, updateCategory, deleteCategory } from '../controllers/expenseCategoryController.js';
+import { createCategory, getCategories, updateCategory, deleteCategory, seedCategoriesEndpoint } from '../controllers/expenseCategoryController.js';
 import auth from '../middleware/auth.js';
 import { requireGroupRole, allowSelfOrAdmin } from '../middleware/roles.js';
 import {
@@ -98,6 +98,12 @@ router.get(
 );
 
 // ---------- Expense categories (admin manages, members list) ----------
+router.post(
+    '/categories/:groupId/seed',
+    validate(objectIdParamSchema, 'params'),
+    requireGroupRole('admin'),
+    seedCategoriesEndpoint
+);
 router.post(
     '/categories/:groupId',
     validate(objectIdParamSchema, 'params'),

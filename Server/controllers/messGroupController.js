@@ -1,5 +1,8 @@
 import MessGroup from '../models/MessGroup.js';
 import User from '../models/User.js';
+import Membership from '../models/Membership.js';
+import PolicyVersion from '../models/PolicyVersion.js';
+import { seedDefaultCategories } from './expenseCategoryController.js';
 import ExcelJS from 'exceljs';
 import { createGroupSchema, addEntrySchema, addMemberSchema, extraSchema, joinByCodeSchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
@@ -30,6 +33,38 @@ export const createGroup = [
                         members: [{ user: req.user.id, role: 'admin' }],
                     });
                     await User.findByIdAndUpdate(req.user.id, { $push: { messGroups: newGroup._id } });
+
+                    // Initialize V2 Membership for the owner
+                    const user = await User.findById(req.user.id).lean();
+                    const now = new Date();
+                    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    await Membership.create({
+                        groupId: newGroup._id,
+                        user: req.user.id,
+                        displayName: user?.username || 'Owner',
+                        role: 'owner',
+                        startDate: now,
+                        createdBy: req.user.id,
+                    });
+
+                    // Initialize default PolicyVersion (Doc §2: BDT, Asia/Dhaka)
+                    await PolicyVersion.create({
+                        groupId: newGroup._id,
+                        version: 1,
+                        effectiveFrom: monthStr,
+                        mealWeights: { breakfast: 500, lunch: 1000, dinner: 1000 },
+                        allowedPortions: [0, 0.5, 1, 1.5, 2],
+                        entryCutoffHour: 23,
+                        currency: 'BDT',
+                        timezone: 'Asia/Dhaka',
+                        rounding: 'largest_remainder',
+                        requireExpenseApproval: true,
+                        publishedBy: req.user.id,
+                    });
+
+                    // Seed Bangladesh preset expense categories (Doc §6)
+                    await seedDefaultCategories({ groupId: newGroup._id, userId: req.user.id });
+
                     return res.status(201).json(newGroup);
                 } catch (e) {
                     if (e.code !== 11000 || !String(e.message).includes('code')) throw e;
