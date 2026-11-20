@@ -13,6 +13,7 @@ const policyVersionSchema = new mongoose.Schema(
         mealWeights: {
             breakfast: { type: Number, default: 500, min: 0, max: 1000 },
             lunch: { type: Number, default: 1000, min: 0, max: 1000 },
+            snacks: { type: Number, default: 1000, min: 0, max: 1000 },
             dinner: { type: Number, default: 1000, min: 0, max: 1000 },
         },
         allowedPortions: { type: [Number], default: [0, 0.5, 1, 1.5, 2] },

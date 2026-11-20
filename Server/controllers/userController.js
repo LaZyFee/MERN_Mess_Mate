@@ -1,5 +1,5 @@
 import User from '../models/User.js';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import cloudinary from '../config/cloudinary.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, updateProfileSchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';

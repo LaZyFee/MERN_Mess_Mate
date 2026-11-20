@@ -1,15 +1,25 @@
 import express from 'express';
-import { addMeal, updateMeal, getMealsByMonth, deleteMeal, getMeals } from '../controllers/mealController.js';
+import {
+    addMeal, updateMeal, deleteMeal, getMeals, getMealsByMonth,
+    createGuestMeal, listGuestMeals, previewBulkMeals, applyBulkMeals,
+    previewAbsence, applyAbsence,
+} from '../controllers/mealController.js';
 import auth from '../middleware/auth.js';
 import { requireGroupRole, allowSelfOrAdmin } from '../middleware/roles.js';
-import { mealEntrySchema, idParamSchema, monthParamSchema, objectIdParamSchema, mealFilterQuerySchema } from '../validation/schemas.js';
+import { idParamSchema, monthParamSchema, objectIdParamSchema, mealFilterQuerySchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 
 const router = express.Router();
 router.use(auth);
 
-// POST /api/meals/:groupId — upsert own meal for a date
+// Daily meal slot entry uses explicit state and integer portion subunits.
 router.post('/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), addMeal);
+router.post('/:groupId/guests', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), createGuestMeal);
+router.get('/:groupId/guests', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), listGuestMeals);
+router.post('/:groupId/bulk/preview', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), previewBulkMeals);
+router.post('/:groupId/bulk/apply', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), applyBulkMeals);
+router.post('/:groupId/absence/preview', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), previewAbsence);
+router.post('/:groupId/absence/apply', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), applyAbsence);
 
 // PUT /api/meals/entry/:id — edit own entry
 router.put('/entry/:id', validate(idParamSchema, 'params'), updateMeal);

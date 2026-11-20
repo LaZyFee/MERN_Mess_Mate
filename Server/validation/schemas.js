@@ -39,8 +39,26 @@ export const loginSchema = z.object({
 });
 
 // ---------- Mess Group ----------
+const MEAL_SLOTS = ['breakfast', 'lunch', 'snacks', 'dinner'];
+const PORTION_SUBUNITS = [0, 250, 500, 750, 1000];
+const mealDefaultsSchema = z.object({
+    breakfast: z.number().int().refine(v => PORTION_SUBUNITS.includes(v)).default(0),
+    lunch: z.number().int().refine(v => PORTION_SUBUNITS.includes(v)).default(0),
+    snacks: z.number().int().refine(v => PORTION_SUBUNITS.includes(v)).default(0),
+    dinner: z.number().int().refine(v => PORTION_SUBUNITS.includes(v)).default(0),
+});
+
 export const createGroupSchema = z.object({
     name: z.string().trim().min(2).max(60),
+    mealSlots: z.array(z.enum(MEAL_SLOTS)).min(1).default(MEAL_SLOTS),
+    mealWeights: z.object({
+        breakfast: z.number().int().min(0).max(1000).default(1000),
+        lunch: z.number().int().min(0).max(1000).default(1000),
+        snacks: z.number().int().min(0).max(1000).default(1000),
+        dinner: z.number().int().min(0).max(1000).default(1000),
+    }).default({}),
+    defaultMealSubunits: mealDefaultsSchema.default({}),
+    defaultMealsEnabled: z.boolean().default(false),
 });
 
 export const objectIdParamSchema = z.object({
@@ -89,16 +107,49 @@ export const monthParamSchema = z.object({
     month: z.string().regex(/^\d{4}-\d{2}$/, 'Month must be YYYY-MM'),
 });
 
-// zod v4: numeric enums must be literals; date may arrive pre-coerced
-const MEAL_VALUE = z.union([
-    z.literal(0), z.literal(0.5), z.literal(1), z.literal(1.5), z.literal(2),
-]);
+// Meal quantities are integer thousandths: .25/.50/.75/1 portion. Missing
+// slots remain unknown; only an explicit state confirms consumption/absence.
+const mealSlotSchema = z.object({
+    state: z.enum(['unknown', 'confirmed_zero', 'consumed']),
+    portionSubunits: z.number().int().min(0).max(1000).optional(),
+}).superRefine((slot, ctx) => {
+    if (slot.state === 'consumed' && ![250, 500, 750, 1000].includes(slot.portionSubunits)) {
+        ctx.addIssue({ code: 'custom', message: 'Consumed slots require portionSubunits of 250, 500, 750, or 1000' });
+    }
+    if (slot.state === 'confirmed_zero' && slot.portionSubunits !== undefined && slot.portionSubunits !== 0) {
+        ctx.addIssue({ code: 'custom', message: 'confirmed_zero slots must have zero portionSubunits' });
+    }
+});
 
 export const mealEntrySchema = z.object({
-    date: z.coerce.date().optional(), // defaults to today in the controller
-    lunch: MEAL_VALUE.default(0),
-    dinner: MEAL_VALUE.default(0),
+    date: z.coerce.date().optional(),
+    slots: z.object({
+        breakfast: mealSlotSchema.optional(),
+        lunch: mealSlotSchema.optional(),
+        snacks: mealSlotSchema.optional(),
+        dinner: mealSlotSchema.optional(),
+    }).refine(slots => Object.keys(slots).length > 0, 'At least one meal slot is required'),
 });
+
+export const guestMealSchema = z.object({
+    date: z.coerce.date().optional(),
+    guestName: z.string().trim().max(80).optional(),
+    slot: z.enum(MEAL_SLOTS),
+    portionSubunits: z.number().int().refine(v => [250, 500, 750, 1000].includes(v)),
+    poolMode: z.enum(['individual', 'universal']),
+    eventPoolRef: z.string().trim().max(120).optional(),
+});
+
+export const mealBulkSchema = z.object({
+    entries: z.array(z.object({ userId: objectIdSchema, date: z.coerce.date(), slots: mealEntrySchema.shape.slots })).min(1).max(500),
+});
+
+export const absenceRangeSchema = z.object({
+    userId: objectIdSchema.optional(),
+    from: z.coerce.date(),
+    to: z.coerce.date(),
+    slots: z.array(z.enum(MEAL_SLOTS)).min(1).default(MEAL_SLOTS),
+}).refine(d => d.from <= d.to, 'from must be before to');
 
 export const idParamSchema = z.object({ id: objectIdSchema });
 
@@ -272,6 +323,7 @@ export const publishPolicySchema = z.object({
     mealWeights: z.object({
         breakfast: z.number().int().min(0).max(1000).optional(),
         lunch: z.number().int().min(0).max(1000).optional(),
+        snacks: z.number().int().min(0).max(1000).optional(),
         dinner: z.number().int().min(0).max(1000).optional(),
     }).optional(),
     allowedPortions: z.array(z.number()).optional(),

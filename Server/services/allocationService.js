@@ -32,10 +32,12 @@ const buildWeights = async ({ groupId, line, category, memberships, serviceFrom,
             }).lean();
             const perUser = new Map();
             for (const meal of meals) {
-                const w = (meal.lunch || 0) + (meal.dinner || 0); // legacy two-slot units
+                const w = typeof meal.totalMeals === 'number'
+                    ? meal.totalMeals
+                    : ['breakfast', 'lunch', 'snacks', 'dinner'].reduce((sum, slot) => sum + (meal[slot]?.state === 'consumed' ? (meal[slot].portionSubunits || 0) / 1000 : 0), 0);
                 perUser.set(String(meal.userId), (perUser.get(String(meal.userId)) || 0) + w);
             }
-            // meal consumption belongs to users; map to memberships (fallback 0)
+            // Meal consumption belongs to users; map to memberships (fallback 0).
             const weights = inPool.map(m => (m.user ? (perUser.get(String(m.user)) || 0) : 0));
             const total = weights.reduce((a, b) => a + b, 0);
             if (total <= 0) {

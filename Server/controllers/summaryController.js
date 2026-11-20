@@ -224,15 +224,13 @@ export const finalizeSummary = [
             const group = req.group;
             const month = req.params.month;
 
-            const computed = await computeSummary(group, month);
-
-            const summary = await MonthlySummary.findOneAndUpdate(
-                { groupId: group._id, month },
-                { ...computed, isFinalized: true },
-                { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-            );
-
-            res.json({ msg: 'Month finalized', summary });
+            // Legacy summaries are read-only compatibility artifacts. Finalizing
+            // through this endpoint would overwrite history; use versioned V2 statements.
+            const existing = await MonthlySummary.findOne({ groupId: group._id, month });
+            if (existing?.isFinalized) {
+                return res.status(409).json({ msg: 'Legacy summary is immutable; use /api/statements for a versioned correction' });
+            }
+            return res.status(410).json({ msg: 'Legacy summary finalization is retired; finalize through /api/statements' });
         } catch (err) {
             next(err);
         }

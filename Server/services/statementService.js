@@ -4,6 +4,9 @@ import Expense from '../models/Expense.js';
 import MoneyTransaction from '../models/MoneyTransaction.js';
 import Membership from '../models/Membership.js';
 import PolicyVersion from '../models/PolicyVersion.js';
+import MessGroup from '../models/MessGroup.js';
+import GuestMeal from '../models/GuestMeal.js';
+import Meal from '../models/Meal.js';
 import { membershipsInMonth } from './membershipService.js';
 import { allocateExpense, sumAllocationsFor } from './allocationService.js';
 import { getOrCreatePeriod, finalizeGuard, markFinalized } from './periodService.js';
@@ -55,15 +58,43 @@ export const buildStatementDraft = async ({ groupId, month }) => {
         }
     }
 
-    // confirmed money movements per member
-    const totalUnits = 0; // computed per-member below from meals
-    const mealDocs = await (await import('../models/Meal.js')).default.find({
-        groupId,
-        date: { $gte: new Date(`${month}-01`), $lt: new Date(new Date(`${month}-01T00:00:00Z`).setUTCMonth(new Date(`${month}-01T00:00:00Z`).getUTCMonth() + 1)) },
-    }).lean();
+    // Validate all expected member/slot records. Missing records are unknown,
+    // never an implicit zero, and must be resolved before a statement can close.
+    const group = await MessGroup.findById(groupId).lean();
+    const start = new Date(`${month}-01T00:00:00.000Z`);
+    const end = new Date(start); end.setUTCMonth(end.getUTCMonth() + 1);
+    const mealDocs = await Meal.find({ groupId, date: { $gte: start, $lt: end } }).lean();
+    const mealByKey = new Map(mealDocs.map(m => [`${m.userId}:${m.date.toISOString().slice(0, 10)}`, m]));
+    const enabledSlots = group?.mealSlots?.length ? group.mealSlots : ['breakfast', 'lunch', 'dinner'];
+    const slotNames = ['breakfast', 'lunch', 'snacks', 'dinner'];
+    for (const membership of memberships) {
+        if (!membership.user) continue;
+        for (let day = new Date(start); day < end; day.setUTCDate(day.getUTCDate() + 1)) {
+            if (day < new Date(membership.startDate) || (membership.endDate && day >= new Date(membership.endDate))) continue;
+            const meal = mealByKey.get(`${membership.user}:${day.toISOString().slice(0, 10)}`);
+            for (const slot of enabledSlots) {
+                if (!meal || !meal[slot] || meal[slot].state === 'unknown') {
+                    throw Object.assign(new Error(`Unresolved ${slot} meal for ${membership.displayName} on ${day.toISOString().slice(0, 10)}`), { status: 422 });
+                }
+            }
+        }
+    }
+    const policy = await PolicyVersion.findOne({ groupId, effectiveFrom: { $lte: month } }).sort({ effectiveFrom: -1, version: -1 }).lean();
     const unitsByUser = new Map();
-    for (const meal of mealDocs) {
-        unitsByUser.set(String(meal.userId), (unitsByUser.get(String(meal.userId)) || 0) + (meal.lunch || 0) + (meal.dinner || 0));
+    let universalGuestUnits = 0;
+    const addUnits = (key, slot, portionSubunits) => {
+        const weightedSubunits = Math.round(portionSubunits * ((policy?.mealWeights?.[slot] ?? group?.mealWeights?.[slot] ?? 1000) / 1000));
+        const units = weightedSubunits / 1000;
+        if (key) unitsByUser.set(key, (unitsByUser.get(key) || 0) + units);
+        return units;
+    };
+    for (const meal of mealDocs) for (const slot of enabledSlots) {
+        if (meal[slot]?.state === 'consumed') addUnits(String(meal.userId), slot, meal[slot].portionSubunits || 0);
+    }
+    const guests = await GuestMeal.find({ groupId, localDate: { $gte: `${month}-01`, $lt: end.toISOString().slice(0, 10) }, status: 'active' }).lean();
+    for (const guest of guests) {
+        const units = addUnits(guest.poolMode === 'individual' ? String(guest.hostUserId) : null, guest.slot, guest.portionSubunits);
+        if (guest.poolMode === 'universal') universalGuestUnits += units;
     }
 
     const openingCredits = new Map();
@@ -114,12 +145,13 @@ export const buildStatementDraft = async ({ groupId, month }) => {
     });
 
     const totalExpenses = mealExpenses + otherExpenses;
-    const totalMeals = sumPoisha(items.map(i => Math.round(i.mealUnits * 1000))); // keep integer domain
-    const mealRate = mealExpenses > 0 && totalMeals > 0 ? Math.round((mealExpenses / totalMeals) * 1000) : null;
+    const totalMeals = sumPoisha(items.map(i => Math.round(i.mealUnits * 1000))) + Math.round(universalGuestUnits * 1000);
+    const mealRate = mealExpenses > 0 && totalMeals > 0 ? Math.round((mealExpenses * 1000) / totalMeals) : null;
 
     return {
         memberships, items, mealExpenses, otherExpenses, totalExpenses,
-        totalUnits: sumPoisha(items.map(i => i.mealUnits)),
+        totalUnits: sumPoisha(items.map(i => i.mealUnits)) + universalGuestUnits,
+        universalGuestUnits,
         mealRate, transactions,
     };
 };

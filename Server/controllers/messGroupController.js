@@ -31,6 +31,10 @@ export const createGroup = [
                         admin: req.user.id,
                         code: makeJoinCode(),
                         members: [{ user: req.user.id, role: 'admin' }],
+                        mealSlots: req.body.mealSlots,
+                        mealWeights: req.body.mealWeights,
+                        defaultMealSubunits: req.body.defaultMealSubunits,
+                        defaultMealsEnabled: req.body.defaultMealsEnabled,
                     });
                     await User.findByIdAndUpdate(req.user.id, { $push: { messGroups: newGroup._id } });
 
@@ -52,8 +56,8 @@ export const createGroup = [
                         groupId: newGroup._id,
                         version: 1,
                         effectiveFrom: monthStr,
-                        mealWeights: { breakfast: 500, lunch: 1000, dinner: 1000 },
-                        allowedPortions: [0, 0.5, 1, 1.5, 2],
+                        mealWeights: { ...req.body.mealWeights, breakfast: req.body.mealWeights.breakfast, lunch: req.body.mealWeights.lunch, dinner: req.body.mealWeights.dinner },
+                        allowedPortions: [0.25, 0.5, 0.75, 1],
                         entryCutoffHour: 23,
                         currency: 'BDT',
                         timezone: 'Asia/Dhaka',

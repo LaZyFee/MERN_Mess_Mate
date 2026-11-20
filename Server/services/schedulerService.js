@@ -3,14 +3,17 @@ import Expense from '../models/Expense.js';
 import Period from '../models/Period.js';
 import PolicyVersion from '../models/PolicyVersion.js';
 import Membership from '../models/Membership.js';
+import MessGroup from '../models/MessGroup.js';
+import Meal from '../models/Meal.js';
 import IdempotencyRecord from '../models/IdempotencyRecord.js';
 import { enqueueNotification } from './outboxWorker.js';
 import { audit } from '../models/AuditEvent.js';
 
 // Scheduler service — automated background tasks (Doc §9, §12, §13)
 // 1. Recurring expense draft generation for the new month
-// 2. Deadline and review grace period reminders
-// 3. Stale idempotency record cleanup
+// 2. Default meal auto-fill for the previous Dhaka civil day
+// 3. Deadline and review grace period reminders
+// 4. Stale idempotency record cleanup
 
 const currentDhakaMonth = () => {
     // Current Asia/Dhaka month "YYYY-MM"
@@ -78,6 +81,46 @@ export const generateRecurringDraftsForMonth = async (costPeriod = currentDhakaM
 };
 
 /**
+ * Fill still-unknown slots for the previous Dhaka civil day from each group's
+ * configured defaults (asked for at mess group creation). Explicit
+ * consumption/confirmed_zero entries are never replaced — only `unknown` slots
+ * are resolved, and the day then no longer blocks statement close.
+ */
+export const applyDefaultMealsForPreviousDay = async () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+        .toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+    const dayStart = new Date(`${yesterday}T00:00:00.000Z`);
+    const groups = await MessGroup.find({ defaultMealsEnabled: true }).lean();
+    let filled = 0;
+    for (const group of groups) {
+        const members = await Membership.find({
+            groupId: group._id,
+            startDate: { $lte: dayStart },
+            user: { $ne: null },
+            $or: [{ endDate: null }, { endDate: { $gt: dayStart } }],
+        }).select('user').lean();
+        for (const member of members) {
+            let meal = await Meal.findOne({ groupId: group._id, userId: member.user, date: dayStart });
+            if (!meal) meal = new Meal({ groupId: group._id, userId: member.user, date: dayStart, month: yesterday.slice(0, 7) });
+            let changed = false;
+            for (const slot of group.mealSlots || []) {
+                if (meal[slot]?.state !== 'unknown') continue;
+                const portions = group.defaultMealSubunits?.[slot] || 0;
+                meal[slot] = {
+                    state: portions > 0 ? 'consumed' : 'confirmed_zero',
+                    portionSubunits: portions,
+                    actorId: null,
+                    source: 'default',
+                };
+                changed = true;
+            }
+            if (changed) { await meal.save(); filled++; }
+        }
+    }
+    return filled;
+};
+
+/**
  * Check open periods that need review reminders or transition to review state.
  */
 export const checkPeriodDeadlines = async () => {
@@ -106,7 +149,7 @@ export const checkPeriodDeadlines = async () => {
                         recipientWa: m.user.whatsapp,
                         payload: { text },
                         dedupeKey: `deadline_${period.groupId}_${period.month}_${m.user._id}`,
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
                 if (m.user.email) {
                     await enqueueNotification({
@@ -120,7 +163,7 @@ export const checkPeriodDeadlines = async () => {
                             html: `<p>${text}</p>`,
                         },
                         dedupeKey: `deadline_${period.groupId}_${period.month}_${m.user._id}`,
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
             }
         }
@@ -148,6 +191,7 @@ export const startScheduler = (intervalMs = 60 * 60 * 1000) => { // default 1 ho
     setTimeout(async () => {
         try {
             await generateRecurringDraftsForMonth();
+            await applyDefaultMealsForPreviousDay();
             await checkPeriodDeadlines();
             await cleanupExpiredIdempotency();
         } catch (e) {
@@ -158,6 +202,7 @@ export const startScheduler = (intervalMs = 60 * 60 * 1000) => { // default 1 ho
     schedulerTimer = setInterval(async () => {
         try {
             await generateRecurringDraftsForMonth();
+            await applyDefaultMealsForPreviousDay();
             await checkPeriodDeadlines();
             await cleanupExpiredIdempotency();
         } catch (e) {
@@ -170,4 +215,3 @@ export const stopScheduler = () => {
     if (schedulerTimer) clearInterval(schedulerTimer);
     schedulerTimer = null;
 };
-
