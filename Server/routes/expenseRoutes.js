@@ -1,6 +1,7 @@
 ﻿import express from 'express';
 import auth from '../middleware/auth.js';
 import { validate } from '../validation/validate.js';
+import { resolveHistoryWindow } from '../middleware/privacy.js';
 import { idempotent } from '../middleware/idempotency.js';
 import {
     requireGroupRole, allowSelfOrAdmin, requireGroupRoleV2,
@@ -24,8 +25,8 @@ expenseRouter.post('/:groupId', validate(objectIdParamSchema, 'params'), require
 // PUT /api/expenses/entry/:id — payer only
 expenseRouter.put('/entry/:id', validate(idParamSchema, 'params'), updateExpense);
 
-// GET /api/expenses/:groupId?month=&from=&to=&userId=&categoryId=&category= — filtered
-expenseRouter.get('/:groupId', validate(expenseFilterQuerySchema, 'query'), requireGroupRole('member'), getExpenses);
+// GET /api/expenses/:groupId?month=&from=&to=&userId=&categoryId=&category= — filtered (ex-members clamped)
+expenseRouter.get('/:groupId', validate(expenseFilterQuerySchema, 'query'), requireGroupRole('member'), resolveHistoryWindow, getExpenses);
 
 // GET /api/expenses/:groupId/:month
 expenseRouter.get('/:groupId/:month', validate(monthParamSchema, 'params'), requireGroupRole('member'), getExpensesByMonth);

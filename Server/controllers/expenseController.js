@@ -402,9 +402,17 @@ export const getExpenses = [
     async (req, res, next) => {
         try {
             const filter = buildFilter(req.params.groupId, req.validated?.query || {});
+            // Ex-member history cutoff (privacy guard)
+            if (req.historyFrom || req.historyTo) {
+                filter.date = {
+                    ...(filter.date || {}),
+                    ...(req.historyFrom ? { $gte: req.historyFrom } : {}),
+                    ...(req.historyTo ? { $lte: req.historyTo } : {}),
+                };
+            }
 
             const expenses = await Expense.find(filter)
-                .populate('userId', 'username')
+                .populate('userId', 'username profilePic')
                 .populate('categoryId', 'name icon splitMode')
                 .sort({ date: 1 })
                 .lean();

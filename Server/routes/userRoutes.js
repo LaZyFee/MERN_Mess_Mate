@@ -3,6 +3,7 @@ import passport from 'passport';
 import {
     register, login, refresh, logout, getProfile, googleAuth,
     forgotPassword, resetPassword, verifyEmail, changePassword, uploadProfilePic, updateProfile,
+    getGroupMembersDirectory,
 } from '../controllers/userController.js';
 import auth from '../middleware/auth.js';
 import upload from '../middleware/upload.js';
@@ -25,6 +26,8 @@ router.get('/verify-email/:token', verifyEmail);
 // Profile (authenticated)
 router.use(auth);
 router.get('/profile', getProfile);
+// Co-member directory — only visible if you share the group (privacy guard inside)
+router.get('/groups/:groupId/members', validate(objectIdParamSchema, 'params'), getGroupMembersDirectory);
 router.put('/profile', updateProfile);
 router.post('/change-password', changePassword);
 router.post('/profile-pic', upload.single('image'), uploadProfilePic);

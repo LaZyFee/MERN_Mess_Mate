@@ -6,6 +6,7 @@ import {
 } from '../controllers/mealController.js';
 import auth from '../middleware/auth.js';
 import { requireGroupRole, allowSelfOrAdmin } from '../middleware/roles.js';
+import { resolveHistoryWindow } from '../middleware/privacy.js';
 import { idParamSchema, monthParamSchema, objectIdParamSchema, mealFilterQuerySchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 
@@ -24,8 +25,8 @@ router.post('/:groupId/absence/apply', validate(objectIdParamSchema, 'params'), 
 // PUT /api/meals/entry/:id — edit own entry
 router.put('/entry/:id', validate(idParamSchema, 'params'), updateMeal);
 
-// GET /api/meals/:groupId?month=&from=&to=&userId= — filtered
-router.get('/:groupId', validate(mealFilterQuerySchema, 'query'), requireGroupRole('member'), getMeals);
+// GET /api/meals/:groupId?month=&from=&to=&userId= — filtered (ex-members clamped)
+router.get('/:groupId', validate(mealFilterQuerySchema, 'query'), requireGroupRole('member'), resolveHistoryWindow, getMeals);
 
 // GET /api/meals/:groupId/:month — group meals for a month
 router.get('/:groupId/:month', validate(monthParamSchema, 'params'), requireGroupRole('member'), getMealsByMonth);

@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
 import csrfProtection from './middleware/csrf.js';
 import userRouter from './routes/userRoutes.js';
+import adminRouter from './routes/adminRoutes.js';
 import messGroupRouter from './routes/messGroupRoutes.js';
 import mealRouter from './routes/mealRoutes.js';
 import expenseRouter from './routes/expenseRoutes.js';
@@ -98,6 +99,8 @@ app.use(passport.session());
 // ---------- Routes ----------
 app.get('/', (req, res) => res.send('Meal Mate Server is running'));
 app.use('/api/users', authLimiter, userRouter);
+// Platform admin control plane — hidden (guard replies 404 to non-admins), unlinked
+app.use('/api/admin', adminRouter);
 app.use('/api/messgroups', generalLimiter, messGroupRouter);
 app.use('/api/meals', generalLimiter, mealRouter);
 app.use('/api/expenses', generalLimiter, expenseRouter);

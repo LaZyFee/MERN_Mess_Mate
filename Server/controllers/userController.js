@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import MessGroup from '../models/MessGroup.js';
 import bcrypt from 'bcrypt';
 import cloudinary from '../config/cloudinary.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, updateProfileSchema } from '../validation/schemas.js';
@@ -76,6 +77,7 @@ export const login = [
             const user = await User.findOne({ email }).select('+password');
             const invalid = { msg: 'Invalid Credentials' };
             if (!user || !user.password) return res.status(400).json(invalid);
+            if (user.suspended) return res.status(403).json({ msg: 'Account suspended' });
 
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) return res.status(400).json(invalid);
@@ -95,6 +97,7 @@ export const refresh = async (req, res, next) => {
 
         const user = await verifyRefreshToken(User, refreshToken);
         if (!user) return res.status(401).json({ msg: 'Invalid or expired refresh token' });
+        if (user.suspended) return res.status(403).json({ msg: 'Account suspended' });
 
         // Rotate: old token is invalidated, a new pair is issued (and cookie updated)
         await sendAuthResponse(res, user);
@@ -141,6 +144,28 @@ export const updateProfile = [
         }
     },
 ];
+
+// GET /api/users/groups/:groupId/members — co-member directory (privacy: only if you share the group)
+export const getGroupMembersDirectory = async (req, res, next) => {
+    try {
+        const group = await MessGroup.findById(req.params.groupId).select('members admin').lean();
+        if (!group) return res.status(404).json({ msg: 'Group not found' });
+
+        const isMember = group.admin?.equals?.(req.user.id) ||
+            String(group.admin) === req.user.id ||
+            group.members.some(m => String(m.user) === req.user.id);
+        if (!isMember) {
+            // Generic 404 — do not reveal the group's existence to outsiders
+            return res.status(404).json({ msg: 'Group not found' });
+        }
+
+        const ids = group.members.map(m => m.user).filter(Boolean);
+        const users = await User.find({ _id: { $in: ids } })
+            .select('username profilePic whatsapp') // email & phone stay private
+            .lean();
+        res.json({ members: users });
+    } catch (err) { next(err); }
+};
 
 // Profile
 export const getProfile = async (req, res, next) => {

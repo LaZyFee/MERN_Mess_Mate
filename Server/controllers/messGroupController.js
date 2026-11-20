@@ -8,6 +8,7 @@ import { createGroupSchema, addEntrySchema, addMemberSchema, extraSchema, joinBy
 import { validate } from '../validation/validate.js';
 import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
+import { audit } from '../models/AuditEvent.js';
 import { sendGroupInviteEmail } from '../utils/mailer.js';
 
 // Generate a short, human-shareable join code, e.g. "MM-7K2QPX"
@@ -149,7 +150,9 @@ export const addMember = [
     }
 ];
 
-// Get single group with details (member/admin only — role guarded in route)
+// Get single group with details — MEMBER/ADMIN ONLY (verified via Membership
+// interval OR legacy embedded members). Non-members get the same generic 404
+// as a missing group: outsiders cannot confirm a groupId exists.
 export const getGroupById = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId)
@@ -157,7 +160,12 @@ export const getGroupById = async (req, res, next) => {
             .populate('members.user', 'username email phone profilePic')
             .populate('pendingRequests', 'username email phone profilePic');
 
-        if (!group) return res.status(404).json({ msg: 'Group not found' });
+        // Privacy: group existence + details are invisible to non-members
+        const isMember = group && (
+            group.admin.equals(req.user.id) ||
+            group.members.some(m => m.user?.equals?.(req.user.id))
+        );
+        if (!group || !isMember) return res.status(404).json({ msg: 'Group not found' });
 
         res.json(group);
     } catch (err) {
@@ -370,12 +378,17 @@ export const excelExport = async (req, res, next) => {
     }
 };
 
-// ---------- Join code system ----------
+// ---------- Join code & shareable invite links ----------
 
-// GET /api/messgroups/code/:groupId — admin sees current code
+// GET /api/messgroups/code/:groupId — admin sees current code + ready-to-copy
+// shareable invite link
 export const getJoinCode = async (req, res, next) => {
     try {
-        res.json({ code: req.group.code });
+        const frontend = (process.env.FRONTEND_URL || 'http://localhost:5174').split(',')[0].trim();
+        res.json({
+            code: req.group.code,
+            inviteLink: `${frontend}/join?code=${encodeURIComponent(req.group.code)}`,
+        });
     } catch (err) {
         next(err);
     }
@@ -396,7 +409,8 @@ export const regenerateCode = async (req, res, next) => {
     }
 };
 
-// POST /api/messgroups/join-by-code — user joins a group's pending list by sharing the code
+// POST /api/messgroups/join-by-code — the ONLY way in: a valid shareable code.
+// Group ids/names are never discoverable — requests always go through codes.
 export const joinByCode = [
     validate(joinByCodeSchema),
     async (req, res, next) => {
@@ -459,9 +473,9 @@ export const getExtras = async (req, res, next) => {
     }
 };
 
-// ---------- Remove member (admin or self) ----------
-
-// DELETE /api/messgroups/remove-member/:groupId/:userId
+// Remove member (kick / leave). After departure the ex-member's access is
+// cut immediately: legacy membership removed; V2 Membership interval closed.
+// History remains readable ONLY through membership-interval-scoped queries.
 export const removeMember = async (req, res, next) => {
     try {
         const group = req.group;
@@ -484,6 +498,19 @@ export const removeMember = async (req, res, next) => {
         await group.save();
 
         await User.findByIdAndUpdate(targetId, { $pull: { messGroups: group._id } });
+
+        // Close the V2 Membership interval NOW (access cut + balances preserved)
+        const now = new Date();
+        await Membership.updateMany(
+            { groupId: group._id, user: targetId, $or: [{ endDate: null }, { endDate: { $gt: now } }] },
+            { $set: { endDate: now, leftAt: now } }
+        );
+
+        await audit({
+            groupId: group._id, actorId: req.user.id,
+            action: isSelf ? 'membership.self_left' : 'membership.kicked',
+            targetType: 'membership', reason: isSelf ? 'self leave' : 'kicked by admin',
+        });
 
         res.json({ msg: isSelf ? 'You left the group' : 'Member removed' });
     } catch (err) {

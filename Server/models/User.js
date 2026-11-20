@@ -31,6 +31,8 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true,
     },
+    // Platform-level suspension (admin panel only): blocks logins & API access
+    suspended: { type: Boolean, default: false, index: true },
     whatsappConsentAt: {
         type: Date,
         default: Date.now,

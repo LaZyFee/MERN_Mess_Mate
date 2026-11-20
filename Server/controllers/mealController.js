@@ -270,6 +270,7 @@ export const deleteMeal = [
 ];
 
 // GET /api/meals/:groupId?month=YYYY-MM | ?from=&to= | &userId= — filtered list
+// Ex-members: history clamped to their membership interval (privacy guard).
 export const getMeals = [
     validate(mealFilterQuerySchema, 'query'),
     async (req, res, next) => {
@@ -278,15 +279,17 @@ export const getMeals = [
             const q = req.validated?.query || {};
 
             if (q.month) filter.month = q.month;
-            else if (q.from || q.to) {
+            else if (q.from || q.to || req.historyFrom || req.historyTo) {
                 filter.date = {};
                 if (q.from) filter.date.$gte = q.from;
                 if (q.to) filter.date.$lte = q.to;
+                if (req.historyFrom) filter.date.$gte = req.historyFrom;
+                if (req.historyTo) filter.date.$lte = req.historyTo;
             }
             if (q.userId) filter.userId = q.userId;
 
             const meals = await Meal.find(filter)
-                .populate('userId', 'username')
+                .populate('userId', 'username profilePic')
                 .sort({ date: 1 })
                 .lean();
 
