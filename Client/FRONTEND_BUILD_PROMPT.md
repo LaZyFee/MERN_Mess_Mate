@@ -1,5 +1,7 @@
 # MealMate Frontend — Build Prompt (paste into IDE AI)
 
+> **READ §8 FIRST.** §8 (Amendments) overrides §1.5 (persist), §2 tasks T0.3–T0.7, §4 "Auth model", and §5 `src/` layout wherever they conflict. New phases P9–P11 are in §8.7.
+
 ## 0. ROLE & GOAL
 
 You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The backend is finished and lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Vite + React). Backend docs: root `readme.md` (API reference) and `plan.md` (per-file deep dive) — they are the source of truth.
@@ -340,3 +342,104 @@ src/
 1. If `Client/TODO.md` does not exist → create it from the seed in §2, then begin **T0.1**.
 2. If it exists → follow the session-start protocol and continue from the first unfinished task.
 3. After each task reply with ≤ 5 lines: `✔ <task id> done — <1 line>. Next: <task id>`. Then continue automatically until tokens run out or a phase ends; at a phase end, run lint/build and the color grep, fix issues, update TODO.md.
+
+
+---
+
+## 8. AMENDMENTS (override earlier sections)
+
+### 8.1 Stack change: Next.js App Router as BFF
+
+Vite SPA cannot provide server middleware, protected server layouts or SSR. Move to **Next.js (App Router, JS or TS — pick one in Notes)**. Unchanged: zustand, react-icons (one family), Chart.js via `react-chartjs-2` (client components, `dynamic(..., { ssr:false })`), CSS variables only, shared components, mobile-first, TODO.md workflow. `Client/` stays the folder name. Port 5174 stays for dev.
+
+**Honest scope of "hiding APIs":** DevTools always shows requests the browser makes. Goals are: (a) no token readable by JS, (b) browser only calls same-origin `/api/bff/*`, (c) backend URL, admin key and secrets exist only in server env (`BACKEND_URL`, never `NEXT_PUBLIC_*`), (d) first-load data is fetched on the server (never appears in the browser network tab), (e) `productionBrowserSourceMaps: false`. Do **not** add fake obfuscation; the backend remains the security authority.
+
+### 8.2 Auth, cookies, storage
+
+- **No `localStorage` / `sessionStorage` / IndexedDB for auth or user data.** Remove zustand `persist` from `authStore`. The store holds `{ user, roles }` only, hydrated from server-rendered props; **tokens are never in JS**.
+- Cookies (set by the backend through the BFF, `HttpOnly; Secure; SameSite=Strict`): `mm_at` (access), `mm_rt` (refresh), `mm_csrf` (readable, double-submit). Web requests send `X-Client: web` so the backend omits tokens from JSON bodies.
+- Theme preference: a plain non-sensitive cookie `mm_theme` (so SSR renders the right theme without flash) — the only non-HttpOnly cookie besides `mm_csrf`.
+
+### 8.3 BFF layer
+
+`app/api/bff/[...path]/route.js` — a catch-all handler that: validates the path against an **allowlist of backend route prefixes**, forwards method/body/query to `${BACKEND_URL}/api/...`, forwards `Cookie`, `Idempotency-Key`, `X-CSRF-Token`, streams blobs (attachments, xlsx, pdf), relays `Set-Cookie`, strips hop-by-hop and server headers, and adds `X-Client: web`. Refresh is handled here (single-flight per request chain). The admin key, if still used, is attached here only for `/api/admin/*`.
+
+### 8.4 Two axios instances (replaces T0.4)
+
+| File | Used from | Behaviour |
+|---|---|---|
+| `lib/api/serverApi.js` | Server Components, layouts, route handlers | baseURL `process.env.BACKEND_URL`; builds the `Cookie` header from `cookies()` (`next/headers`); on 401 calls refresh once and re-sets cookies; throws typed errors (`NotFound`, `Forbidden`, `Unauthorized`) so `notFound()` / `redirect()` can be used |
+| `lib/api/browserApi.js` | Client components, zustand actions | baseURL `/api/bff`; `withCredentials: true`; attaches `x-csrf-token` from the `mm_csrf` cookie; **single-flight** 401 → `POST /api/bff/users/refresh` → retry queue; on refresh failure → `router.replace('/login?next=…')` and clear stores; 429 → RateLimit handler; always adds an `Idempotency-Key` helper for financial mutations |
+
+One domain file per area under `lib/api/` (auth, groups, meals, …, **support, routines, inbox**) exporting functions that take the axios instance as a parameter or use a small `apiFor(context)` helper so the same function runs on server and client.
+
+### 8.5 Routing, middleware, protected layout / component (replaces T0.6)
+
+```
+app/
+  (public)/    login, register, forgot/reset, verify-email, join?code=
+  (app)/       layout.js  ← PROTECTED LAYOUT (server): getSession() → redirect('/login?next=…') if none
+    page.js (home) · groups/[groupId]/(overview|meals|expenses|money|statements|charts|members|board|more)
+    support/ · inbox/ · profile/
+  (admin)/admin/   layout.js ← PLATFORM-ADMIN LAYOUT: probe GET /api/admin/overview (+ 2FA verified);
+                     on 404/403 call notFound() so the section does not exist for non-admins
+  api/bff/[...path]/route.js
+middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a protected matcher → redirect to /login;
+                  redirect logged-in users away from /login; set CSP + Referrer-Policy headers; never trust it for authorisation
+```
+
+- **Protected layout** is the real gate: it loads the session/profile server-side and passes `initialUser` to a tiny client `<AuthHydrator>` that seeds `authStore`. Group routes also load the membership/role server-side and call `notFound()` on 404 (privacy rule: never reveal existence).
+- **`<Protected roles={[…]} fallback="hide|404|message">`** (client) and `requireRole(session, roles)` (server) both wrap the existing `PermissionGuard` logic — one source of truth for the 5-tier roles. UI gating is cosmetic; the server enforces.
+- Loading/error: `loading.js` uses `Skeleton`; `error.js` + `not-found.js` use existing shared components.
+
+### 8.6 SSR and data-fetching rules
+
+- Fetch the first screen's data in Server Components via `serverApi`, pass as `initialData` to client components that then own it in zustand (`{ data, loading, error, fetch, mutate, invalidate }` unchanged). Do not double-fetch on mount when `initialData` is present.
+- Anything role- or time-sensitive (statement state, support `permissions.canComment`) is re-validated on mutation; the server response is authoritative.
+- Charts, socket client, `navigator.share`, `clipboard` → client components only.
+- Socket.IO connects with `withCredentials` (cookie handshake, no token in URL/auth payload); after refresh, reconnect.
+- Security headers via `middleware.js`/`next.config`: CSP (`default-src 'self'`; `connect-src 'self' wss:<socket origin>`; `img-src 'self' data: res.cloudinary.com`), `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `X-Content-Type-Options`, `frame-ancestors 'none'`.
+
+### 8.7 Task list changes
+
+**Replace** in the seed TODO: T0.3 (create `app/` structure, `.env` with `BACKEND_URL` + `NEXT_PUBLIC_APP_URL` only, `.env.example`), T0.4 (§8.3–8.4), T0.5 (`authStore` **without persist**, `AuthHydrator`), T0.6 (§8.5), T0.7 (`groupStore`/`useGroupRole` seeded from server props). T1.x pages become server/client splits; T1.3 Google callback: backend sets cookies → redirect to `/` (no tokens in URL). Add **T0.11** `middleware.js` + headers, **T0.12** `<Protected>` / `requireRole`, **T0.13** `next.config` (no prod source maps, `poweredByHeader:false`), **T0.14** ESLint rule/grep: no `localStorage|sessionStorage|document.cookie` outside `mm_theme`/`mm_csrf` helpers, no `NEXT_PUBLIC_` secrets.
+
+**Add phases:**
+
+```
+## P9 Routine & Board (plan.md §14)
+- [ ] T9.1 Board widget on group Overview: GET /routines/groups/:id/board/today → today's duties, menu, pinned notes, active hand-overs
+- [ ] T9.2 Duties calendar (month/week strip; my duties highlighted; mobile = agenda list) + mark done + swap request / accept / decline
+- [ ] T9.3 Rosters admin (manager): create/edit roster (type, areas, rotation mode, member order drag/arrows), publish, extend horizon
+- [ ] T9.4 Weekly menu: week view + template editor; today's menu card with cook
+- [ ] T9.5 Notice board: feed, create note/announcement/alert, pin, audience picker, "seen" receipts, archive
+- [ ] T9.6 Handover composer: absence window + task checklist; claim / done on tasks; banner while active
+- [ ] T9.7 Realtime: duty-updated / menu-updated / note-created → store invalidate
+
+## P10 Support (plan.md §15)
+- [ ] T10.1 My tickets list (StatusBadge: open/answered/awaiting_admin/resolved/closed, unread dot) + New ticket form (category, subject, body, optional group context consent, attachments)
+- [ ] T10.2 Ticket thread page: messages timeline; composer driven ONLY by `permissions.canComment` + `reason` (disabled with explanation: "Waiting for admin to reply" / "Ticket is closed"); resolve / close / reopen (ConfirmationModal) / rate
+- [ ] T10.3 Email-action landing page /support/action/[token] → POST /support/actions/:token, neutral result message
+- [ ] T10.4 Public appeal page for suspended users (CAPTCHA, email)
+- [ ] T10.5 Admin Support queue (/admin/support): filters (status, priority, assignee, overdue), SLA countdown chips, unread, search by ticketNo
+- [ ] T10.6 Admin ticket view: reply, internal note (visually distinct), canned replies, assign, priority, resolve/close/reopen with reason, user context panel
+- [ ] T10.7 Admin support stats cards (open, awaiting_admin, overdue, median first response, CSAT)
+
+## P11 Inbox & notifications (plan.md §16)
+- [ ] T11.1 TopBar bell + unread badge (socket `inbox-new`, count from /inbox/unread-count) + dropdown/bottom-sheet list
+- [ ] T11.2 Inbox page (cursor list, mark read / all, deep-link via `link.kind/id`)
+- [ ] T11.3 Notification preferences (per type, email toggle, quiet hours) on Profile
+- [ ] T11.4 Admin bell reuses the same component (scope comes from the server); toast on new `support.ticket_created`
+
+## P12 Security UX (plan.md §18)
+- [ ] T12.1 2FA setup (QR via canvas/img data-URI from backend, verify code, recovery codes shown once) + login step-up screen; admin enrolment gate
+- [ ] T12.2 Invite code dialog: one-time reveal with copy/share, shows expiry + uses left; regenerate confirms and warns old links die
+- [ ] T12.3 Sessions page: highlight "new device" events from SecurityEvent
+```
+
+### 8.8 Definition of Done additions
+
+- Zero tokens in JS-reachable storage (grep rule T0.14). Zero `NEXT_PUBLIC_` secrets.
+- Protected pages tested logged-out (redirect), wrong role (hidden/404), other group (`notFound()`).
+- Support composer never enabled when `permissions.canComment` is false; closed tickets show read-only thread.
+- SSR first paint verified for Overview, Board, Support list (no client fetch flash for initial data).

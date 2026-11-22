@@ -1,4 +1,4 @@
-import MessGroup from '../models/MessGroup.js';
+﻿import MessGroup from '../models/MessGroup.js';
 import User from '../models/User.js';
 import Membership from '../models/Membership.js';
 import PolicyVersion from '../models/PolicyVersion.js';
@@ -10,15 +10,13 @@ import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
 import { audit } from '../models/AuditEvent.js';
 import { sendGroupInviteEmail } from '../utils/mailer.js';
-
-// Generate a short, human-shareable join code, e.g. "MM-7K2QPX"
+import { publicProfile } from '../middleware/privacy.js';
 const makeJoinCode = () => {
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no ambiguous chars (0/O, 1/I/L)
     let code = '';
     for (let i = 0; i < 6; i++) code += alphabet[crypto.randomInt(alphabet.length)];
     return `MM-${code}`;
 };
-
 // Create Mess Group (with unique join code)
 export const createGroup = [
     validate(createGroupSchema),
@@ -38,7 +36,6 @@ export const createGroup = [
                         defaultMealsEnabled: req.body.defaultMealsEnabled,
                     });
                     await User.findByIdAndUpdate(req.user.id, { $push: { messGroups: newGroup._id } });
-
                     // Initialize V2 Membership for the owner
                     const user = await User.findById(req.user.id).lean();
                     const now = new Date();
@@ -51,8 +48,7 @@ export const createGroup = [
                         startDate: now,
                         createdBy: req.user.id,
                     });
-
-                    // Initialize default PolicyVersion (Doc §2: BDT, Asia/Dhaka)
+                    // Initialize default PolicyVersion (Doc Â§2: BDT, Asia/Dhaka)
                     await PolicyVersion.create({
                         groupId: newGroup._id,
                         version: 1,
@@ -66,10 +62,8 @@ export const createGroup = [
                         requireExpenseApproval: true,
                         publishedBy: req.user.id,
                     });
-
-                    // Seed Bangladesh preset expense categories (Doc §6)
+                    // Seed Bangladesh preset expense categories (Doc Â§6)
                     await seedDefaultCategories({ groupId: newGroup._id, userId: req.user.id });
-
                     return res.status(201).json(newGroup);
                 } catch (e) {
                     if (e.code !== 11000 || !String(e.message).includes('code')) throw e;
@@ -81,27 +75,22 @@ export const createGroup = [
         }
     }
 ];
-
 // Send Join Request (any authenticated user)
 export const sendJoinRequest = async (req, res, next) => {
     try {
         const group = req.group; // loaded by requireGroupRole... but requester is NOT a member yet
         const fetched = group || await MessGroup.findById(req.params.groupId);
         if (!fetched) return res.status(404).json({ msg: 'Group not found' });
-
         if (fetched.pendingRequests.includes(req.user.id) || fetched.members.some(m => m.user.equals(req.user.id))) {
             return res.status(400).json({ msg: 'Already requested or member' });
         }
-
         fetched.pendingRequests.push(req.user.id);
         await fetched.save();
-
         res.json({ msg: 'Request sent' });
     } catch (err) {
         next(err);
     }
 };
-
 // Approve Join Request (admin only)
 export const approveRequest = async (req, res, next) => {
     try {
@@ -110,83 +99,79 @@ export const approveRequest = async (req, res, next) => {
         if (!group.pendingRequests.some(id => id.equals(userId))) {
             return res.status(400).json({ msg: 'No pending request from this user' });
         }
-
         group.pendingRequests = group.pendingRequests.filter(id => !id.equals(userId));
         group.members.push({ user: userId, role: 'member' });
         await group.save();
-
         await User.findByIdAndUpdate(userId, { $push: { messGroups: group._id } });
-
         res.json({ msg: 'Approved' });
     } catch (err) {
         next(err);
     }
 };
-
-// Add Member Manually (admin only — role guarded in route)
+// Add Member Manually (admin only â€” role guarded in route)
 export const addMember = [
     validate(addMemberSchema),
     async (req, res, next) => {
         try {
             const group = req.group;
             const { userId, role } = req.body;
-
             if (group.members.some(m => m.user.equals(userId))) {
                 return res.status(400).json({ msg: 'User already a member' });
             }
-
             const target = await User.findById(userId);
             if (!target) return res.status(404).json({ msg: 'Target user not found' });
-
             group.members.push({ user: userId, role });
             await group.save();
-
             await User.findByIdAndUpdate(userId, { $push: { messGroups: group._id } });
-
             res.json({ msg: 'Member added successfully' });
         } catch (err) {
             next(err);
         }
     }
 ];
-
-// Get single group with details — MEMBER/ADMIN ONLY (verified via Membership
+// Get single group with details â€” MEMBER/ADMIN ONLY (verified via Membership
 // interval OR legacy embedded members). Non-members get the same generic 404
 // as a missing group: outsiders cannot confirm a groupId exists.
 export const getGroupById = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId)
-            .populate('admin', 'username email phone profilePic')
-            .populate('members.user', 'username email phone profilePic')
-            .populate('pendingRequests', 'username email phone profilePic');
-
+            .populate('admin', '_id username profilePic')
+            .populate('members.user', '_id username profilePic')
+            .populate('pendingRequests', '_id username profilePic').lean();
         // Privacy: group existence + details are invisible to non-members
         const isMember = group && (
             group.admin.equals(req.user.id) ||
             group.members.some(m => m.user?.equals?.(req.user.id))
         );
         if (!group || !isMember) return res.status(404).json({ msg: 'Group not found' });
-
-        res.json(group);
+        const sanitizedAdmin = group.admin ? publicProfile(group.admin) : null;
+        const sanitizedMembers = (group.members || []).map(m => ({ ...m, user: m.user ? publicProfile(m.user) : null }));
+        const sanitizedPending = (group.pendingRequests || []).map(u => publicProfile(u));
+        res.json({ ...group, admin: sanitizedAdmin, members: sanitizedMembers, pendingRequests: sanitizedPending });
     } catch (err) {
         next(err);
     }
 };
-
-// All groups the user belongs to — was leaking EVERY group's data to any logged-in user (data leakage)
+// All groups the user belongs to â€” was leaking EVERY group's data to any logged-in user (data leakage)
 export const getAllGroups = async (req, res, next) => {
     try {
         const groups = await MessGroup.find({ 'members.user': req.user.id })
-            .populate('admin', 'username email phone profilePic')
-            .populate('members.user', 'username email phone profilePic')
-            .populate('pendingRequests', 'username email phone profilePic');
-
-        res.json(groups);
+            .populate('admin', '_id username profilePic')
+            .populate('members.user', '_id username profilePic')
+            .populate('pendingRequests', '_id username profilePic')
+            .lean();
+        // Apply publicProfile to strip any sensitive fields from user objects
+        const sanitized = groups.map(g => {
+            const admin = g.admin ? publicProfile(g.admin) : null;
+            const members = (g.members || []).map(m => ({ ...m, user: m.user ? publicProfile(m.user) : null }));
+            const pending = (g.pendingRequests || []).map(u => publicProfile(u));
+            return { ...g, admin, members, pendingRequests: pending };
+        });
+        res.json(sanitized);
     } catch (err) {
         next(err);
     }
 };
-
 // Add Entry (Meal/Cost)
 export const addEntry = [
     validate(addEntrySchema),
@@ -194,15 +179,12 @@ export const addEntry = [
         try {
             const group = req.group;
             const isAdmin = req.canEditOthers;
-
             const { date, meals, costs } = req.body;
             let entry = group.entries.find(e => e.date.toDateString() === new Date(date).toDateString());
-
             if (!entry) {
                 entry = { date: new Date(date), meals: [], costs: [] };
                 group.entries.push(entry);
             }
-
             // Validate and update meals
             for (const m of meals || []) {
                 if (!group.members.some(mem => mem.user.equals(m.userId))) {
@@ -214,7 +196,6 @@ export const addEntry = [
                     else entry.meals.push({ userId: m.userId, count: m.count });
                 }
             }
-
             // Validate and update costs
             for (const c of costs || []) {
                 if (!group.members.some(mem => mem.user.equals(c.userId))) {
@@ -230,7 +211,6 @@ export const addEntry = [
                     }
                 }
             }
-
             await group.save();
             res.json(entry);
         } catch (err) {
@@ -238,26 +218,24 @@ export const addEntry = [
         }
     }
 ];
-
 // Get Group Entries (member only)
 export const getEntries = async (req, res, next) => {
     try {
-        const group = await MessGroup.findById(req.params.groupId)
-            .populate('members.user', 'username');
+        const group = await MessGroup.findById(req.params.groupId).populate('members.user', 'username');
         if (!group) return res.status(404).json({ msg: 'Group not found' });
-
-        res.json(group);
+        const sanitizedAdmin = group.admin ? publicProfile(group.admin) : null;
+        const sanitizedMembers = (group.members || []).map(m => ({ ...m, user: m.user ? publicProfile(m.user) : null }));
+        const sanitizedPending = (group.pendingRequests || []).map(u => publicProfile(u));
+        res.json({ ...group, admin: sanitizedAdmin, members: sanitizedMembers, pendingRequests: sanitizedPending });
     } catch (err) {
         next(err);
     }
 };
-
 // Calculate Totals (member only)
 export const calculate = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId).populate('members.user', 'username');
         if (!group) return res.status(404).json({ msg: 'Group not found' });
-
         if (group.entries.length === 0) {
             return res.json({
                 totalMeals: 0,
@@ -272,7 +250,6 @@ export const calculate = async (req, res, next) => {
                 })),
             });
         }
-
         let totalMeals = 0;
         let totalBazar = 0;
         const userTotals = group.members.map(member => ({
@@ -281,7 +258,6 @@ export const calculate = async (req, res, next) => {
             meals: 0,
             costs: 0,
         }));
-
         group.entries.forEach(entry => {
             entry.meals.forEach(m => {
                 const userIdx = userTotals.findIndex(u => u.userId.equals(m.userId));
@@ -298,11 +274,8 @@ export const calculate = async (req, res, next) => {
                 }
             });
         });
-
         group.extras.forEach(extra => totalBazar += extra.amount || 0);
-
         const mealRate = totalMeals > 0 ? totalBazar / totalMeals : 0;
-
         const summaries = userTotals.map(ut => ({
             user: ut.user,
             totalMeals: ut.meals,
@@ -310,31 +283,25 @@ export const calculate = async (req, res, next) => {
             mealCost: ut.meals * mealRate,
             balance: ut.costs - (ut.meals * mealRate),
         }));
-
         res.json({ totalMeals, totalBazar, mealRate, summaries });
     } catch (err) {
         next(err);
     }
 };
-
-// Export to Excel (member only) — ExcelJS (maintained, secure; replaces unmaintained SheetJS)
+// Export to Excel (member only) â€” ExcelJS (maintained, secure; replaces unmaintained SheetJS)
 export const excelExport = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId).populate('members.user', 'username');
         if (!group) return res.status(404).json({ msg: 'Group not found' });
-
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Mess Data');
-
         const headers = ['Date',
             ...group.members.map(m => `${m.user.username} Meals`),
             ...group.members.map(m => `${m.user.username} Costs`)];
         ws.addRow(headers);
         ws.getRow(1).font = { bold: true };
-
         let totalMeals = 0, totalBazar = 0;
         const totals = group.members.map(member => ({ user: member.user.username, meals: 0, costs: 0 }));
-
         if (group.entries.length > 0) {
             group.entries.sort((a, b) => a.date - b.date).forEach(entry => {
                 const row = [entry.date.toDateString()];
@@ -353,10 +320,8 @@ export const excelExport = async (req, res, next) => {
         } else {
             ws.addRow(['No entries available']);
         }
-
         group.extras.forEach(extra => totalBazar += extra.amount || 0);
         const mealRate = totalMeals > 0 ? totalBazar / totalMeals : 0;
-
         ws.addRow([]);
         ws.addRow(['TOTAL MEALS', totalMeals]);
         ws.addRow(['TOTAL BAZAR', totalBazar]);
@@ -367,20 +332,16 @@ export const excelExport = async (req, res, next) => {
             const mealCost = t.meals * mealRate;
             ws.addRow([t.user, t.meals, t.costs, mealCost, t.costs - mealCost]);
         });
-
         res.setHeader('Content-Disposition', 'attachment; filename="mess_export.xlsx"');
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-
         await wb.xlsx.write(res); // stream directly to the response
         res.end();
     } catch (err) {
         next(err);
     }
 };
-
 // ---------- Join code & shareable invite links ----------
-
-// GET /api/messgroups/code/:groupId — admin sees current code + ready-to-copy
+// GET /api/messgroups/code/:groupId â€” admin sees current code + ready-to-copy
 // shareable invite link
 export const getJoinCode = async (req, res, next) => {
     try {
@@ -393,14 +354,12 @@ export const getJoinCode = async (req, res, next) => {
         next(err);
     }
 };
-
-// POST /api/messgroups/regenerate-code/:groupId — admin rotates the code (old links die)
+// POST /api/messgroups/regenerate-code/:groupId â€” admin rotates the code (old links die)
 export const regenerateCode = async (req, res, next) => {
     try {
         const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
         let code = '';
         for (let i = 0; i < 6; i++) code += alphabet[crypto.randomInt(alphabet.length)];
-
         req.group.code = `MM-${code}`;
         await req.group.save();
         res.json({ msg: 'Join code regenerated', code: req.group.code });
@@ -408,35 +367,30 @@ export const regenerateCode = async (req, res, next) => {
         next(err);
     }
 };
-
-// POST /api/messgroups/join-by-code — the ONLY way in: a valid shareable code.
-// Group ids/names are never discoverable — requests always go through codes.
+// POST /api/messgroups/join-by-code â€” the ONLY way in: a valid shareable code.
+// Group ids/names are never discoverable â€” requests always go through codes.
 export const joinByCode = [
     validate(joinByCodeSchema),
     async (req, res, next) => {
         try {
             const group = await MessGroup.findOne({ code: req.body.code });
-            // Generic message — don't reveal whether the code exists
+            // Generic message â€” don't reveal whether the code exists
             if (!group) return res.status(404).json({ msg: 'Invalid join code' });
-
             if (group.members.some(m => m.user.equals(req.user.id))) {
                 return res.status(400).json({ msg: 'Already requested or member' });
             }
             if (group.pendingRequests.includes(req.user.id)) {
                 return res.status(400).json({ msg: 'Already requested or member' });
             }
-
             group.pendingRequests.push(req.user.id);
             await group.save();
-            res.json({ msg: 'Request sent — waiting for admin approval' });
+            res.json({ msg: 'Request sent â€” waiting for admin approval' });
         } catch (err) {
             next(err);
         }
     },
 ];
-
 // ---------- Extras management (admin only) ----------
-
 // POST /api/messgroups/extras/:groupId
 export const addExtra = [
     validate(extraSchema),
@@ -450,7 +404,6 @@ export const addExtra = [
         }
     },
 ];
-
 // DELETE /api/messgroups/extras/:groupId/:extraId
 export const removeExtra = async (req, res, next) => {
     try {
@@ -463,7 +416,6 @@ export const removeExtra = async (req, res, next) => {
         next(err);
     }
 };
-
 // GET /api/messgroups/extras/:groupId
 export const getExtras = async (req, res, next) => {
     try {
@@ -472,7 +424,6 @@ export const getExtras = async (req, res, next) => {
         next(err);
     }
 };
-
 // Remove member (kick / leave). After departure the ex-member's access is
 // cut immediately: legacy membership removed; V2 Membership interval closed.
 // History remains readable ONLY through membership-interval-scoped queries.
@@ -482,42 +433,34 @@ export const removeMember = async (req, res, next) => {
         const targetId = req.params.userId;
         const isAdmin = group.admin.equals(req.user.id);
         const isSelf = req.user.id === targetId;
-
         if (!isAdmin && !isSelf) {
             return res.status(403).json({ msg: 'Only admin can remove other members' });
         }
         if (targetId === String(group.admin)) {
-            return res.status(400).json({ msg: 'Admin cannot be removed — transfer admin role first' });
+            return res.status(400).json({ msg: 'Admin cannot be removed â€” transfer admin role first' });
         }
-
         const member = group.members.find(m => m.user.equals(targetId));
         if (!member) return res.status(404).json({ msg: 'Not a member of this group' });
-
         group.members = group.members.filter(m => !m.user.equals(targetId));
         group.pendingRequests = group.pendingRequests.filter(id => !id.equals(targetId));
         await group.save();
-
         await User.findByIdAndUpdate(targetId, { $pull: { messGroups: group._id } });
-
         // Close the V2 Membership interval NOW (access cut + balances preserved)
         const now = new Date();
         await Membership.updateMany(
             { groupId: group._id, user: targetId, $or: [{ endDate: null }, { endDate: { $gt: now } }] },
             { $set: { endDate: now, leftAt: now } }
         );
-
         await audit({
             groupId: group._id, actorId: req.user.id,
             action: isSelf ? 'membership.self_left' : 'membership.kicked',
             targetType: 'membership', reason: isSelf ? 'self leave' : 'kicked by admin',
         });
-
         res.json({ msg: isSelf ? 'You left the group' : 'Member removed' });
     } catch (err) {
         next(err);
     }
 };
-
 // ---------- Invite by email (admin only, uses Nodemailer) ----------
 export const inviteByEmail = async (req, res, next) => {
     try {
@@ -525,24 +468,20 @@ export const inviteByEmail = async (req, res, next) => {
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({ msg: 'Valid email required' });
         }
-
         const group = req.group; // loaded by requireGroupRole
         await group.populate('admin', 'username');
-
         await sendGroupInviteEmail(email, group.name, group.admin.username, group.code);
         res.json({ msg: 'Invitation sent' });
     } catch (err) {
         next(err);
     }
 };
-
 // ---------- PDF export (member only) ----------
 export const pdfExport = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId)
             .populate('members.user', 'username');
         if (!group) return res.status(404).json({ msg: 'Group not found' });
-
         // Compute totals (same logic as calculate)
         let totalMeals = 0, totalBazar = 0;
         const totals = group.members.map(member => ({ user: member.user.username, meals: 0, costs: 0 }));
@@ -558,17 +497,13 @@ export const pdfExport = async (req, res, next) => {
         });
         group.extras.forEach(e => totalBazar += e.amount || 0);
         const mealRate = totalMeals > 0 ? totalBazar / totalMeals : 0;
-
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="mess_report.pdf"');
-
         const doc = new PDFDocument({ margin: 40 });
         doc.pipe(res);
-
         doc.fontSize(20).text(group.name, { align: 'center' });
-        doc.fontSize(12).text(`Mess Report — generated ${new Date().toLocaleDateString()}`, { align: 'center' });
+        doc.fontSize(12).text(`Mess Report â€” generated ${new Date().toLocaleDateString()}`, { align: 'center' });
         doc.moveDown(2);
-
         doc.fontSize(14).text('Daily Entries', { underline: true });
         doc.moveDown(0.5);
         if (group.entries.length === 0) {
@@ -587,7 +522,6 @@ export const pdfExport = async (req, res, next) => {
                 doc.moveDown(0.3);
             });
         }
-
         doc.addPage();
         doc.fontSize(14).text('Monthly Summary', { underline: true });
         doc.moveDown();
@@ -595,7 +529,6 @@ export const pdfExport = async (req, res, next) => {
         doc.text(`Total Bazar: ${totalBazar}`);
         doc.text(`Meal Rate: ${mealRate.toFixed(2)}`);
         doc.moveDown();
-
         doc.fontSize(12).text('Member Balances', { underline: true });
         doc.moveDown(0.3);
         totals.forEach(t => {
@@ -605,9 +538,10 @@ export const pdfExport = async (req, res, next) => {
                 `${t.user}: meals=${t.meals}, paid=${t.costs.toFixed(2)}, mealCost=${mealCost.toFixed(2)}, balance=${balance.toFixed(2)} ${balance >= 0 ? '(receives)' : '(owes)'}`
             );
         });
-
         doc.end();
     } catch (err) {
         next(err);
     }
 };
+
+

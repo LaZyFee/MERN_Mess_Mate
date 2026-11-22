@@ -14,6 +14,7 @@ import {
     objectIdAndExtraParamSchema, objectIdAndIdParamSchema, inviteSchema,
 } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
+import { deprecate } from '../middleware/deprecate.js';
 
 const router = express.Router();
 
@@ -67,8 +68,9 @@ router.post(
 );
 router.get('/my-groups', getAllGroups);
 router.get('/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), getGroupById);
-router.get('/entries/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), getEntries);
-router.get('/calculate/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), calculate);
+// Legacy entry/calculate endpoints — superseded by /api/meals & /api/expenses
+router.get('/entries/:groupId', deprecate({ successor: '/api/meals, /api/expenses' }), validate(objectIdParamSchema, 'params'), requireGroupRole('member'), getEntries);
+router.get('/calculate/:groupId', deprecate({ successor: '/api/summary' }), validate(objectIdParamSchema, 'params'), requireGroupRole('member'), calculate);
 router.get('/export/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), excelExport);
 router.get('/pdf/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), pdfExport);
 router.get('/extras/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), getExtras);

@@ -1,8 +1,25 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { getCookie } from '../utils/tokens.js';
+
+// Cookie name for the access token (Doc §15 / §19.1)
+const ACCESS_COOKIE = 'mm_at';
+
+const getToken = (req) => {
+    // 1) HttpOnly cookie (browser clients) — manual parse, no cookie-parser dep
+    const cookieToken = getCookie(req, ACCESS_COOKIE);
+    if (cookieToken) return cookieToken;
+    // 2) x-auth-token header (non-browser / legacy clients)
+    const headerToken = req.header('x-auth-token');
+    if (headerToken) return headerToken;
+    // 3) Authorization: Bearer header
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ')) return authHeader.slice(7);
+    return null;
+};
 
 const auth = async (req, res, next) => {
-    const token = req.header('x-auth-token');
+    const token = getToken(req);
     if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
 
     try {
@@ -21,3 +38,7 @@ const auth = async (req, res, next) => {
 };
 
 export default auth;
+
+// Expose cookie name so controllers can set/clear it when X-Client: web
+export { ACCESS_COOKIE };
+

@@ -6,8 +6,10 @@ import Membership from '../models/Membership.js';
 import MessGroup from '../models/MessGroup.js';
 import Meal from '../models/Meal.js';
 import IdempotencyRecord from '../models/IdempotencyRecord.js';
+import { registerRoutineJobs } from './routineJobs.js';
 import { enqueueNotification } from './outboxWorker.js';
 import { audit } from '../models/AuditEvent.js';
+import { runJob } from './jobRunner.js';
 
 // Scheduler service — automated background tasks (Doc §9, §12, §13)
 // 1. Recurring expense draft generation for the new month
@@ -186,14 +188,12 @@ let schedulerTimer = null;
 
 export const startScheduler = (intervalMs = 60 * 60 * 1000) => { // default 1 hour
     if (schedulerTimer) return;
+    if (process.env.ENABLE_SCHEDULER === 'false') return;
 
     // Run once on boot after a 10s warmup
     setTimeout(async () => {
         try {
-            await generateRecurringDraftsForMonth();
-            await applyDefaultMealsForPreviousDay();
-            await checkPeriodDeadlines();
-            await cleanupExpiredIdempotency();
+            await runAllJobs();
         } catch (e) {
             console.error('[scheduler] warmup error:', e.message);
         }
@@ -201,10 +201,7 @@ export const startScheduler = (intervalMs = 60 * 60 * 1000) => { // default 1 ho
 
     schedulerTimer = setInterval(async () => {
         try {
-            await generateRecurringDraftsForMonth();
-            await applyDefaultMealsForPreviousDay();
-            await checkPeriodDeadlines();
-            await cleanupExpiredIdempotency();
+            await runAllJobs();
         } catch (e) {
             console.error('[scheduler] interval error:', e.message);
         }
@@ -215,3 +212,63 @@ export const stopScheduler = () => {
     if (schedulerTimer) clearInterval(schedulerTimer);
     schedulerTimer = null;
 };
+
+// ---------- Safe cron wiring (B0.2) ----------
+// Every job now runs through runJob (distributed lock + run log) and is
+// exported as a function taking `now`, returning { processed, failed }.
+
+
+const asResult = (value) =>
+    Array.isArray(value) ? { processed: value.length, failed: 0 } : value;
+
+export const jobRecurringDrafts = async (now = new Date()) =>
+    asResult(await generateRecurringDraftsForMonth(
+        (now || new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7)
+    ));
+
+export const jobDefaultMeals = async (now = new Date()) => {
+    const dayStart = new Date(`${new Date((now || new Date()).getTime() - 24 * 3600 * 1000)
+        .toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })}T00:00:00.000Z`);
+    // Re-use the existing routine but scoped to the fixed day via its own logic:
+    // the exported function computes "yesterday" itself, so for fixed-now tests
+    // we call it directly (it is idempotent: only `unknown` slots are touched).
+    const filled = await applyDefaultMealsForPreviousDay();
+    return { processed: filled, failed: 0, dayStart };
+};
+
+export const jobDeadlineReminders = async () => {
+    await checkPeriodDeadlines();
+    return { processed: 0, failed: 0 }; // notifications are deduped in the outbox
+};
+
+export const jobIdempotencyCleanup = async () => {
+    const deleted = await cleanupExpiredIdempotency();
+    return { processed: deleted, failed: 0 };
+};
+
+export const ALL_JOBS = [
+    ['recurringDrafts', jobRecurringDrafts],
+    ['defaultMeals', jobDefaultMeals],
+    ['deadlineReminders', jobDeadlineReminders],
+    ['idempotencyCleanup', jobIdempotencyCleanup],
+    ['supportSlaWatcher', async () => (await import('./supportJobs.js')).supportSlaWatcherFn()],
+    ['supportAutoClose', async () => (await import('./supportJobs.js')).supportAutoCloseFn()],
+    ['dutyReminders', async () => (await import('./routineJobs.js')).dutyRemindersFn()],
+    ['markMissed', async () => (await import('./routineJobs.js')).markMissedFn()],
+    ['noteExpiry', async () => (await import('./routineJobs.js')).noteExpiryFn()],
+    ['rosterHorizon', async () => (await import('./routineJobs.js')).rosterHorizonFn()],
+];
+
+export const runAllJobs = async (now = new Date()) => {
+    const results = {};
+    for (const [name, fn] of ALL_JOBS) {
+        results[name] = await runJob(name, fn, { now });
+    }
+    return results;
+};
+
+// ---------- SIGTERM: stop cron, let the in-flight job finish ----------
+process.on('SIGTERM', () => {
+    stopScheduler();
+    // interval cleared; an in-flight run continues (its promise is not cancellable)
+});

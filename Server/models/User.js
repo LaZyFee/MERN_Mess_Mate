@@ -48,6 +48,28 @@ const userSchema = new mongoose.Schema({
         default: "",
     },
     messGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MessGroup' }],
+    // Per-type notification preferences (B0.1). Unknown types default to on.
+    notificationPrefs: {
+        types: { type: mongoose.Schema.Types.Mixed, default: {} },
+        quietHours: {
+            from: { type: String, default: '22:00' },
+            to: { type: String, default: '07:00' },
+            _id: false,
+        },
+        _id: false,
+    },
+    // ---- TOTP 2FA (B3.2) ----
+    twoFactor: {
+        enabled: { type: Boolean, default: false },
+        secretEnc: { type: String, default: '' }, // AES-256-GCM encrypted TOTP secret
+        enabledAt: { type: Date, default: null },
+        recoveryCodesHash: [{ type: String }], // sha256 hashes, single-use
+    },
+    // ---- Consent timestamps (B3.4) ----
+    termsAcceptedAt: { type: Date, default: null },
+    privacyAcceptedAt: { type: Date, default: null },
+    supportContextConsentAt: { type: Date, default: null },
+    emailNotificationsConsentAt: { type: Date, default: null },
 });
 
 userSchema.plugin(uniqueValidator);

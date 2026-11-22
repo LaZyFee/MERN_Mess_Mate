@@ -4,8 +4,11 @@ import crypto from 'crypto';
 const ACCESS_TTL = '1h';
 const REFRESH_TTL_DAYS = 7;
 
-export const signAccessToken = (user) =>
-    jwt.sign({ user: { id: user.id } }, process.env.JWT_SECRET, { expiresIn: ACCESS_TTL });
+export const signAccessToken = (user) => {
+    const payload = { user: { id: user.id } };
+    if (user.amr) payload.user.amr = user.amr;
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_TTL });
+};
 
 // jti (unique id) guarantees two refresh tokens signed in the same second differ,
 // so rotation actually invalidates the old token
@@ -76,6 +79,55 @@ export const clearRefreshTokenCookie = (res) => {
         'Max-Age=0',
         'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
         `SameSite=${isProd ? 'Strict' : 'Lax'}`,
+    ];
+    if (isProd) flags.push('Secure');
+    res.setHeader('Set-Cookie', flags.join('; '));
+};
+
+// ---- Access token cookie (mm_at) ----
+export const setAccessTokenCookie = (res, token) => {
+    const isProd = process.env.NODE_ENV === 'production';
+    const sameSite = isProd ? 'Strict' : 'Lax';
+    const maxAge = 60 * 60; // 1 hour
+    const flags = [
+        'mm_at=' + encodeURIComponent(token),
+        'HttpOnly',
+        'Path=/',
+        `Max-Age=${maxAge}`,
+        `SameSite=${sameSite}`,
+    ];
+    if (isProd) flags.push('Secure');
+    res.setHeader('Set-Cookie', flags.join('; '));
+};
+
+export const clearAccessTokenCookie = (res) => {
+    const isProd = process.env.NODE_ENV === 'production';
+    const sameSite = isProd ? 'Strict' : 'Lax';
+    const flags = [
+        'mm_at=',
+        'HttpOnly',
+        'Path=/',
+        'Max-Age=0',
+        'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+        `SameSite=${sameSite}`,
+    ];
+    if (isProd) flags.push('Secure');
+    res.setHeader('Set-Cookie', flags.join('; '));
+};
+
+// Widen refresh cookie path for BFF refresh route (Section 5 item 3).
+// Default path is /api/users; BFF needs /api/users/refresh accessible.
+// Call with pathOverride='/api' or '/' to cover BFF proxy routes.
+export const setRefreshTokenCookieWide = (res, token, pathOverride = '/api') => {
+    const isProd = process.env.NODE_ENV === 'production';
+    const sameSite = isProd ? 'Strict' : 'Lax';
+    const maxAge = REFRESH_TTL_DAYS * 24 * 60 * 60;
+    const flags = [
+        'refreshToken=' + encodeURIComponent(token),
+        'HttpOnly',
+        `Path=${pathOverride}`,
+        `Max-Age=${maxAge}`,
+        `SameSite=${sameSite}`,
     ];
     if (isProd) flags.push('Secure');
     res.setHeader('Set-Cookie', flags.join('; '));

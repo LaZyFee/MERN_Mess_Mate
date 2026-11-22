@@ -2,6 +2,7 @@
 import { assertNoOverlap, activeMemberships, membershipsInMonth } from '../services/membershipService.js';
 import { audit } from '../models/AuditEvent.js';
 import { auditRoleChange, assertOwnerTransfer } from '../middleware/roles.js';
+import { reassignDepartedMemberDuties } from '../services/routineJobs.js';
 
 // Membership endpoints — effective-dated intervals, placeholder accounts,
 // role assignment, departure with preserved balances.
@@ -122,6 +123,9 @@ export const departMembership = async (req, res, next) => {
             action: 'membership.departed', targetType: 'membership', targetId: membership._id,
             reason: req.body?.reason || '', after: { endDate: at },
         });
+
+        // Reassign future duties of the departed member and notify managers
+        try { await reassignDepartedMemberDuties(groupId, membershipId); } catch { /* non-blocking */ }
 
         res.json({ msg: 'Departure recorded; account and balances preserved', membership });
     } catch (err) { next(err); }

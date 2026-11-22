@@ -22,6 +22,12 @@
 13. [Roadmap / Remaining Work](#13-roadmap--remaining-work)
 14. [Advanced Features](#14-advanced-features-what-better-you-can-do)
 15. [Environment Variables](#15-environment-variables-env)
+16. [Routine & Notice Board](#16-routine--notice-board-planned)
+17. [Support Desk](#17-support-desk-planned)
+18. [Notification Inbox](#18-notification-inbox-planned)
+19. [Security Hardening Roadmap](#19-security-hardening-roadmap)
+20. [Frontend Architecture (SSR / BFF / cookies)](#20-frontend-architecture-ssr--bff--cookies)
+21. [Updated Roadmap](#21-updated-roadmap)
 
 ---
 
@@ -632,3 +638,84 @@ WHATSAPP_APP_SECRET=     # optional — webhook HMAC verification
 ADMIN_EMAILS=you@example.com,other@…   # platform-admin allowlist (comma-separated)
 ADMIN_PANEL_KEY=...      # optional second factor: X-Admin-Key header for /api/admin
 ```
+
+
+---
+
+## 16. Routine & Notice Board (planned)
+
+Shows each member **who does bazar / cleaning / cooking and when**, **what is cooked on which day**, and lets members leave **notes and absence hand-overs** for the rest of the mess. No ledger impact. Full design: [`plan.md`](./plan.md) §14.
+
+| Feature | Summary |
+|---|---|
+| Duty rosters | `bazar`, `cleaning` (with areas), `cooking`, `custom`; rotation modes `round_robin`, `weekly_template`, `fair`, `manual`; skips departed or absent members; publish → generates the next 30 days |
+| Duty actions | mark done, swap request (to a person or open offer), manager reassign; bazar duty → prefilled expense draft |
+| Weekly menu | per weekday × meal slot items, cook, estimated cost; a repeating template with weekly overrides |
+| Notes | `note`, `announcement`, `handover` (absence window + task checklist anyone can claim), `alert`; audience targeting, pin (max 3), read receipts, auto-expiry |
+| Board widget | `GET /api/routines/groups/:groupId/board/today` — today's duties, menu, pinned notes, active hand-overs in one call |
+| Reminders | evening-before + morning-of duty reminders, swap and hand-over events, missed-duty alerts to managers |
+
+New models: `Roster`, `DutyAssignment`, `SwapRequest`, `MenuPlan`, `Note`. New prefix `/api/routines`. Realtime events: `duty-updated`, `menu-updated`, `note-created`, `note-updated`.
+
+## 17. Support Desk (planned)
+
+A member can raise a ticket with the platform admin. Rules:
+
+- A new ticket is **locked for the user until the admin first replies**; the user cannot add comments in the meantime.
+- After an admin reply the user may respond (status `answered`); after the user's reply the thread locks again until the admin answers (strict turn-taking, toggle `SUPPORT_STRICT_TURNS`).
+- `resolved` → user may **Reopen** within 7 days; `closed` is terminal — **no comments** (open a new linked ticket).
+- Auto-close 72 h after `resolved`; SLA timers (first response due 24 h, urgent 4 h) raise admin alerts.
+- Email buttons use **single-use action tokens** (resolve / close / rate), stored hashed, 7-day TTL.
+- Admin-only **internal notes**, canned replies, assignment, priority, stats; suspended users can file an **appeal** through a rate-limited public route.
+
+| Side | Prefix | Highlights |
+|---|---|---|
+| User | `/api/support` | `POST /tickets`, `GET /tickets`, `GET /tickets/:id` (returns `permissions.canComment` + reason), `POST /tickets/:id/messages\|resolve\|close\|reopen\|rate`, `POST /actions/:token` |
+| Admin (hidden, 404-masked) | `/api/admin/support` | queue with filters, `reply`, `internal-note`, `assign`, `PATCH`, `resolve\|close\|reopen`, `stats`, `canned-replies` |
+
+Error codes: `403 TICKET_AWAITING_ADMIN`, `403 TICKET_CLOSED`, `409 TICKET_STATE_CHANGED`. Models: `SupportTicket`, `SupportMessage` (immutable), `SupportActionToken`, `SupportCannedReply`, `Counter`. Details: `plan.md` §15.
+
+## 18. Notification Inbox (planned)
+
+One `InboxNotification` collection (TTL 90 days) powers the in-app bell for **users and admins** (duties, notes, disputes, statements, support). Admin alerts are fanned out per admin (own read state); sockets auto-join `user:<id>` and receive `inbox-new`. API: `/api/inbox` (`GET /`, `GET /unread-count`, `POST /read`, `GET/PUT /preferences`). Email still flows via the outbox with dedupe keys; admin email is a digest. Details: `plan.md` §16.
+
+## 19. Security Hardening Roadmap
+
+| Item | Status |
+|---|---|
+| Invite codes hashed at rest, 7-day TTL, max-uses, one-time reveal; strict join limiter | planned (`InviteCode` model) |
+| TOTP 2FA — mandatory for platform admins, offered to owner/treasurer | planned |
+| Anomaly detection (`SecurityEvent` + 15-min sweep, new-device email) | planned |
+| Strip email/phone from every populate, central `publicProfile`, sensitive-read audit | planned (+ regression test) |
+| Retention job (tickets anonymised at 18 months, TTLs) | planned |
+| CSP + Referrer-Policy + Permissions-Policy + HSTS | planned |
+| Backup/restore runbook + quarterly drill | planned |
+| Consent timestamps (terms, privacy, support context, email) | planned |
+| Cron hardening: Mongo `JobLock`, `JobRun` log, overlap guard, graceful shutdown | planned (`plan.md` §17) |
+
+## 20. Frontend Architecture (SSR / BFF / cookies)
+
+Decision: move the client to **Next.js App Router** acting as a **BFF** — server middleware for route protection, protected server layouts, SSR for first-load data, HttpOnly cookies only (no `localStorage`), and a same-origin `/api/bff/*` proxy so the browser never learns the backend URL or any token. Browser DevTools will still show requests to your own origin; real security stays on the backend. Backend changes required (cookie access token, `X-Client: web` handling, CSRF double-submit, cookie-authenticated sockets): `plan.md` §19.1. Frontend rules: `FRONTEND_BUILD_PROMPT.md` §8.
+
+### New environment variables
+
+```dotenv
+SUPPORT_STRICT_TURNS=true        # lock user comments until admin replies after every user message
+SUPPORT_SLA_NORMAL_HOURS=24
+SUPPORT_SLA_URGENT_HOURS=4
+SUPPORT_AUTOCLOSE_HOURS=72
+TWO_FA_ENC_KEY=...               # 32-byte base64 key for TOTP secret encryption
+INVITE_DEFAULT_TTL_DAYS=7
+ENABLE_SCHEDULER=true            # true only on the worker instance
+COOKIE_DOMAIN=                   # optional, production
+```
+
+## 21. Updated Roadmap
+
+- [ ] **B0** Inbox + JobLock/JobRun + scheduler audit fixes + notification preferences
+- [ ] **B1** Support Desk (rules matrix tests, admin alerts, action tokens, appeals)
+- [ ] **B2** Routine & Board (rosters, duties, swaps, menu, notes/hand-overs, reminders)
+- [ ] **B3** Security hardening (InviteCode, 2FA, SecurityEvent, CSP, retention, runbook)
+- [ ] **B4** Cookie-only auth on the backend
+- [ ] **B5** Next.js BFF frontend (foundation, then Support, Board, Inbox UI)
+- [ ] **B6** Extras: cook headcount, shared shopping list, fairness board, inventory tracker, polls, weekly digest (`plan.md` §20)

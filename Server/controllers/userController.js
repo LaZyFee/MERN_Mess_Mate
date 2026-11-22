@@ -6,8 +6,10 @@ import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema,
 import { validate } from '../validation/validate.js';
 import {
     signAccessToken, signRefreshToken, saveRefreshToken, clearRefreshToken,
-    verifyRefreshToken, randomToken, setRefreshTokenCookie, clearRefreshTokenCookie, getCookie,
+    verifyRefreshToken, randomToken, setRefreshTokenCookie, clearRefreshTokenCookie,
+    getCookie, setAccessTokenCookie, clearAccessTokenCookie,
 } from '../utils/tokens.js';
+import { setCSRFCookie } from '../middleware/csrf.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../utils/mailer.js';
 
 const safeUser = (user) => ({
@@ -19,17 +21,27 @@ const safeUser = (user) => ({
     isVerified: user.isVerified,
 });
 
-const sendAuthResponse = async (res, user, status = 200) => {
+const sendAuthResponse = async (res, user, status = 200, req = null) => {
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
     await saveRefreshToken(User, user.id, refreshToken);
-    setRefreshTokenCookie(res, refreshToken);
 
-    res.status(status).json({
-        user: safeUser(user),
-        accessToken,
-        refreshToken, // client stores this or relies on HttpOnly cookie
-    });
+    const isWeb = req && req.headers['x-client'] === 'web';
+
+    if (isWeb) {
+        // Cookie-only: set HttpOnly cookies, omit tokens from JSON body
+        setAccessTokenCookie(res, accessToken);
+        setRefreshTokenCookieWide(res, refreshToken); // widened path for BFF
+        setCSRFCookie(res);
+        res.status(status).json({ user: safeUser(user) });
+    } else {
+        setRefreshTokenCookie(res, refreshToken);
+        res.status(status).json({
+            user: safeUser(user),
+            accessToken,
+            refreshToken,
+        });
+    }
 };
 
 // Register
@@ -59,7 +71,7 @@ export const register = [
             });
 
             await sendVerificationEmail(user, verifyToken);
-            await sendAuthResponse(res, user, 201);
+            await sendAuthResponse(res, user, 201, req);
         } catch (err) {
             if (err.code === 11000) return res.status(400).json({ msg: 'User already exists' });
             next(err);
@@ -82,7 +94,18 @@ export const login = [
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) return res.status(400).json(invalid);
 
-            await sendAuthResponse(res, user);
+            // If 2FA is enabled, require step-up verification before issuing tokens
+            if (user.twoFactor?.enabled) {
+                const { makeChallenge } = await import('./totpController.js');
+                const challengeId = makeChallenge(user.id);
+                return res.json({
+                    twoFactorRequired: true,
+                    challengeToken: challengeId,
+                    msg: '2FA verification required',
+                });
+            }
+
+            await sendAuthResponse(res, user, 200, req);
         } catch (err) {
             next(err);
         }
@@ -100,7 +123,7 @@ export const refresh = async (req, res, next) => {
         if (user.suspended) return res.status(403).json({ msg: 'Account suspended' });
 
         // Rotate: old token is invalidated, a new pair is issued (and cookie updated)
-        await sendAuthResponse(res, user);
+        await sendAuthResponse(res, user, 200, req);
     } catch (err) {
         next(err);
     }
@@ -253,6 +276,9 @@ export const changePassword = [
 
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(req.body.newPassword, salt);
+            // Revoke all other sessions: clear stored refresh token so every
+            // device must re-login with the new password (B3 quick win).
+            user.refreshToken = null;
             await user.save();
 
             res.json({ msg: 'Password changed' });

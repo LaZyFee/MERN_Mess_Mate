@@ -8,6 +8,7 @@ import RecurringRule from '../models/RecurringRule.js';
 import Expense from '../models/Expense.js';
 import PaymentNote from '../models/PaymentNote.js';
 import ExpenseCategory from '../models/ExpenseCategory.js';
+import Meal from '../models/Meal.js';
 import { seedDefaultCategories } from '../controllers/expenseCategoryController.js';
 
 dotenv.config();
@@ -37,6 +38,7 @@ export const runMigration = async () => {
     let migratedMemberships = 0;
     let migratedRecurring = 0;
     let migratedExpenses = 0;
+    let migratedMeals = 0;
 
     const groups = await MessGroup.find().lean();
     console.log(`Found ${groups.length} mess groups.`);
@@ -160,11 +162,50 @@ export const runMigration = async () => {
         migratedExpenses++;
     }
 
+    // 6. Migrate legacy 2-slot float meals (breakfast/dinner only, portions as
+    //    floats like 1.5) into the 4-slot integer-subunit state form.
+    //    Legacy shape: { breakfast: 1.5, dinner: 0, lunch: null, snacks: null }
+    //    Target shape: slot = { state, portionSubunits, source }.
+    const legacySlotNames = ['breakfast', 'lunch', 'dinner', 'snacks'];
+    const legacyMeals = await Meal.find({
+        $or: [
+            { 'breakfast.state': { $exists: false } },
+            { 'lunch.state': { $exists: false } },
+            { breakfast: { $type: 'number' } },
+            { lunch: { $type: 'number' } },
+            { dinner: { $type: 'number' } },
+            { snacks: { $type: 'number' } },
+        ],
+    });
+    console.log(`Found ${legacyMeals.length} legacy 2-slot float meals needing migration.`);
+
+    for (const meal of legacyMeals) {
+        if (!isDryRun) {
+            for (const slotName of legacySlotNames) {
+                const raw = meal[slotName];
+                // Already migrated (object with state) — leave untouched.
+                if (raw && typeof raw === 'object' && raw.state) continue;
+                const portions = Number(raw) || 0; // legacy float like 1.5, or null
+                const subunits = Math.round(portions * 1000);
+                meal[slotName] = {
+                    state: subunits > 0 ? 'consumed' : 'confirmed_zero',
+                    portionSubunits: subunits,
+                    actorId: null,
+                    source: 'member',
+                };
+            }
+            // pre-validate hook recomputes totalMealSubunits/totalMeals
+            await meal.save();
+        }
+        migratedMeals++;
+    }
+
     console.log('\n--- Migration Summary ---');
     console.log(`Groups verified: ${migratedGroups}`);
     console.log(`Memberships initialized: ${migratedMemberships}`);
     console.log(`Recurring rules created from extras: ${migratedRecurring}`);
     console.log(`Expenses normalized: ${migratedExpenses}`);
+    console.log(`Legacy 2-slot meals migrated: ${migratedMeals}`);
     console.log('Migration finished successfully.\n');
 
     await mongoose.disconnect();

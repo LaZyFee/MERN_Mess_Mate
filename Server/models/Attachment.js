@@ -24,6 +24,13 @@ const attachmentSchema = new mongoose.Schema(
             enum: ['clean', 'pending', 'rejected'],
             default: 'clean',
         },
+        // Cloud storage (item #5): provider, public id and secure url for
+        // signed-URL access. `storagePath` holds the logical path (Cloudinary
+        // public_id) for cloud uploads, or a local disk path for legacy files.
+        provider: { type: String, enum: ['local', 'cloudinary'], default: 'local' },
+        publicId: { type: String, trim: true },
+        secureUrl: { type: String, trim: true },
+        resourceType: { type: String, enum: ['image', 'raw'], default: 'image' },
         targetType: {
             type: String,
             enum: ['expense_receipt', 'payment_evidence', 'other'],

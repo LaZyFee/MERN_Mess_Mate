@@ -1,8 +1,9 @@
-import User from '../models/User.js';
+﻿import User from '../models/User.js';
 import Membership from '../models/Membership.js';
 import MessGroup from '../models/MessGroup.js';
 import AuditEvent from '../models/AuditEvent.js';
 import { audit } from '../models/AuditEvent.js';
+import { publicProfile } from '../middleware/privacy.js';
 
 // ADMIN-ONLY control plane. Never exposed in any user-facing route, sitemap,
 // or API listing. Guard fails CLOSED and responses are intentionally generic.
@@ -12,7 +13,7 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
 const ADMIN_HEADER_SECRET = process.env.ADMIN_PANEL_KEY || '';
 
 /**
- * requirePlatformAdmin — mount BEFORE any /api/admin route.
+ * requirePlatformAdmin â€” mount BEFORE any /api/admin route.
  * Verifies the caller is on the platform-admin allowlist (ADMIN_EMAILS env,
  * comma-separated). Optionally also requires the X-Admin-Key header when
  * ADMIN_PANEL_KEY is set (defense-in-depth against a stolen access token).
@@ -32,6 +33,16 @@ export const requirePlatformAdmin = async (req, res, next) => {
             });
             return res.status(404).json({ msg: 'Route not found' }); // same as global 404
         }
+
+        // 2FA mandatory for platform admins: access token must carry amr: otp
+        const amr = req.user?.amr || [];
+        if (!Array.isArray(amr) || !amr.includes('otp')) {
+            await audit({
+                actorId: req.user.id, action: 'admin.2fa_required',
+                targetType: 'admin_panel', reason: `path=${req.originalUrl}`,
+            });
+            return res.status(404).json({ msg: 'Route not found' });
+        }
         req.isAdminPanel = true;
         next();
     } catch (err) { next(err); }
@@ -43,7 +54,7 @@ const alog = (req, action, extra = {}) =>
 
 // ---------------- Traffic & analytics ----------------
 
-/** GET /api/admin/overview — counts + headline metrics */
+/** GET /api/admin/overview â€” counts + headline metrics */
 export const getOverview = async (req, res, next) => {
     try {
         const since24h = new Date(Date.now() - 24 * 3600 * 1000);
@@ -69,7 +80,7 @@ export const getOverview = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-/** GET /api/admin/traffic?days=30 — daily signup/activity buckets */
+/** GET /api/admin/traffic?days=30 â€” daily signup/activity buckets */
 export const getTraffic = async (req, res, next) => {
     try {
         const days = Math.min(Math.max(1, Number(req.query.days) || 30), 120);
@@ -91,7 +102,7 @@ export const getTraffic = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-/** GET /api/admin/audit?limit=100&action=&groupId= — latest audit events */
+/** GET /api/admin/audit?limit=100&action=&groupId= â€” latest audit events */
 export const listAuditEvents = async (req, res, next) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 100, 500);
@@ -105,7 +116,7 @@ export const listAuditEvents = async (req, res, next) => {
 
 // ---------------- Global user directory (admin-only) ----------------
 
-/** GET /api/admin/users?q=&limit=&cursor= — all users, paginated */
+/** GET /api/admin/users?q=&limit=&cursor= â€” all users, paginated */
 export const adminListUsers = async (req, res, next) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 50, 200);
@@ -127,19 +138,20 @@ export const adminListUsers = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-/** GET /api/admin/users/:userId — full profile incl. group memberships */
+/** GET /api/admin/users/:userId â€” full profile incl. group memberships */
 export const adminGetUser = async (req, res, next) => {
     try {
         const user = await User.findById(req.params.userId)
             .select('-password -refreshToken -resetPasswordToken -verifyEmailToken').lean();
         if (!user) return res.status(404).json({ msg: 'Not found' });
+        await alog(req, 'admin.users.view', { targetId: user._id });
         const memberships = await Membership.find({ user: user._id })
             .populate('groupId', 'name code').lean();
-        res.json({ user, memberships });
+        res.json({ user: publicProfile(user), memberships });
     } catch (err) { next(err); }
 };
 
-/** PATCH /api/admin/users/:userId — suspend/verify/flip admin allowlist flags */
+/** PATCH /api/admin/users/:userId â€” suspend/verify/flip admin allowlist flags */
 export const adminUpdateUser = async (req, res, next) => {
     try {
         const { isVerified, suspended } = req.body;
@@ -149,6 +161,7 @@ export const adminUpdateUser = async (req, res, next) => {
         const user = await User.findByIdAndUpdate(req.params.userId, update, { new: true })
             .select('-password -refreshToken').lean();
         if (!user) return res.status(404).json({ msg: 'Not found' });
+        await alog(req, 'admin.users.view', { targetId: user._id });
         await alog(req, 'admin.user_updated', { targetId: req.params.userId, after: update });
         res.json({ user });
     } catch (err) { next(err); }
@@ -156,7 +169,7 @@ export const adminUpdateUser = async (req, res, next) => {
 
 // ---------------- Global group directory (admin-only) ----------------
 
-/** GET /api/admin/groups?q=&limit= — ALL groups with member counts */
+/** GET /api/admin/groups?q=&limit= â€” ALL groups with member counts */
 export const adminListGroups = async (req, res, next) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 50, 200);
@@ -164,7 +177,7 @@ export const adminListGroups = async (req, res, next) => {
         if (req.query.q) filter.name = new RegExp(req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
         const groups = await MessGroup.find(filter).sort({ createdAt: -1 }).limit(limit)
-            .populate('admin', 'username email')
+            .populate('admin', '_id username profilePic')
             .lean();
         const counts = await Membership.aggregate([
             { $match: { $or: [{ endDate: null }, { endDate: { $gt: new Date() } }] } },
@@ -178,17 +191,17 @@ export const adminListGroups = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-/** GET /api/admin/groups/:groupId — deep inspection of any group */
+/** GET /api/admin/groups/:groupId â€” deep inspection of any group */
 export const adminGetGroup = async (req, res, next) => {
     try {
-        const group = await MessGroup.findById(req.params.groupId).populate('admin', 'username email').lean();
+        const group = await MessGroup.findById(req.params.groupId).populate('admin', '_id username profilePic').lean();
         if (!group) return res.status(404).json({ msg: 'Not found' });
-        const memberships = await Membership.find({ groupId: group._id }).populate('user', 'username email').lean();
+        const memberships = await Membership.find({ groupId: group._id }).populate('user', '_id username profilePic').lean();
         res.json({ group, memberships });
     } catch (err) { next(err); }
 };
 
-/** DELETE /api/admin/groups/:groupId — archive/danger zone (ownerless groups only) */
+/** DELETE /api/admin/groups/:groupId â€” archive/danger zone (ownerless groups only) */
 export const adminDeleteGroup = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId);
@@ -199,5 +212,3 @@ export const adminDeleteGroup = async (req, res, next) => {
         res.json({ msg: 'Group archived' });
     } catch (err) { next(err); }
 };
-
-

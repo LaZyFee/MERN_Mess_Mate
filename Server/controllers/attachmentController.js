@@ -1,8 +1,13 @@
 import Attachment from '../models/Attachment.js';
 import Expense from '../models/Expense.js';
 import MoneyTransaction from '../models/MoneyTransaction.js';
-import { verifyMagicBytes, computeFileSha256 } from '../middleware/receiptUpload.js';
-import fs from 'fs';
+import {
+    verifyMagicBytes,
+    computeBufferSha256,
+    scanForViruses,
+    uploadToCloudinary,
+    signedReceiptUrl,
+} from '../middleware/receiptUpload.js';
 
 // Attachment controller — upload, magic byte check, and authorized private download (Doc §10, §15)
 
@@ -17,63 +22,81 @@ export const uploadAttachment = async (req, res, next) => {
 
         const { groupId } = req.params;
         const { targetType = 'expense_receipt', targetId = null } = req.body;
-        const filePath = req.file.path;
+        const buffer = req.file.buffer;
         const mimeType = req.file.mimetype;
 
-        // Magic bytes validation
-        const isValidSignature = verifyMagicBytes(filePath, mimeType);
+        // Magic bytes validation (reject disguised/executable files)
+        const isValidSignature = verifyMagicBytes(buffer, mimeType);
         if (!isValidSignature) {
-            fs.unlinkSync(filePath); // delete invalid/disguised file
-            return res.status(400).json({ msg: 'File signature does not match claimed MIME type (rejected)' });
+            return res
+                .status(400)
+                .json({ msg: 'File signature does not match claimed MIME type (rejected)' });
         }
 
         // SHA-256 hash
-        const sha256 = await computeFileSha256(filePath);
+        const sha256 = computeBufferSha256(buffer);
+
+        // AV-scan hook
+        const scan = await scanForViruses(buffer);
+        let scanStatus = 'clean';
+        if (scan.verdict.startsWith('infected')) {
+            return res.status(400).json({ msg: 'File failed antivirus scan (rejected)' });
+        }
+        if (!scan.scanned) {
+            scanStatus = 'pending'; // clamscan unavailable → flag for central AV sweep
+        }
+
+        // Cloud storage as an authenticated resource (signed-URL only access)
+        const { publicId, secureUrl, resourceType } = await uploadToCloudinary(
+            buffer,
+            mimeType,
+            req.file.originalname
+        );
 
         const attachment = await Attachment.create({
             groupId,
             uploadedBy: req.user.id,
             originalName: req.file.originalname,
-            storedName: req.file.filename,
-            storagePath: filePath,
+            storedName: publicId,
+            storagePath: publicId, // logical path on Cloudinary
+            provider: 'cloudinary',
+            publicId,
+            secureUrl,
+            resourceType,
             mimeType,
             size: req.file.size,
             sha256,
-            scanStatus: 'clean',
+            scanStatus,
             targetType,
             targetId: targetId || null,
         });
 
         // Link to target if provided
         if (targetId) {
+            const receiptUrl = `/api/attachments/groups/${groupId}/${attachment._id}`;
             if (targetType === 'expense_receipt') {
-                await Expense.findOneAndUpdate(
-                    { _id: targetId, groupId },
-                    { receiptUrl: `/api/attachments/groups/${groupId}/${attachment._id}` }
-                );
+                await Expense.findOneAndUpdate({ _id: targetId, groupId }, { receiptUrl });
             } else if (targetType === 'payment_evidence') {
-                await MoneyTransaction.findOneAndUpdate(
-                    { _id: targetId, groupId },
-                    { evidenceUrl: `/api/attachments/groups/${groupId}/${attachment._id}` }
-                );
+                await MoneyTransaction.findOneAndUpdate({ _id: targetId, groupId }, {
+                    evidenceUrl: receiptUrl,
+                });
             }
         }
 
         res.status(201).json({
-            msg: 'Attachment uploaded and verified',
+            msg: 'Attachment uploaded to cloud storage, verified and scanned',
+            scan: { scanned: scan.scanned, verdict: scan.verdict },
             attachment: {
                 id: attachment._id,
                 originalName: attachment.originalName,
                 mimeType: attachment.mimeType,
                 size: attachment.size,
                 sha256: attachment.sha256,
+                scanStatus: attachment.scanStatus,
                 url: `/api/attachments/groups/${groupId}/${attachment._id}`,
             },
         });
     } catch (err) {
-        if (req.file?.path && fs.existsSync(req.file.path)) {
-            try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
-        }
         next(err);
     }
 };
@@ -90,6 +113,17 @@ export const downloadAttachment = async (req, res, next) => {
             return res.status(404).json({ msg: 'Attachment not found' });
         }
 
+        if (attachment.provider === 'cloudinary' && attachment.publicId) {
+            const resourceType =
+                attachment.resourceType ||
+                (attachment.mimeType === 'application/pdf' ? 'raw' : 'image');
+            const url = signedReceiptUrl(attachment.publicId, resourceType);
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            return res.redirect(302, url);
+        }
+
+        // Legacy local storage fallback
+        const fs = await import('fs');
         if (!fs.existsSync(attachment.storagePath)) {
             return res.status(404).json({ msg: 'File no longer exists on storage' });
         }

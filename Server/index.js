@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import passport from 'passport';
 import connectDB from './config/db.js';
+import MongoSessionStore from './config/mongoSessionStore.js';
 import './config/passportJs.js';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
@@ -27,8 +28,14 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
 import attachmentRoutes from './routes/attachmentRoutes.js';
 import depositAssetRoutes from './routes/depositAssetRoutes.js';
+import inboxRoutes from './routes/inboxRoutes.js';
+import supportRoutes from './routes/supportRoutes.js';
+import supportAdminRoutes from './routes/supportAdminRoutes.js';
+import routinesRoutes from './routes/routinesRoutes.js';
+import totpRoutes from './routes/totpRoutes.js';
 import { startOutboxWorker } from './services/outboxWorker.js';
 import { startScheduler } from './services/schedulerService.js';
+import { setSocketIo } from './services/inboxService.js';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -40,8 +47,49 @@ connectDB();
 const app = express();
 app.set('trust proxy', 1); // needed for express-rate-limit behind proxies (Render/Heroku/Vercel)
 
-// ---------- Security headers ----------
-app.use(helmet());
+// ---------- Security headers ---------- (B3.4)
+const isProd = process.env.NODE_ENV === 'production';
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+                connectSrc: ["'self'", process.env.FRONTEND_URL || 'http://localhost:5174'],
+                frameAncestors: ["'none'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                scriptSrc: ["'self'"],
+            },
+        },
+        referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+        permissionsPolicy: {
+            camera: [],
+            microphone: [],
+            geolocation: [],
+        },
+        ...(isProd
+            ? {
+                  strictTransportSecurity: {
+                      maxAge: 31536000,
+                      includeSubDomains: true,
+                      preload: true,
+                  },
+              }
+            : {}),
+    })
+);
+
+// no-store on authenticated JSON responses (B3 quick win)
+app.use((req, res, next) => {
+    const originalJson = res.json;
+    res.json = function (body) {
+        if (req.user || req.headers.cookie) {
+            res.setHeader('Cache-Control', 'no-store');
+        }
+        return originalJson.call(this, body);
+    };
+    next();
+});
 
 // ---------- Rate limiting ----------
 // Stricter limit on auth endpoints (brute-force protection)
@@ -85,6 +133,7 @@ app.use(
         secret: process.env.SESSION_SECRET,
         resave: false,
         saveUninitialized: false,
+        store: new MongoSessionStore(), // off MemoryStore → MongoDB (multi-instance safe)
         cookie: {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -118,6 +167,11 @@ app.use('/api/notifications', generalLimiter, notificationRoutes);
 app.use('/api/sessions', generalLimiter, sessionRoutes);
 app.use('/api/attachments', generalLimiter, attachmentRoutes);
 app.use('/api/assets', generalLimiter, depositAssetRoutes);
+app.use('/api/inbox', generalLimiter, inboxRoutes);
+app.use('/api/support', generalLimiter, supportRoutes);
+app.use('/api/admin/support', supportAdminRoutes);
+app.use('/api/routines', generalLimiter, routinesRoutes);
+app.use('/api/users', authLimiter, totpRoutes);
 
 // ---------- Socket.IO (JWT-authenticated realtime updates) ----------
 const httpServer = createServer(app);
@@ -128,13 +182,17 @@ const io = new SocketServer(httpServer, {
     },
 });
 
-// Handshake must carry a valid access token: client passes ?token=<accessToken>
+// Handshake: read access token from mm_at cookie (withCredentials), not query string.
+// Query-string tokens are rejected (security quick win — token never in URL).
 io.use((socket, next) => {
     try {
-        const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+        const cookieHeader = socket.handshake.headers.cookie || '';
+        const match = cookieHeader.match(/(?:^|;\s*)mm_at=([^;]*)/);
+        const token = match ? decodeURIComponent(match[1]) : null;
         if (!token) return next(new Error('Authentication required'));
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         socket.userId = decoded.user.id;
+        socket.join(`user:${socket.userId}`); // per-user inbox room (B0.1)
         next();
     } catch {
         next(new Error('Invalid token'));
@@ -151,6 +209,8 @@ io.on('connection', (socket) => {
 
 // Make io available to controllers for realtime events
 app.set('io', io);
+// Wire io into the inbox service so notify() emits `inbox-new` to user rooms
+setSocketIo(io);
 
 // ---------- 404 ----------
 app.use((req, res) => res.status(404).json({ msg: 'Route not found' }));
@@ -162,11 +222,20 @@ app.use((err, req, res, next) => {
     res.status(err.status || 500).json({ msg: 'Server error' });
 });
 
-const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Export the raw Express app for supertest integration tests (index.js itself
+// still boots the full HTTP server when run as the entry point).
+export { app, httpServer };
 
-// Background delivery worker (notification outbox → email/WhatsApp)
-startOutboxWorker();
+// Real server boot only when run directly (`node index.js` / nodemon) —
+// importing index.js from tests must not bind a port or start workers.
+const isMain = process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('index.js');
+if (isMain) {
+    const PORT = process.env.PORT || 5000;
+    httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// Background scheduler (recurring rule draft generation & deadline reminders)
-startScheduler();
+    // Background delivery worker (notification outbox → email/WhatsApp)
+    startOutboxWorker();
+
+    // Background scheduler (recurring rule draft generation & deadline reminders)
+    startScheduler();
+}

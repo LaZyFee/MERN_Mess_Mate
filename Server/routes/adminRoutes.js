@@ -8,6 +8,7 @@ import {
     adminListUsers, adminGetUser, adminUpdateUser,
     adminListGroups, adminGetGroup, adminDeleteGroup,
 } from '../controllers/adminController.js';
+import { listJobStatuses } from '../controllers/jobController.js';
 import { objectId } from '../validation/schemas.js';
 
 // PLATFORM ADMIN CONTROL PLANE — deliberately unlinked from any user-facing
@@ -27,6 +28,9 @@ router.get('/audit', listAuditEvents);
 router.get('/users', adminListUsers);
 router.get('/users/:userId', validate(z.object({ userId: objectId }), 'params'), adminGetUser);
 router.patch('/users/:userId', validate(z.object({ userId: objectId }), 'params'), adminUpdateUser);
+
+// ---- Background jobs (B0.2, hidden) ----
+router.get('/jobs', listJobStatuses);
 
 // ---- Global group directory ----
 router.get('/groups', adminListGroups);

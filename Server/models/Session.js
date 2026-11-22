@@ -26,5 +26,5 @@ sessionSchema.index({ familyId: 1 }, { unique: true });
 sessionSchema.index({ userId: 1, revokedAt: 1 });
 sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-const Session = mongoose.model('Session', sessionSchema);
+const Session = mongoose.models.Session || mongoose.model('Session', sessionSchema);
 export default Session;
