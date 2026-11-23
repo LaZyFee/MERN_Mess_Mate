@@ -8,7 +8,7 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 
 **Priorities, in order:** (1) follow the rules below, (2) **mobile responsiveness — top priority for every screen and component**, (3) token efficiency, (4) working code, (5) modern UI polish.
 
-**Fixed stack decisions:** React (Vite) · **zustand** for state · **react-icons** for all icons (no SVG) · Chart.js (canvas) for charts · CSS variables from `App.css` for all colors.
+**Fixed stack decisions:** React (Vite) · **zustand** for state · **react-icons** for all icons (no SVG) · Chart.js (canvas) for charts · CSS variables from `App.css` for all colors. New backend modules covered: Invite Codes, TOTP 2FA, In-App Inbox, Support Desk, Routine & Board, Shopping List, Kitchen Inventory, Polls, cookie-only auth (`mm_at`/`mm_csrf` cookies).
 
 ---
 
@@ -200,24 +200,25 @@ One line per component: `Name · path · props (required*/optional) · use-for`.
 
 ## 4. BACKEND CONTRACT (compact — don't re-read server code unless a detail is missing)
 
-**Base:** `${VITE_API_URL}/api` · Header: `x-auth-token: <accessToken>` · Backend CORS allows `http://localhost:5174` → set Vite `server.port = 5174`. Include `credentials: true` on axios (HttpOnly refresh cookie is scoped to `/api/users`).
+**Base:** `${VITE_API_URL}/api` · Header: `x-auth-token: <accessToken>` · Backend CORS allows `http://localhost:5174` → set Vite `server.port = 5174`. Include `credentials: true` on axios (HttpOnly cookies: `mm_at` access token Path=/, `refreshToken` Path=/api/users, `mm_csrf` CSRF double-submit).
 
 ### Auth model
 
 - Login/register return `{ user, accessToken, refreshToken }` and also set an HttpOnly cookie. Access = 1h, refresh = 7d (**rotating**: each `POST /users/refresh` returns a new pair; replaying an old refresh token revokes the whole session **family** → 401 → force logout).
+- **TOTP 2FA:** if user has 2FA enabled, login returns `{twoFactorRequired: true, challengeToken}`. Call `POST /users/login/2fa-challenge {email,password}` → then `POST /users/login/2fa {challengeToken, code}` to get tokens with `amr: ['pwd','otp']`. 2FA setup: `POST /users/2fa/setup` → verify `POST /users/2fa/verify {code}` → disable `POST /users/2fa/disable {password, code}`. Admin routes require `amr: otp` (404-masked if not enrolled).
 - On 401: call `POST /users/refresh` once (with `credentials: 'include'`), retry the original request. Queue parallel requests during refresh. On failure: logout + redirect to login.
 - Sessions are per-device: list via `GET /sessions/users/sessions`, revoke via `DELETE /sessions/users/sessions/:familyId` or all via `DELETE /sessions/users/sessions`.
 - Rate limits: 50/15min auth, 300/15min general → friendly 429 message (RateLimitCatcher).
-- **Roles (5-tier, V2):** `owner > manager > treasurer > auditor > member`, resolved from effective-dated Memberships (legacy groups: group admin ⇒ owner). Gate UI with `PermissionGuard`; the server is the real authority. Members may hold different roles in different groups.
+- **Roles (5-tier, V2):** `owner > manager > treasurer > auditor > member`, resolved from effective-dated Memberships (legacy groups: group admin → owner). Gate UI with `PermissionGuard`; the server is the real authority. Members may hold different roles in different groups.
 - **Idempotency:** financial mutations accept an optional `Idempotency-Key` header. Send a generated UUID on create/submit/approve/reverse/confirm/finalize to make retries safe. Key reuse with a different body → 409.
 
 **Privacy model (must be reflected in UI):**
 
 1. **No global discovery** — no user or group search/browse UI anywhere for regular users. Group detail returns 404 to outsiders; render as "Group not found".
 2. **User info is group-scoped** — only the co-members directory exposes profiles (username/profilePic/whatsapp). No email/phone display across members.
-3. **Invite-only joining** — groups are entered solely via shareable copyable code/link; Settings shows code + inviteLink with copy & share buttons; admin can regenerate (kills old links).
+3. **Invite-only joining (hashed codes):** join codes are hashed at rest (sha256 + pepper). `GET /invite/codes/:groupId` returns only metadata `{prefix, expiresAt, usesLeft}` — no plaintext. Plaintext is shown **once** at creation via `POST /invite/codes`. Join via `POST /invite/join-by-code {code, groupId}` (rate-limited, failure lockout). Admin can regenerate (kills old links).
 4. **Leave/kick cuts instantly** — after departure the member loses access; if they somehow revisit, group data 404s. Their own historic data remains via interval-clamped reads only if the server permits (it clamps automatically).
-5. **Hidden admin panel** — `/admin` shell exists only for platform admins (env `ADMIN_EMAILS`); any 404 from `/api/admin/*` ⇒ user is not admin ⇒ never render the route/link.
+5. **Hidden admin panel** — `/admin` shell exists only for platform admins (env `ADMIN_EMAILS`); any 404 from `/api/admin/*` → user is not admin → never render the route/link.
 
 ### Money format — CRITICAL
 
@@ -225,20 +226,19 @@ All monetary fields are **integer poisha** (100 poisha = ৳1). Send integers; d
 
 ### Endpoints by domain
 
-**/users:** POST `/register` `/login` `/refresh` `/logout` `/change-password {currentPassword,newPassword}` `/forgot-password {email}` `/reset-password {token,password}` `/profile-pic` (multipart field `image`) · GET `/profile` `/verify-email/:token` `/auth/google(/callback)` · PUT `/profile {username?,phone?,whatsapp?}`
+**/users:** POST `/register` `/login` `/refresh` `/logout` `/change-password {currentPassword,newPassword}` `/forgot-password {email}` `/reset-password {token,password}` `/profile-pic` (multipart field `image`) · GET `/profile` `/verify-email/:token` `/auth/google(/callback)` · PUT `/profile {username?,phone?,whatsapp?}` · POST `/2fa/setup` `/2fa/verify {code}` `/2fa/disable {password, code}` · POST `/login/2fa-challenge {email,password}` `/login/2fa {challengeToken, code}`.
 **Privacy rule:** other users' profiles are visible ONLY inside shared groups — `GET /users/groups/:groupId/members` returns `{members:[{_id, username, profilePic, whatsapp}]}` or **404** if you don't belong. Never build global user search/browse UI.
 Password rule: 8+ chars, upper + lower + digit.
 
 **/sessions:** GET `/users/sessions` · DELETE `/users/sessions/:familyId` · DELETE `/users/sessions`.
 
-**/messgroups:** POST `/create {name, mealSlots?, mealWeights?, defaultMealSubunits?, defaultMealsEnabled?}` · `/join-by-code {code}` · `/join-request/:groupId` · `/approve/:groupId/:userId`(admin) · `/add-member/:groupId`(admin) · `/regenerate-code/:groupId`(admin) · `/invite/:groupId {email}`(admin) · `/extras/:groupId`(admin) · `/categories/:groupId`(admin; splitMode 8 values) · `/categories/:groupId/seed`(admin, re-seed BD presets)
-GET `/my-groups` · `/:groupId` (**404-masked for non-members — handle as "group not found", never reveal existence**) · `/code/:groupId`(admin → `{code, inviteLink}`) · `/extras/:groupId` · `/categories/:groupId` · `/calculate/:groupId`(legacy) · `/export/:groupId`(xlsx blob) · `/pdf/:groupId`(pdf blob)
+**/messgroups:** POST `/create {name, mealSlots?, mealWeights?, defaultMealSubunits?, defaultMealsEnabled?}` · `/join-request/:groupId` · `/approve/:groupId/:userId`(admin) · `/add-member/:groupId`(admin) · `/invite/:groupId {email}`(admin) · `/extras/:groupId`(admin) · `/categories/:groupId`(admin; splitMode 8 values) · `/categories/:groupId/seed`(admin, re-seed BD presets)
+GET `/my-groups` · `/:groupId` (**404-masked for non-members — handle as "group not found", never reveal existence**) · `/code/:groupId`(admin → legacy `{code, inviteLink}`, superseded by `/invite/codes/:groupId`) · `/extras/:groupId` · `/categories/:groupId` · `/calculate/:groupId`(legacy) · `/export/:groupId`(xlsx blob) · `/pdf/:groupId`(pdf blob)
 PUT/DELETE categories (`DELETE` archives), payment-notes (legacy), remove-member (**kick or self-leave**; after leaving, history reads are auto-clamped to the member's interval by the server — reflect this in UI with a "viewing history until <date>" notice for ex-members).
 
-**Invite-link UX:** admin settings shows the code in a mono chip with copy-to-clipboard button AND the full `inviteLink` (`{FRONTEND_URL}/join?code=…`) with a separate Copy + native share (navigator.share when available). `GET /code/:groupId` → `{ code:'MM-XXXXXX', inviteLink:'https://…/join?code=MM-XXXXXX' }`.
+**Invite-link UX:** admin settings shows the code in a mono chip with copy-to-clipboard button AND the full `inviteLink` (`{FRONTEND_URL}/join?code=…`) with a separate Copy + native share (navigator.share when available). `GET /code/:groupId` → `{ code:'MM-XXXXXX', inviteLink:'https://…/join?code=MM-XXXXXX' }`. `GET /invite/codes/:groupId` → `{ prefix:'MM-ABCD', expiresAt, usesLeft, active }` (no plaintext).
 
 **Hidden admin app-shell (platform admins only):** lazy route `/admin/*` guarded by membership in `ADMIN_EMAILS` (returned as `user.isAdmin` from `/profile` or a probe `GET /api/admin/overview` — 404 means hide the route entirely). Panels: Overview/traffic cards + line chart (signups & activity per day, colors from CSS vars), Users table (search `q`, cursor pagination, suspend/verify toggles with ConfirmationModal), Groups table (name, admin, activeMembers, archive action), Audit feed (filter by action). The route must NOT appear in any nav for non-admins; treat any 404 from `/api/admin/*` as "not an admin".
-
 **/memberships (V2 source of truth):** GET `/groups/:groupId/memberships` (+ `/active`, `/month/:month`) · POST `/groups/:groupId/memberships {displayName, startDate, userId? (null ⇒ placeholder), role?, room?, weight?}`(manager) · PATCH `/:membershipId {role?, room?, weight?, endDate?, linkUserId?}`(manager) · POST `/:membershipId/depart {at?, reason?}`(manager).
 
 **/meals (slot-state):** POST `/:groupId {date?, slots: { lunch?: {state:'unknown'|'confirmed_zero'|'consumed', portionSubunits?}, … }}` (upsert own day; consumed requires portionSubunits ∈ 250/500/750/1000) · PUT/DELETE `/entry/:id`(owner[/admin]) · GET `/:groupId?month=|from=&to=&userId=` or `/:groupId/:month`
@@ -271,29 +271,45 @@ Absence (admin): POST `/:groupId/absence/preview` → `/absence/apply` `{userId?
 **/stats:** GET `/groups/:groupId/dashboard` (**V2** — build the Overview tab on this) · GET `/:groupId?granularity=month|year&year=&month=&userId=` (legacy charts) → `{ mealsSeries, expenseSeries, categoryBreakdown, totals }`.
 
 **/summary (LEGACY, floats):** GET `/:groupId/:month` · POST `/finalize/…` (now returns 410/409 — **direct users to the Statements tab**) · GET `/whatsapp/:groupId/:month`.
+**NEW — /inbox:** GET `/` (cursor list `?unread=1&cursor=&limit=`) · GET `/unread-count` · POST `/read {ids[]|all:true}` · GET/PUT `/preferences` {types: {…}, quietHours:{from,to}}.
 
-**Socket.IO:** connect with `auth: { token: accessToken }` (reconnect with the new token after refresh). Emit `join-group`/`leave-group` (groupId). Listen: `meal-updated`, `expense-updated` (room `group:<id>`). Use the existing `SocketInitializer`.
+**NEW — /support (user side):** Public POST `/actions/:token` (neutral responses) · Public POST `/appeal {email,message,captchaToken?}` · Auth POST `/tickets {category,subject,body,groupId?,attachContext?}` (idempotent) · GET `/tickets` · GET `/tickets/:ticketId` → `{ticket, messages, permissions:{canComment, reason, code}, slaStage}` · POST `/tickets/:ticketId/messages {body, attachmentIds?}` · POST `/tickets/:ticketId/resolve|close|reopen|rate {score?, comment?, note?, reason?}`.
+
+**NEW — /admin/support (hidden, requirePlatformAdmin + 2FA):** GET/POST `/tickets` · GET/PATCH `/tickets/:ticketId` · POST `/tickets/:ticketId/reply|internal-note|assign|resolve|close|reopen` · POST `/tickets/:ticketId/messages/:messageId/redact {reason}` · GET `/stats` · GET/POST/PUT/DELETE `/canned-replies`.
+
+**NEW — /routines (B2):** Rosters GET/POST `/groups/:groupId/rosters` · GET/PATCH/POST(publish)/POST(extend-horizon) `/groups/:groupId/rosters/:rosterId` · Duties GET `/groups/:groupId/duties` · POST done/reassign `/groups/:groupId/duties/:assignmentId/…` · Swaps POST `/groups/:groupId/swaps` · POST respond `/groups/:groupId/swaps/:swapId/respond` · Menu GET/POST `/groups/:groupId/menu` · Notes GET/POST/PATCH/DELETE `/groups/:groupId/notes/…` · POST ack/claim/done tasks · GET `/groups/:groupId/board/today` · `/menu/bazar-suggestions` · `/duties/fairness` · `/bazar-spend-rotation` · POST `/emergency-broadcast`.
+
+**NEW — /shopping-list:** GET `/groups/:groupId` · POST items · PATCH/DELETE items/:itemId · POST `/to-expense` · GET `/history`.
+
+**NEW — /kitchen-inventory:** GET/POST `/groups/:groupId` · PATCH/DELETE `/groups/:groupId/:itemId` · POST `/:itemId/refill`.
+
+**NEW — /polls:** GET/POST `/groups/:groupId` · POST `/:pollId/vote {optionIndex}` · POST `/:pollId/close` · GET `/:pollId/results`.
+
+**NEW — /invite:** POST `/join-by-code {code,groupId}` (rate-limited) · POST `/codes {groupId,maxUses?,ttlDays?}` (admin) · GET `/codes/:groupId` (metadata only).
+
+**Socket.IO:** connect with `auth: { token: accessToken }` (reconnect with the new token after refresh). Emit `join-group`/`leave-group` (groupId). Listen: `meal-updated`, `expense-updated`, `inbox-new` (room `user:<id>`), `duty-updated`, `menu-updated`, `note-created`, `note-updated`, `shoppingList-updated`, `kitchenInventory-updated` (room `group:<id>`). Use the existing `SocketInitializer`.
 
 | PATCH | `/admin/users/:userId` | `{isVerified?, suspended?}` — suspension kills login/refresh/all requests. |
 | GET | `/admin/groups?q=&limit=` | **All** groups + active member counts + admins. |
 | GET | `/admin/groups/:groupId` | Deep inspection: group + memberships populated. |
 | DELETE | `/admin/groups/:groupId` | Archive (audit-logged). |
+| GET | `/admin/jobs` | Last run + lock state per background job. |
 
 ### Key shapes (UI rendering)
 
 - **Cursor lists:** `{ items, nextCursor, hasMore, count }` → "Load more" button while `hasMore`.
-- **Statement item:** `{ membershipId, displayName, mealUnits, mealCost, otherCost, totalCharge, contributions, closingCredit, status:'owes'|'receives'|'settled' }` — `closingCredit > 0` ⇒ group owes member.
+- **Statement item:** `{ membershipId, displayName, mealUnits, mealCost, otherCost, totalCharge, contributions, closingCredit, status:'owes'|'receives'|'settled' }` — `closingCredit > 0` → group owes member.
 - **Meal doc:** `{ userId, date, breakfast/lunch/snacks/dinner: {state, portionSubunits?, source}, totalMealSubunits, totalMeals }`.
 - **Membership:** `{ displayName, isPlaceholder, role, startDate, endDate, room, weight, leftAt }`.
 - **Expense:** `{ status, lines[], payers[], supplierName, receiptReference, costPeriod, isPayable, paidTotal }`.
+- **Support ticket:** `{ ticketNo:'MM-T-000123', status:'open'|'answered'|'awaiting_admin'|'resolved'|'closed', category, subject, priority, permissions:{canComment, reason} }`.
+- **Inbox notification:** `{ id, type, title, body, link:{kind,id}, readAt }`.
+- **Roster/Duty/Note/Menu/Swap/Poll:** see `plan.md` §14; statuses use StatusBadge with icon + color.
 - **Zod validation errors:** 400 `{ msg:'Validation failed', errors:[{field:'lines.0.amount', message}] }` → map onto fields by path.
 
 ### Errors
 
-Server returns generic messages; show them via Toast. Field errors per above. Forgot-password always 200 — neutral message. Finalize 409 ⇒ "Month data changed — refresh and retry". Any 422 listing unresolved meals ⇒ render chips.
-
----
-
+Server returns generic messages; show them via Toast. Field errors per above. Forgot-password always 200 — neutral message. Finalize 409 → "Month data changed — refresh and retry". Any 422 listing unresolved meals → render chips. Support: `403 TICKET_AWAITING_ADMIN`, `403 TICKET_CLOSED`, `409 TICKET_STATE_CHANGED`. Invite: `429 JOIN_CODE_RATE_LIMITED` / `JOIN_CODE_LOCKED`. Admin: any 404 from `/api/admin/*` → not an admin.
 ## 5. ARCHITECTURE RULES
 
 ```
@@ -415,6 +431,9 @@ middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a 
 - [ ] T9.5 Notice board: feed, create note/announcement/alert, pin, audience picker, "seen" receipts, archive
 - [ ] T9.6 Handover composer: absence window + task checklist; claim / done on tasks; banner while active
 - [ ] T9.7 Realtime: duty-updated / menu-updated / note-created → store invalidate
+- [ ] T9.8 Shopping list: shared bazar list → convert to expense draft (GET/POST /shopping-list/groups/:id, items, to-expense)
+- [ ] T9.9 Kitchen inventory: staple stock + refills (GET/POST /kitchen-inventory/groups/:id, /:itemId/refill)
+- [ ] T9.10 Polls: quick menu decisions with voting (GET/POST /polls/groups/:id, /:pollId/vote, /results)
 
 ## P10 Support (plan.md §15)
 - [ ] T10.1 My tickets list (StatusBadge: open/answered/awaiting_admin/resolved/closed, unread dot) + New ticket form (category, subject, body, optional group context consent, attachments)
@@ -443,3 +462,6 @@ middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a 
 - Protected pages tested logged-out (redirect), wrong role (hidden/404), other group (`notFound()`).
 - Support composer never enabled when `permissions.canComment` is false; closed tickets show read-only thread.
 - SSR first paint verified for Overview, Board, Support list (no client fetch flash for initial data).
+
+
+
