@@ -15,7 +15,7 @@ import {
     doneHandoverTask,
 } from '../services/routineRules.js';
 
-const emitGroup = (req, event, payload) => {
+export const emitGroup = (req, event, payload) => {
     const io = req.app?.get('io');
     if (io && payload && payload.groupId) io.to(`group:${payload.groupId}`).emit(event, payload);
 };

@@ -67,6 +67,7 @@ export const register = [
             // Email verification token (sent only if SMTP configured)
             const verifyToken = randomToken();
 
+            const now = new Date();
             const user = await User.create({
                 username,
                 email,
@@ -75,6 +76,9 @@ export const register = [
                 whatsapp: req.body.whatsapp || '',
                 verifyEmailToken: verifyToken,
                 isVerified: false,
+                termsAcceptedAt: now,
+                privacyAcceptedAt: now,
+                emailNotificationsConsentAt: now,
             });
 
             await sendVerificationEmail(user, verifyToken);
@@ -136,7 +140,7 @@ export const refresh = async (req, res, next) => {
     }
 };
 
-// POST /api/users/logout — invalidate the stored refresh token and clear cookie
+// POST /api/users/logout — invalidate the stored refresh token and clear all cookies
 export const logout = async (req, res, next) => {
     try {
         const refreshToken = req.body?.refreshToken || getCookie(req, 'refreshToken');
@@ -145,6 +149,19 @@ export const logout = async (req, res, next) => {
             if (user) await clearRefreshToken(User, user.id);
         }
         clearRefreshTokenCookie(res);
+        clearAccessTokenCookie(res);
+        // Clear CSRF cookie
+        const isProd = process.env.NODE_ENV === 'production';
+        const sameSite = isProd ? 'Strict' : 'Lax';
+        res.setHeader('Set-Cookie', [
+            'mm_csrf=',
+            'HttpOnly',
+            'Path=/',
+            'Max-Age=0',
+            'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+            `SameSite=${sameSite}`,
+            ...(isProd ? ['Secure'] : []),
+        ].join('; '));
         res.json({ msg: 'Logged out' });
     } catch (err) {
         next(err);

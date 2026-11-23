@@ -11,7 +11,7 @@ import {
     encryptSecret,
     decryptSecret,
 } from '../utils/totp.js';
-import { validate } from '../middleware/validate.js';
+import { validate } from '../validation/validate.js';
 import { z } from 'zod';
 
 const CHALLENGE_TTL = 5 * 60 * 1000;

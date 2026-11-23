@@ -33,6 +33,7 @@ import supportRoutes from './routes/supportRoutes.js';
 import supportAdminRoutes from './routes/supportAdminRoutes.js';
 import routinesRoutes from './routes/routinesRoutes.js';
 import totpRoutes from './routes/totpRoutes.js';
+import inviteRoutes from './routes/inviteRoutes.js';
 import shoppingListRoutes from './routes/shoppingListRoutes.js';
 import kitchenInventoryRoutes from './routes/kitchenInventoryRoutes.js';
 import pollRoutes from './routes/pollRoutes.js';
@@ -178,6 +179,7 @@ app.use('/api/shopping-list', generalLimiter, shoppingListRoutes);
 app.use('/api/kitchen-inventory', generalLimiter, kitchenInventoryRoutes);
 app.use('/api/polls', generalLimiter, pollRoutes);
 app.use('/api/users', authLimiter, totpRoutes);
+app.use('/api/invite', generalLimiter, inviteRoutes);
 
 // ---------- Socket.IO (JWT-authenticated realtime updates) ----------
 const httpServer = createServer(app);

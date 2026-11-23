@@ -2,8 +2,8 @@
 // Runs every 15 minutes: detects refresh-token reuse, new device/country,
 // device-enrolment bursts, repeated failures; emits "new sign-in" alerts.
 
-import { SecurityEvent } from '../models/SecurityEvent.js';
-import { User } from '../models/User.js';
+import SecurityEvent from '../models/SecurityEvent.js';
+import User from '../models/User.js';
 import { recordSecurityEvent } from '../models/SecurityEvent.js';
 import { notifyAdmins, notify } from './inboxService.js';
 

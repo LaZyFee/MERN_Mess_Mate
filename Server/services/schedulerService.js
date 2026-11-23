@@ -14,6 +14,7 @@ import { notify, notifyAdmins } from './inboxService.js';
 import User from '../models/User.js';
 import DutyAssignment from '../models/DutyAssignment.js';
 import Statement from '../models/Statement.js';
+import { runAnomalySweep } from './securityService.js';
 
 // Scheduler service — automated background tasks (Doc §9, §12, §13)
 // 1. Recurring expense draft generation for the new month
@@ -333,6 +334,7 @@ export const ALL_JOBS = [
     ['markMissed', async () => (await import('./routineJobs.js')).markMissedFn()],
     ['noteExpiry', async () => (await import('./routineJobs.js')).noteExpiryFn()],
     ['rosterHorizon', async () => (await import('./routineJobs.js')).rosterHorizonFn()],
+    ['anomalySweep', async () => runAnomalySweep()],
 ];
 
 export const runAllJobs = async (now = new Date()) => {

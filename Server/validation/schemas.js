@@ -8,7 +8,7 @@ const passwordSchema = z
     .regex(/[a-z]/, 'Must contain a lowercase letter')
     .regex(/[0-9]/, 'Must contain a number');
 
-const objectIdSchema = z
+export const objectIdSchema = z
     .string()
     .regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId');
 
@@ -287,10 +287,10 @@ export const changePasswordSchema = z.object({
 
 // validation schemas (all money fields are integer poisha)
 
-const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId');
+export const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId');
 const month = z.string().regex(/^\d{4}-\d{2}$/, 'Month must be YYYY-MM');
 
-export { objectId }; // shared ObjectId schema for other route files
+// shared ObjectId schema for other route files
 const poisha = z.number().int().min(1, 'Amount must be integer poisha ≥ 1');
 const splitMode = z.enum([
     'meal_units', 'equal_all', 'equal_selected', 'member_days',

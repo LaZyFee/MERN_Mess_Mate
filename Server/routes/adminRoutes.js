@@ -10,14 +10,15 @@ import {
 } from '../controllers/adminController.js';
 import { listJobStatuses } from '../controllers/jobController.js';
 import { objectId } from '../validation/schemas.js';
+import { requireAdminAMR } from '../middleware/amrGate.js';
 
 // PLATFORM ADMIN CONTROL PLANE — deliberately unlinked from any user-facing
 // route or response. Guard answers 404 (not 403) so non-admins cannot even
-// confirm these endpoints exist.
+// confirm these endpoints exist. 2FA (amr: otp) is required for all admin routes.
 
 const router = express.Router();
 
-router.use(auth, requirePlatformAdmin);
+router.use(auth, requirePlatformAdmin, requireAdminAMR);
 
 // ---- Traffic & platform health ----
 router.get('/overview', getOverview);
