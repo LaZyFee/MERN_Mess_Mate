@@ -1,19 +1,19 @@
 /**
- * Progress component for displaying progress indicators
- * @param {Object} props - Component props
- * @param {number} props.value - Current progress value (0-100)
- * @param {number} [props.min=0] - Minimum value
- * @param {number} [props.max=100] - Maximum value
- * @param {'sm'|'md'|'lg'} [props.size='md'] - Progress bar height
- * @param {'line'|'circle'} [props.variant='line'] - Progress variant
- * @param {string} [props.colorScheme='primary'] - Color scheme
- * @param {boolean} [props.hasStripe=false] - Whether to show stripe pattern
- * @param {boolean} [props.isAnimated=false] - Whether stripe pattern is animated
- * @param {boolean} [props.isIndeterminate=false] - Whether progress is indeterminate
- * @param {string} [props.label] - Optional label to display
- * @param {boolean} [props.showPercentage=false] - Whether to show percentage
- * @param {string} [props.className] - Additional classes
- */
+  * Progress component for displaying progress indicators
+  * @param {Object} props - Component props
+  * @param {number} props.value - Current progress value (0-100)
+  * @param {number} [props.min=0] - Minimum value
+  * @param {number} [props.max=100] - Maximum value
+  * @param {'sm'|'md'|'lg'} [props.size='md'] - Progress bar height
+  * @param {'line'|'circle'} [props.variant='line'] - Progress variant
+  * @param {string} [props.colorScheme='primary'] - Color scheme
+  * @param {boolean} [props.hasStripe=false] - Whether to show stripe pattern
+  * @param {boolean} [props.isAnimated=false] - Whether stripe pattern is animated
+  * @param {boolean} [props.isIndeterminate=false] - Whether progress is indeterminate
+  * @param {string} [props.label] - Optional label to display
+  * @param {boolean} [props.showPercentage=false] - Whether to show percentage
+  * @param {string} [props.className] - Additional classes
+  */
 const Progress = ({
   value,
   min = 0,
@@ -57,11 +57,11 @@ const Progress = ({
       case "secondary":
         return "bg-(--p2)";
       case "danger":
-        return "bg-red-500";
+        return "bg-(--danger)";
       case "success":
-        return "bg-green-500";
+        return "bg-(--success)";
       case "warning":
-        return "bg-yellow-500";
+        return "bg-(--warning)";
       default:
         return "bg-(--p)";
     }
@@ -74,11 +74,11 @@ const Progress = ({
       case "secondary":
         return "text-(--p2)";
       case "danger":
-        return "text-red-500";
+        return "text-(--danger)";
       case "success":
-        return "text-green-500";
+        return "text-(--success)";
       case "warning":
-        return "text-yellow-500";
+        return "text-(--warning)";
       default:
         return "text-(--p)";
     }
@@ -95,54 +95,40 @@ const Progress = ({
             )}
             {showPercentage && (
               <span className="text-sm font-medium text-(--ts)">
-                {percent.toFixed(0)}%
-              </span>
-            )}
-          </div>
-        )}
+  // Circular progress — CSS conic-gradient, no inline SVG (§1.4)
+  const deg = Math.round((percent / 100) * 360);
 
-        <div className={`w-full bg-(--bd2) rounded-full ${sizeClasses[size]}`}>
-          <div
-            className={`
-              ${getColorClass()} rounded-full
-              ${sizeClasses[size]} 
-              ${hasStripe ? "bg-stripes" : ""} 
-              ${isAnimated && hasStripe ? "animate-progress-stripes" : ""}
-              ${isIndeterminate ? "animate-progress-indeterminate w-3/12" : ""}
-            `}
-            style={{ width: isIndeterminate ? undefined : `${percent}%` }}
-            role="progressbar"
-            aria-valuenow={isIndeterminate ? undefined : value}
-            aria-valuemin={min}
-            aria-valuemax={max}
-          ></div>
-        </div>
-      </div>
-    );
-  }
-
-  // Circular progress
-  const circleSize = 50; // SVG viewport size
-  const strokeWidth = size === "sm" ? 4 : size === "md" ? 5 : 6;
-  const radius = (circleSize - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (percent / 100) * circumference;
-
-  // Get stroke color
-  const getStrokeColor = () => {
+  const getCircleTextColor = () => {
     switch (colorScheme) {
       case "primary":
-        return "stroke-(--p)";
+        return "text-(--p)";
       case "secondary":
-        return "stroke-(--p2)";
+        return "text-(--p2)";
       case "danger":
-        return "stroke-red-500";
+        return "text-(--danger)";
       case "success":
-        return "stroke-green-500";
+        return "text-(--success)";
       case "warning":
-        return "stroke-yellow-500";
+        return "text-(--warning)";
       default:
-        return "stroke-(--p)";
+        return "text-(--p)";
+    }
+  };
+
+  const getCircleBgColor = () => {
+    switch (colorScheme) {
+      case "primary":
+        return "bg-(--p)";
+      case "secondary":
+        return "bg-(--p2)";
+      case "danger":
+        return "bg-(--danger)";
+      case "success":
+        return "bg-(--success)";
+      case "warning":
+        return "bg-(--warning)";
+      default:
+        return "bg-(--p)";
     }
   };
 
@@ -156,41 +142,28 @@ const Progress = ({
       {...props}
     >
       <div className={`relative ${circleSizeClasses[size]}`}>
-        <svg
-          className={`w-full h-full ${isIndeterminate ? "animate-spin-slow" : ""}`}
-          viewBox={`0 0 ${circleSize} ${circleSize}`}
+        {/* Background track */}
+        <div
+          className="w-full h-full rounded-full border-8 border-(--bd2) flex items-center justify-center"
+          style={{ "--progress-deg": `${deg}deg` }}
         >
-          {/* Background circle */}
-          <circle
-            className="stroke-(--bd2)"
-            stroke="currentColor"
-            fill="none"
-            strokeWidth={strokeWidth}
-            r={radius}
-            cx={circleSize / 2}
-            cy={circleSize / 2}
-          />
-
-          {/* Progress circle */}
-          <circle
-            className={`${getStrokeColor()} ${isIndeterminate ? "opacity-25" : ""}`}
-            stroke="currentColor"
-            fill="none"
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={isIndeterminate ? circumference * 0.75 : offset}
-            r={radius}
-            cx={circleSize / 2}
-            cy={circleSize / 2}
-            transform={`rotate(-90 ${circleSize / 2} ${circleSize / 2})`}
-          />
-        </svg>
+          {/* Progress ring — conic-gradient */}
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: `conic-gradient(from -90deg, var(--progress-ring-color) 0deg, var(--progress-ring-color) ${deg}deg, transparent ${deg}deg)`,
+              "--progress-ring-color": getCircleBgColor().replace("bg-", "text-"),
+            }}
+          >
+            {/* Inner mask to create ring effect */}
+            <div className="absolute inset-[8px] rounded-full bg-[var(--bg)]" />
+          </div>
+        </div>
 
         {/* Center text */}
         {showPercentage && !isIndeterminate && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-sm font-medium ${getTextColorClass()}`}>
+            <span className={`text-sm font-medium ${getCircleTextColor()}`}>
               {percent.toFixed(0)}%
             </span>
           </div>
@@ -199,7 +172,7 @@ const Progress = ({
 
       {/* Label */}
       {label && (
-        <span className={`mt-2 text-sm font-medium ${getTextColorClass()}`}>
+        <span className={`mt-2 text-sm font-medium ${getCircleTextColor()}`}>
           {label}
         </span>
       )}
@@ -208,3 +181,28 @@ const Progress = ({
 };
 
 export default Progress;
+                {percent.toFixed(0)}%
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className={`w-full bg-(--bd2) rounded-full ${sizeClasses[size]}`}>
+          <div
+            className={`
+              ${getColorClass()} rounded-full
+              ${sizeClasses[size]}
+              ${hasStripe ? "bg-stripes" : ""}
+              ${isAnimated && hasStripe ? "animate-progress-stripes" : ""}
+              ${isIndeterminate ? "animate-progress-indeterminate w-3/12" : ""}
+            `}
+            style={{ width: isIndeterminate ? undefined : `${percent}%` }}
+            role="progressbar"
+            aria-valuenow={isIndeterminate ? undefined : value}
+            aria-valuemin={min}
+            aria-valuemax={max}
+          ></div>
+        </div>
+      </div>
+    );
+  }

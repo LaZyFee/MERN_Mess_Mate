@@ -1,101 +1,50 @@
 "use client";
 
-import { usePermissions } from "@/hooks/usePermissions";
-import Loading from "@/components/shared/feedback/Loading";
+import { useGroupRole } from "@/lib/hooks/useGroupRole";
+import Loading from "@/components/shared/Loading";
 
 /**
- * Component that renders children only if user has required permissions
+ * Component that renders children only if user has the required 5-tier role.
+ * Roles: owner > manager > treasurer > auditor > member.
+ * UI gating is cosmetic; the server enforces authorisation.
  *
  * @example
- * // Single permission
- * <PermissionGuard feature="vehicles" action="create">
- *   <CreateVehicleButton />
+ * <PermissionGuard roles={["owner", "manager"]}>
+ *  <CreateGroupButton />
  * </PermissionGuard>
  *
  * @example
- * // Multiple permissions (all required)
- * <PermissionGuard
- *   requiredPermissions={[
- *     { feature: "vehicles", action: "edit" },
- *     { feature: "vehicles", action: "view" }
- *   ]}
- * >
- *   <EditVehicleForm />
- * </PermissionGuard>
- *
- * @example
- * // Any of the permissions
- * <PermissionGuard
- *   requiredAnyPermission={[
- *     { feature: "vehicles", action: "edit" },
- *     { feature: "vehicles", action: "manage" }
- *   ]}
- * >
- *   <AdminControls />
+ * <PermissionGuard roles={["treasurer"]} fallback={<span>Treasurer only</span>}>
+ *  <ApproveExpenseButton />
  * </PermissionGuard>
  */
 export default function PermissionGuard({
-  feature,
-  action = "view",
-  requiredPermissions = [],
-  requiredAnyPermission = [],
-  children,
-  fallback = null,
-  showLoading = true,
-  // New API: single permission string or array of permission strings (e.g. 'vehicles.view')
-  permission = null,
+ roles = [],
+ children,
+ fallback = null,
+ showLoading = true,
 }) {
-  const { can, canAll, canAny, isLoading } = usePermissions();
+  const { myRole, isLoading } = useGroupRole();
 
-  // Build requirements from props
-  let requirements = requiredPermissions;
-  let checkMethod = canAll;
-
-  if (feature) {
-    requirements = [{ feature, action }];
-    checkMethod = can;
-  } else if (requiredAnyPermission.length > 0) {
-    requirements = requiredAnyPermission;
-    checkMethod = canAny;
-  } else if (requiredPermissions.length > 0) {
-    requirements = requiredPermissions;
-    checkMethod = canAll;
-  }
+  const allowed =
+    roles.length === 0 ||
+    roles.some(
+      (r) =>
+        myRole === r ||
+        (r === "manager" && myRole === "owner") ||
+        (r === "treasurer" && (myRole === "owner" || myRole === "manager")) ||
+        (r === "auditor" && (myRole === "owner" || myRole === "manager" || myRole === "treasurer")) ||
+        (r === "member" && true),
+    );
 
   if (isLoading && showLoading) {
     return (
       <div className="flex items-center justify-center p-4">
-        <Loading size="sm" text="Checking permissions..." />
+        <Loading size="sm" text="Checking access…" />
       </div>
     );
   }
 
-  // New API handling: permission as string or array
-  if (permission) {
-    const perms = Array.isArray(permission) ? permission : [permission];
-
-    // Convert 'feature.action' strings into calls to can(feature, action)
-    const hasAll = perms.every((p) => {
-      const parts = String(p).split(".");
-      if (parts.length === 0) return false;
-      let feat, act;
-      if (parts.length > 1) {
-        act = parts.pop();
-        feat = parts.join(".");
-      } else {
-        feat = parts[0];
-        act = "view";
-      }
-      return can(feat, act);
-    });
-
-    if (!hasAll) return fallback;
-    return children;
-  }
-
-  if (!checkMethod(requirements)) {
-    return fallback;
-  }
-
+  if (!allowed) return fallback;
   return children;
 }

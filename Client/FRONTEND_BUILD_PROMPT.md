@@ -4,11 +4,11 @@
 
 ## 0. ROLE & GOAL
 
-You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The backend is finished and lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Vite + React). Backend docs: root `readme.md` (API reference) and `plan.md` (per-file deep dive) — they are the source of truth.
+You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The backend is finished and lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Next.js App Router + React). Backend docs: root `readme.md` (API reference) and `plan.md` (per-file deep dive) — they are the source of truth.
 
 **Priorities, in order:** (1) follow the rules below, (2) **mobile responsiveness — top priority for every screen and component**, (3) token efficiency, (4) working code, (5) modern UI polish.
 
-**Fixed stack decisions:** React (Vite) · **zustand** for state · **react-icons** for all icons (no SVG) · Chart.js (canvas) for charts · CSS variables from `App.css` for all colors. New backend modules covered: Invite Codes, TOTP 2FA, In-App Inbox, Support Desk, Routine & Board, Shopping List, Kitchen Inventory, Polls, cookie-only auth (`mm_at`/`mm_csrf` cookies).
+**Fixed stack decisions:** Next.js App Router + React · **zustand** for state · **react-icons** for all icons (no SVG) · Chart.js (canvas) for charts · CSS variables from `app/globals.css` for all colors. New backend modules covered: Invite Codes, TOTP 2FA, In-App Inbox, Support Desk, Routine & Board, Shopping List, Kitchen Inventory, Polls, cookie-only auth (`mm_at`/`mm_csrf` cookies).
 
 ---
 
@@ -16,13 +16,13 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 
 ### 1.1 Colors
 
-- **Only** use CSS variables defined in `Client/src/App.css`.
-- **Forbidden anywhere in `src/` except `App.css`/`index.css` variable definitions:** hex (`#fff`), `rgb()/rgba()/hsl()`, named colors (`red`, `white`…), Tailwind palette classes (`bg-blue-500`), inline `style={{ color/background/border… }}` with literal colors, and any literal color on icons (icons inherit text color via `currentColor`; set that color with a variable-based class).
+- **Only** use CSS variables defined in `app/globals.css`.
+- **Forbidden anywhere in `src/` and `app/` except `app/globals.css` variable definitions:** hex (`#fff`), `rgb()/rgba()/hsl()`, named colors (`red`, `white`…), Tailwind palette classes (`bg-blue-500`), inline `style={{ color/background/border… }}` with literal colors, and any literal color on icons (icons inherit text color via `currentColor`; set that color with a variable-based class).
 - Allowed: `var(--name)` references (e.g. `className="bg-[var(--surface)]"` or `.my-class { color: var(--text) }`).
-- If a needed color/shade doesn't exist: **add a new variable to `App.css` for BOTH light and dark themes**, then use it. Never inline it.
+- If a needed color/shade doesn't exist: **add a new variable to `app/globals.css` for BOTH light and dark themes**, then use it. Never inline it.
 - Chart colors (Chart.js) must be read from variables at runtime via `getComputedStyle(document.documentElement).getPropertyValue('--x')`.
 - Verify at the end of every phase with:
-  `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(" Client/src --include=*.jsx --include=*.js --include=*.css | grep -v "App.css\|index.css"` → must return nothing.
+  `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(" Client/src Client/app --include=*.jsx --include=*.js --include=*.css | grep -v "globals.css"` → must return nothing.
 
 ### 1.2 Reuse components
 
@@ -48,8 +48,8 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 - Any existing shared component that contains inline SVG must be converted to react-icons (task T0.8).
 - Icons inherit color through `currentColor` (set via variable-based text color classes); size via the `size` prop or a size class.
 - Charts: use **Chart.js + react-chartjs-2 (canvas)**. Do **not** use Recharts/D3-SVG or any lib that renders SVG.
-- Favicon: replace the `vite.svg` reference in `index.html` with a `.png`/`.ico` or remove it.
-- Verify at the end of every phase: `grep -rniE "<svg|\.svg" Client/src Client/index.html` → must return nothing.
+- Favicon: use `public/favicon.ico` or `public/favicon.png`; remove any `vite.svg` / `react.svg` references.
+- Verify at the end of every phase: `grep -rniE "<svg|\.svg" Client/src Client/app Client/public` → must return nothing.
 
 ### 1.5 State management — zustand only
 
@@ -74,7 +74,7 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 
 ### 1.7 Modern UI & component design
 
-- Clean, card-based layouts with generous whitespace; 4/8px spacing scale; consistent radius scale; layered soft shadows; subtle borders. Define **design tokens as variables in `App.css`** (`--radius-*`, `--shadow-*`, `--space-*`, `--transition`, font sizes). Shadows and gradients also use color variables only (e.g. `color-mix(in srgb, var(--surface) 80%, transparent)` for frosted/blurred sticky headers).
+- Clean, card-based layouts with generous whitespace; 4/8px spacing scale; consistent radius scale; layered soft shadows; subtle borders. Define **design tokens as variables in `app/globals.css`** (`--radius-*`, `--shadow-*`, `--space-*`, `--transition`, font sizes). Shadows and gradients also use color variables only (e.g. `color-mix(in srgb, var(--surface) 80%, transparent)` for frosted/blurred sticky headers).
 - Typography: one font family, clear scale, `tabular-nums` for money.
 - Interactions: 150–200ms transitions on hover/focus/press, subtle press feedback, `:focus-visible` rings via variable, skeleton shimmer, light route fade. Respect `prefers-reduced-motion`.
 - Components: pill chips for filters, segmented controls for month/year toggles, avatars with initials fallback, status Badges with **icon + color** (never color alone) — statuses everywhere: expense `draft/submitted/approved/rejected/reversed`, money `submitted/confirmed/rejected/reversed`, period `open/review/finalized`, statement item `owes/receives/settled`, outbox `pending/sent/delivered/read/failed/skipped`. Empty states with icon + message + CTA.
@@ -113,15 +113,15 @@ Create and maintain **`Client/TODO.md`** — this is your memory across sessions
 Last Session: (none) → T0.1
 
 ## P0 Recon & Foundation
-- [ ] T0.1 Read App.css → list all CSS variables (names + purpose) in Notes. Read package.json → note styling lib and router. Install missing deps: axios, react-router-dom, socket.io-client, zustand, react-icons, chart.js, react-chartjs-2. Choose ONE react-icons family and record it in Notes.
+- [ ] T0.1 Read app/globals.css → list all CSS variables (names + purpose) in Notes. Read package.json → note styling lib and router (Next.js App Router). Install missing deps: axios, socket.io-client, zustand, react-icons, chart.js, react-chartjs-2. Choose ONE react-icons family and record it in Notes.
 - [ ] T0.2 Create Client/COMPONENTS.md: for each file in components/*, one line: name · path · props · when to use. (Read only the top of each file.) Flag components containing inline SVG.
-- [ ] T0.3 Folder structure: src/{api,store,hooks,routes,pages,features,utils}. Create .env (VITE_API_URL) + .env.example. Set Vite server.port = 5174.
-- [ ] T0.4 api/axiosClient.js: baseURL `${VITE_API_URL}/api`, x-auth-token from useAuthStore.getState(), 401 → POST /users/refresh once (queue concurrent requests, retry; refresh token rides the HttpOnly cookie — include credentials), logout on refresh failure, 429 → RateLimit handler.
-- [ ] T0.5 store/authStore (zustand + persist: user, accessToken; login/logout/loadProfile actions) + tiny fetch-state helper for data stores.
-- [ ] T0.6 routes: AppRoutes with ProtectedRoute/PublicRoute (lazy-loaded pages + Skeleton fallback), layouts (AuthLayout; AppLayout with TopBar + ThemeToggle + mobile bottom nav + desktop sidebar), 404 page, wrap ToastProvider + RateLimit listener in main/App.
+- [ ] T0.3 Folder structure: app/ + src/{api,store,hooks,routes,pages,features,utils}. Create .env (BACKEND_URL + NEXT_PUBLIC_APP_URL) + .env.example. Dev port 5174 set in package.json dev script.
+- [ ] T0.4 lib/api/serverApi.js + lib/api/browserApi.js (§8.4) + app/api/bff/[...path]/route.js allowlist proxy (§8.3). baseURL /api/bff (browser) or BACKEND_URL (server).
+- [ ] T0.5 store/authStore (zustand, NO persist per §8.2: user, accessToken; login/logout/loadProfile actions) + AuthHydrator + tiny fetch-state helper for data stores.
+- [ ] T0.6 routes: app/ App Router with protected layout + public layout groups (lazy-loaded pages + Skeleton fallback), 404 page, wrap ToastProvider + RateLimit listener in layout.
 - [ ] T0.7 store/groupStore (current group, myRole from 5-tier roles) + store/uiStore (theme, sheets) + hooks/useGroupRole feeding PermissionGuard.
-- [ ] T0.8 Modernize shared components ONCE: design tokens in App.css (light+dark); replace inline SVG with react-icons; Modal → bottom sheet on mobile; Table → stacked cards <md; 44px targets; focus-visible rings; Button/Input/Card/Badge/Tabs/Skeleton polish; add StatusBadge variants for the new statuses (§1.7). Update COMPONENTS.md.
-- [ ] T0.9 index.html: viewport meta (width=device-width, initial-scale=1, viewport-fit=cover), remove vite.svg favicon, safe-area + dvh base CSS, font setup, base responsive utilities.
+- [ ] T0.8 Modernize shared components ONCE: design tokens in app/globals.css (light+dark); replace inline SVG with react-icons; Modal → bottom sheet on mobile; Table → stacked cards <md; 44px targets; focus-visible rings; Button/Input/Card/Badge/Tabs/Skeleton polish; add StatusBadge variants for the new statuses (§1.7). Update COMPONENTS.md.
+- [ ] T0.9 app/layout.js + app/globals.css: viewport meta, theme pre-paint script, safe-area + dvh base CSS, font setup, base responsive utilities; public/favicon.ico (no svg).
 - [ ] T0.10 utils/format.js: formatPoisha (poisha→৳ string), parseTaka (৳→integer poisha), month helpers (toMonthString, formatMonth, monthRange), day helpers (Dhaka civil date via Intl timeZone 'Asia/Dhaka').
 
 ## P1 Auth & Sessions
@@ -200,7 +200,7 @@ One line per component: `Name · path · props (required*/optional) · use-for`.
 
 ## 4. BACKEND CONTRACT (compact — don't re-read server code unless a detail is missing)
 
-**Base:** `${VITE_API_URL}/api` · Header: `x-auth-token: <accessToken>` · Backend CORS allows `http://localhost:5174` → set Vite `server.port = 5174`. Include `credentials: true` on axios (HttpOnly cookies: `mm_at` access token Path=/, `refreshToken` Path=/api/users, `mm_csrf` CSRF double-submit).
+**Base:** browser calls `/api/bff` (proxy to `${BACKEND_URL}/api`); server calls `${BACKEND_URL}/api` directly · Header: `x-auth-token: <accessToken>` · Backend CORS allows `http://localhost:5174` → port 5174 set in package.json dev script. Include `credentials: true` on axios (HttpOnly cookies: `mm_at` access token Path=/, `mm_rt` refresh Path=/api/users, `mm_csrf` CSRF double-submit).
 
 ### Auth model
 

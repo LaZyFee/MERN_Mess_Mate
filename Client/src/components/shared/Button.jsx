@@ -1,35 +1,17 @@
 import React from "react";
 import {
-  FiArrowLeft,
-  FiArrowRight,
-  FiCheck,
-  FiSave,
-  FiSearch,
+ FiArrowLeft,
+ FiArrowRight,
+ FiCheck,
+ FiSave,
+ FiSearch,
 } from "react-icons/fi";
+
+import { LuLoader } from "react-icons/lu";
 
 // Loading spinner
 const Spinner = () => (
-  <svg
-    className="animate-spin h-4 w-4 text-current"
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-  >
-    <circle
-      className="opacity-25"
-      cx="12"
-      cy="12"
-      r="10"
-      stroke="currentColor"
-      strokeWidth="4"
-    />
-    <path
-      className="opacity-75"
-      fill="currentColor"
-      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-    />
-  </svg>
+ <LuLoader className="animate-spin" size={16} aria-hidden="true" />
 );
 
 /**
@@ -53,214 +35,214 @@ const Spinner = () => (
  * @param {string|React.ElementType} [props.as='button'] - Custom element type
  */
 const Button = ({
-  variant = "",
-  size = "md",
-  isFullWidth = false,
-  isRound = false,
-  isLoading = false,
-  isDisabled = false,
-  disabled,
-  hasShadow = false,
-  hasHoverTranslate = false,
-  leftIcon,
-  rightIcon,
-  className = "",
-  type = "button",
-  children,
-  ariaLabel,
-  href,
-  as: Component = "button",
-  ...props
+ variant = "",
+ size = "md",
+ isFullWidth = false,
+ isRound = false,
+ isLoading = false,
+ isDisabled = false,
+ disabled,
+ hasShadow = false,
+ hasHoverTranslate = false,
+ leftIcon,
+ rightIcon,
+ className = "",
+ type = "button",
+ children,
+ ariaLabel,
+ href,
+ as: Component = "button",
+ ...props
 }) => {
-  // Base classes that apply to all buttons
-  const baseClasses = [
-    "inline-flex items-center justify-center gap-2 font-medium transition-all duration-300 ease-out whitespace-nowrap select-none leading-none",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)/50 focus-visible:ring-offset-2",
-    "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0 disabled:scale-100",
-    "cursor-pointer",
-  ].join(" ");
+ // Base classes that apply to all buttons
+ const baseClasses = [
+  "inline-flex items-center justify-center gap-2 font-medium transition-all duration-300 ease-out whitespace-nowrap select-none leading-none",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)/50 focus-visible:ring-offset-2",
+  "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0 disabled:scale-100",
+  "cursor-pointer",
+ ].join(" ");
 
-  // Size classes using design system tokens
-  const sizeClasses = {
-    xs: "h-5 px-3 text-[0.625rem]",
-    sm: "h-8 px-4 text-xs",
-    md: "h-10 px-5 text-sm",
-    lg: "h-12 px-6 text-base",
-    xl: "h-14 px-8 text-lg",
-  };
+ // Size classes using design system tokens
+ const sizeClasses = {
+  xs: "h-5 px-3 text-[0.625rem]",
+  sm: "h-8 px-4 text-xs",
+  md: "h-10 px-5 text-sm",
+  lg: "h-12 px-6 text-base",
+  xl: "h-14 px-8 text-lg",
+ };
 
-  // Fixed circular sizes for round (icon-only) buttons — no horizontal padding,
-  // the icon itself is centered by the base flex layout.
-  const circleSizeClasses = {
-    xs: "w-5 h-5",
-    sm: "w-7 h-7",
-    md: "w-10 h-10",
-    lg: "w-12 h-12",
-    xl: "w-14 h-14",
-  };
+ // Fixed circular sizes for round (icon-only) buttons — no horizontal padding,
+ // the icon itself is centered by the base flex layout.
+ const circleSizeClasses = {
+  xs: "w-5 h-5",
+  sm: "w-7 h-7",
+  md: "w-10 h-10",
+  lg: "w-12 h-12",
+  xl: "w-14 h-14",
+ };
 
-  // Shadow classes (used only when hasShadow is explicitly true, otherwise variants handle their own subtle shadows)
-  const shadowClasses = {
-    primary:
-      "shadow-[0_8px_24px_rgba(0,94,56,0.25)] hover:shadow-[0_12px_32px_rgba(0,94,56,0.35)]",
-    secondary: "shadow-md hover:shadow-lg",
-    default: "shadow-md hover:shadow-lg",
-  };
+ // Shadow classes (used only when hasShadow is explicitly true, otherwise variants handle their own subtle shadows)
+ const shadowClasses = {
+  primary:
+   "shadow-[var(--shadow-lg)]",
+  secondary: "shadow-md hover:shadow-lg",
+  default: "shadow-md hover:shadow-lg",
+ };
 
-  // Hover translate classes (explicit override)
-  const hoverTranslateClasses = {
-    true: "hover:-translate-y-1 active:translate-y-0",
-    false: "",
-  };
+ // Hover translate classes (explicit override)
+ const hoverTranslateClasses = {
+  true: "hover:-translate-y-1 active:translate-y-0",
+  false: "",
+ };
 
-  // Variant classes with rich aesthetics, gradients, and micro-interactions
-  const variantClasses = {
-    primary: "bg-(--p) text-[var(--bgs)] shadow-md shadow-(--p)/20 hover:bg-[var(--p3)] hover:shadow-lg hover:shadow-(--p)/30 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]",
-    secondary:
-      "bg-(--bg) text-(--tm) border-[1.5px] border-(--bd2) shadow-sm hover:bg-[var(--pale)] hover:text-(--p) hover:border-(--p) hover:shadow-md hover:-translate-y-[1px] active:bg-[var(--bd)] active:translate-y-0 active:scale-[0.98]",
-    outline:
-      "bg-transparent border-[1.5px] border-(--bd2) text-(--ts) hover:bg-[var(--pale)] hover:text-(--p) hover:border-[var(--p)] hover:shadow-sm hover:-translate-y-[1px] active:bg-(--bd) active:translate-y-0 active:scale-[0.98]",
-    ghost: "bg-transparent text-(--ts) hover:text-(--p) hover:bg-[var(--pale)] active:bg-[var(--bd)] active:scale-[0.98]",
-    danger: "bg-red-600 text-white shadow-md shadow-red-600/20 hover:bg-red-700 hover:shadow-lg hover:shadow-red-600/30 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]",
-    link: "bg-transparent text-(--p) hover:text-[var(--p3)] underline-offset-4 hover:underline p-0 h-auto active:scale-95",
-    "danger-link":
-      "bg-transparent text-red-500 hover:text-red-600 underline-offset-4 hover:underline p-0 h-auto active:scale-95",
-    dashed:
-      "bg-transparent border-[1.5px] border-dashed border-(--bd2) text-(--tm) hover:bg-[var(--pale)] hover:text-(--p) hover:border-(--p) active:bg-(--bd) active:scale-[0.98]",
-    translucent: "bg-black/5 text-(--tm) backdrop-blur-sm border-[1.5px] border-transparent hover:bg-black/10 hover:border-black/5 active:bg-black/15 active:scale-[0.98]",
-    "translucent-dark":
-      "bg-black/40 text-white backdrop-blur-md border-[1.5px] border-white/10 hover:bg-black/60 hover:border-white/20 active:bg-black/70 active:scale-[0.98]",
-    custom: "",
-    empty: "",
-    "": "",
-  };
+ // Variant classes with rich aesthetics, gradients, and micro-interactions
+ const variantClasses = {
+  primary: "bg-(--p) text-[var(--bgs)] shadow-md shadow-(--p)/20 hover:bg-[var(--p3)] hover:shadow-lg hover:shadow-(--p)/30 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]",
+  secondary:
+   "bg-(--bg) text-(--tm) border-[1.5px] border-(--bd2) shadow-sm hover:bg-[var(--pale)] hover:text-(--p) hover:border-(--p) hover:shadow-md hover:-translate-y-[1px] active:bg-[var(--bd)] active:translate-y-0 active:scale-[0.98]",
+  outline:
+   "bg-transparent border-[1.5px] border-(--bd2) text-(--ts) hover:bg-[var(--pale)] hover:text-(--p) hover:border-[var(--p)] hover:shadow-sm hover:-translate-y-[1px] active:bg-(--bd) active:translate-y-0 active:scale-[0.98]",
+  ghost: "bg-transparent text-(--ts) hover:text-(--p) hover:bg-[var(--pale)] active:bg-[var(--bd)] active:scale-[0.98]",
+  danger: "bg-(--danger) text-(--bgs) shadow-md shadow-red-600/20 hover:bg-(--danger) hover:shadow-lg hover:shadow-red-600/30 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]",
+  link: "bg-transparent text-(--p) hover:text-[var(--p3)] underline-offset-4 hover:underline p-0 h-auto active:scale-95",
+  "danger-link":
+   "bg-transparent text-(--danger) hover:text-(--danger) underline-offset-4 hover:underline p-0 h-auto active:scale-95",
+  dashed:
+   "bg-transparent border-[1.5px] border-dashed border-(--bd2) text-(--tm) hover:bg-[var(--pale)] hover:text-(--p) hover:border-(--p) active:bg-(--bd) active:scale-[0.98]",
+  translucent: "bg-(--p4)/5 text-(--tm) backdrop-blur-sm border-[1.5px] border-transparent hover:bg-(--p4)/10 hover:border-(--bd) active:bg-(--p4)/15 active:scale-[0.98]",
+  "translucent-dark":
+   "bg-(--p4)/40 text-(--bgs) backdrop-blur-md border-[1.5px] border-(--bgs)/10 hover:bg-(--p4)/60 hover:border-(--bgs)/20 active:bg-(--p4)/70 active:scale-[0.98]",
+  custom: "",
+  empty: "",
+  "": "",
+ };
 
-  // Check if className contains custom styling that should override defaults
-  const hasCustomRounded = className && /rounded-\w+/.test(className);
-  const hasCustomPadding =
-    className && /p-[x\d]|px-|py-|pt-|pr-|pb-|pl-/.test(className);
+ // Check if className contains custom styling that should override defaults
+ const hasCustomRounded = className && /rounded-\w+/.test(className);
+ const hasCustomPadding =
+  className && /p-[x\d]|px-|py-|pt-|pr-|pb-|pl-/.test(className);
 
-  // Determine the appropriate rounded class
-  const getRoundedClass = () => {
-    if (hasCustomRounded) return "";
-    if (variant === "link") return "";
-    if (isRound) return "rounded-full";
-    return "rounded-xl";
-  };
+ // Determine the appropriate rounded class
+ const getRoundedClass = () => {
+  if (hasCustomRounded) return "";
+  if (variant === "link") return "";
+  if (isRound) return "rounded-full";
+  return "rounded-xl";
+ };
 
-  const normalizedDisabled = isDisabled || disabled;
+ const normalizedDisabled = isDisabled || disabled;
 
-  const getDefaultIcon = (position) => {
-    if (leftIcon || rightIcon || typeof children !== "string") return null;
+ const getDefaultIcon = (position) => {
+  if (leftIcon || rightIcon || typeof children !== "string") return null;
 
-    const label = children.trim().toLowerCase();
-    if (position === "left") {
-      if (label === "back" || label === "previous")
-        return <FiArrowLeft size={16} />;
-      if (
-        label.includes("save") ||
-        label.includes("update") ||
-        label.includes("publish")
-      )
-        return <FiSave size={16} />;
-      if (label.includes("search")) return <FiSearch size={16} />;
-      if (
-        label.includes("submit") ||
-        label.includes("confirm") ||
-        label.includes("apply")
-      )
-        return <FiCheck size={16} />;
-    }
+  const label = children.trim().toLowerCase();
+  if (position === "left") {
+   if (label === "back" || label === "previous")
+    return <FiArrowLeft size={16} />;
+   if (
+    label.includes("save") ||
+    label.includes("update") ||
+    label.includes("publish")
+   )
+    return <FiSave size={16} />;
+   if (label.includes("search")) return <FiSearch size={16} />;
+   if (
+    label.includes("submit") ||
+    label.includes("confirm") ||
+    label.includes("apply")
+   )
+    return <FiCheck size={16} />;
+  }
 
-    if (position === "right" && (label === "next" || label === "continue")) {
-      return <FiArrowRight size={16} />;
-    }
+  if (position === "right" && (label === "next" || label === "continue")) {
+   return <FiArrowRight size={16} />;
+  }
 
-    return null;
-  };
+  return null;
+ };
 
-  const resolvedLeftIcon = leftIcon || getDefaultIcon("left");
-  const resolvedRightIcon = rightIcon || getDefaultIcon("right");
+ const resolvedLeftIcon = leftIcon || getDefaultIcon("left");
+ const resolvedRightIcon = rightIcon || getDefaultIcon("right");
 
-  // Get size classes, excluding padding if custom padding is provided
-  const getSizeClasses = () => {
-    if (variant === "link" || variant === "ghost") return "";
-    if (isRound) return circleSizeClasses[size] || circleSizeClasses.md;
-    if (hasCustomPadding) {
-      // Only apply height and font size, not padding
-      const sizeMap = {
-        xs: "h-6 text-[0.625rem]",
-        sm: "h-8 text-xs",
-        md: "h-10 text-sm",
-        lg: "h-12 text-base",
-        xl: "h-14 text-lg",
-      };
-      return sizeMap[size];
-    }
-    return sizeClasses[size];
-  };
+ // Get size classes, excluding padding if custom padding is provided
+ const getSizeClasses = () => {
+  if (variant === "link" || variant === "ghost") return "";
+  if (isRound) return circleSizeClasses[size] || circleSizeClasses.md;
+  if (hasCustomPadding) {
+   // Only apply height and font size, not padding
+   const sizeMap = {
+    xs: "h-6 text-[0.625rem]",
+    sm: "h-8 text-xs",
+    md: "h-10 text-sm",
+    lg: "h-12 text-base",
+    xl: "h-14 text-lg",
+   };
+   return sizeMap[size];
+  }
+  return sizeClasses[size];
+ };
 
-  const getFilteredClassName = () => className;
+ const getFilteredClassName = () => className;
 
-  // Get shadow class based on variant
-  const getShadowClass = () => {
-    if (variant === "primary") return shadowClasses.primary;
-    return shadowClasses.default;
-  };
+ // Get shadow class based on variant
+ const getShadowClass = () => {
+  if (variant === "primary") return shadowClasses.primary;
+  return shadowClasses.default;
+ };
 
-  const classes = [
-    baseClasses,
-    variantClasses[variant],
-    getSizeClasses(),
-    getRoundedClass(),
-    isFullWidth ? "w-full" : "w-fit",
-    isLoading ? "cursor-wait" : "",
-    hasShadow ? getShadowClass() : "",
-    hasHoverTranslate ? hoverTranslateClasses.true : "",
-    getFilteredClassName(),
-  ]
-    .filter(Boolean)
-    .join(" ");
+ const classes = [
+  baseClasses,
+  variantClasses[variant],
+  getSizeClasses(),
+  getRoundedClass(),
+  isFullWidth ? "w-full" : "w-fit",
+  isLoading ? "cursor-wait" : "",
+  hasShadow ? getShadowClass() : "",
+  hasHoverTranslate ? hoverTranslateClasses.true : "",
+  getFilteredClassName(),
+ ]
+  .filter(Boolean)
+  .join(" ");
 
-  // Determine if we should render as a link
-  const Element = href ? "a" : Component;
-  const isButtonElement = Element === "button";
+ // Determine if we should render as a link
+ const Element = href ? "a" : Component;
+ const isButtonElement = Element === "button";
 
-  // For link variant with href, we want it to look like a link
-  const finalProps = {
-    className: classes,
-    "aria-label": ariaLabel,
-    ...(href && { href }),
-    ...(isButtonElement && { type }),
-    ...(isButtonElement && { disabled: normalizedDisabled || isLoading }),
-    ...(isButtonElement && { "aria-busy": isLoading || undefined }),
-    ...props,
-  };
+ // For link variant with href, we want it to look like a link
+ const finalProps = {
+  className: classes,
+  "aria-label": ariaLabel,
+  ...(href && { href }),
+  ...(isButtonElement && { type }),
+  ...(isButtonElement && { disabled: normalizedDisabled || isLoading }),
+  ...(isButtonElement && { "aria-busy": isLoading || undefined }),
+  ...props,
+ };
 
-  return (
-    <Element {...finalProps}>
-      {isLoading ? (
-        <>
-          <Spinner />
-          {children}
-        </>
-      ) : (
-        <>
-          {resolvedLeftIcon && (
-            <span className="shrink-0" aria-hidden="true">
-              {resolvedLeftIcon}
-            </span>
-          )}
-          {children}
-          {resolvedRightIcon && (
-            <span className="shrink-0" aria-hidden="true">
-              {resolvedRightIcon}
-            </span>
-          )}
-        </>
-      )}
-    </Element>
-  );
+ return (
+  <Element {...finalProps}>
+   {isLoading ? (
+    <>
+     <Spinner />
+     {children}
+    </>
+   ) : (
+    <>
+     {resolvedLeftIcon && (
+      <span className="shrink-0" aria-hidden="true">
+       {resolvedLeftIcon}
+      </span>
+     )}
+     {children}
+     {resolvedRightIcon && (
+      <span className="shrink-0" aria-hidden="true">
+       {resolvedRightIcon}
+      </span>
+     )}
+    </>
+   )}
+  </Element>
+ );
 };
 
 export default Button;

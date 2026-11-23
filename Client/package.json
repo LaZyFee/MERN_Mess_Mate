@@ -4,20 +4,22 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "next dev -p 5174",
+    "build": "next build",
+    "start": "next start -p 5174",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "audit:colors": "powershell -NoProfile -Command \"Get-ChildItem src,app -Recurse -Include *.jsx,*.js,*.css | Where-Object { $_.Name -notin @('globals.css') } | Select-String -Pattern '#[0-9a-fA-F]{3,8}\\b|rgba?\\(|hsla?\\('\"",
+    "audit:svg": "powershell -NoProfile -Command \"Get-ChildItem src,app,public -Recurse -Include *.jsx,*.js,*.html | Select-String -Pattern '<svg|\\.svg'\""
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.1.13",
     "axios": "^1.12.2",
-    "lucide-react": "^0.544.0",
+    "chart.js": "^4.6.1",
+    "next": "^16.4.6",
     "react": "^19.1.1",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.1.1",
     "react-icons": "^5.5.0",
-    "react-router-dom": "^7.9.1",
-    "sweetalert2": "^11.23.0",
+    "socket.io-client": "^4.8.4",
     "tailwindcss": "^4.1.13",
     "zustand": "^5.0.8"
   },
@@ -25,11 +27,9 @@
     "@eslint/js": "^9.33.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
-    "@vitejs/plugin-react": "^5.0.0",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^16.3.0",
-    "vite": "^7.1.2"
+    "globals": "^16.3.0"
   }
 }
