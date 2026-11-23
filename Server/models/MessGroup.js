@@ -28,6 +28,15 @@ const messGroupSchema = new mongoose.Schema({
     },
     defaultMealsEnabled: { type: Boolean, default: false },
     guestMealModes: { type: [String], enum: ['individual', 'universal'], default: ['individual', 'universal'] },
+    featureFlags: {
+        routines: { type: Boolean, default: true },
+        polls: { type: Boolean, default: true },
+        shoppingList: { type: Boolean, default: true },
+        kitchenInventory: { type: Boolean, default: true },
+        bazarRotation: { type: Boolean, default: true },
+        emergencyBroadcast: { type: Boolean, default: true },
+        weeklyDigest: { type: Boolean, default: true },
+    },
     members: [{
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         role: { type: String, enum: ['admin', 'member'], default: 'member' },

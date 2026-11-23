@@ -3,7 +3,7 @@ import passport from 'passport';
 import {
     register, login, refresh, logout, getProfile, googleAuth,
     forgotPassword, resetPassword, verifyEmail, changePassword, uploadProfilePic, updateProfile,
-    getGroupMembersDirectory,
+    getGroupMembersDirectory, downloadMyData,
 } from '../controllers/userController.js';
 import auth from '../middleware/auth.js';
 import upload from '../middleware/upload.js';
@@ -31,6 +31,9 @@ router.get('/groups/:groupId/members', validate(objectIdParamSchema, 'params'), 
 router.put('/profile', updateProfile);
 router.post('/change-password', changePassword);
 router.post('/profile-pic', upload.single('image'), uploadProfilePic);
+
+// Download my data — privacy compliance
+router.get('/download-my-data', downloadMyData);
 
 // Google OAuth
 router.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));

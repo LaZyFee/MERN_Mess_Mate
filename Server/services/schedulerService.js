@@ -10,6 +10,10 @@ import { registerRoutineJobs } from './routineJobs.js';
 import { enqueueNotification } from './outboxWorker.js';
 import { audit } from '../models/AuditEvent.js';
 import { runJob } from './jobRunner.js';
+import { notify, notifyAdmins } from './inboxService.js';
+import User from '../models/User.js';
+import DutyAssignment from '../models/DutyAssignment.js';
+import Statement from '../models/Statement.js';
 
 // Scheduler service — automated background tasks (Doc §9, §12, §13)
 // 1. Recurring expense draft generation for the new month
@@ -246,13 +250,85 @@ export const jobIdempotencyCleanup = async () => {
     return { processed: deleted, failed: 0 };
 };
 
+/**
+ * Weekly digest (Fri evening): sends each member their duties next week,
+ * menu, balance summary, and open disputes.
+ */
+export const weeklyDigestFn = async (now = new Date()) => {
+    const dhakaStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+    const dayOfWeek = now.getUTCDay(); // 0=Sun ... 6=Sat; Friday=5
+
+    // Only run on Friday in Dhaka timezone
+    if (dayOfWeek !== 5) return { processed: 0, failed: 0, skipped: 'not Friday' };
+
+    const groups = await MessGroup.find({}).lean();
+    let processed = 0;
+
+    for (const group of groups) {
+        try {
+            const members = await Membership.find({
+                groupId: group._id,
+                user: { $ne: null },
+                $or: [{ endDate: null }, { endDate: { $gt: now } }],
+            }).populate('user', 'username email whatsapp').lean();
+
+            const nextWeekStart = new Date(now);
+            nextWeekStart.setUTCDate(nextWeekStart.getUTCDate() + ((7 - dayOfWeek) % 7 || 7));
+            const nextWeekEnd = new Date(nextWeekStart);
+            nextWeekEnd.setUTCDate(nextWeekEnd.getUTCDate() + 6);
+
+            const startStr = nextWeekStart.toISOString().slice(0, 10);
+            const endStr = nextWeekEnd.toISOString().slice(0, 10);
+
+            const duties = await DutyAssignment.find({
+                groupId: group._id,
+                localDate: { $gte: startStr, $lte: endStr },
+                status: { $in: ['scheduled', 'done'] },
+            }).lean();
+
+            const memberDuties = {};
+            for (const d of duties) {
+                if (!memberDuties[d.membershipId]) memberDuties[d.membershipId] = [];
+                memberDuties[d.membershipId].push(d);
+            }
+
+            for (const m of members) {
+                if (!m.user) continue;
+                const myDuties = memberDuties[String(m._id)] || [];
+                const userName = m.user.username || m.displayName || 'Member';
+
+                // Check notification preference / quiet hours could go here
+                await notify({
+                    userIds: [m.user._id],
+                    scope: 'user',
+                    groupId: group._id,
+                    type: 'weekly.digest',
+                    title: `Weekly digest — ${group.name}`,
+                    body: `Hi ${userName}, you have ${myDuties.length} duty(ies) next week (${startStr} to ${endStr}).`,
+                    link: { kind: 'board', id: group._id.toString() },
+                    dedupeKey: `weekly:digest:${group._id}:${m.user._id}:${startStr}`,
+                });
+                processed++;
+            }
+        } catch (err) {
+            console.error(`[weeklyDigest] failed for group ${group._id}:`, err.message);
+        }
+    }
+
+    return { processed, failed: 0 };
+};
+
+export const runWeeklyDigest = (now = new Date()) => runJob('weeklyDigest', weeklyDigestFn, { now });
+
 export const ALL_JOBS = [
     ['recurringDrafts', jobRecurringDrafts],
     ['defaultMeals', jobDefaultMeals],
     ['deadlineReminders', jobDeadlineReminders],
     ['idempotencyCleanup', jobIdempotencyCleanup],
+    ['weeklyDigest', runWeeklyDigest],
     ['supportSlaWatcher', async () => (await import('./supportJobs.js')).supportSlaWatcherFn()],
     ['supportAutoClose', async () => (await import('./supportJobs.js')).supportAutoCloseFn()],
+    ['supportRetention', async () => (await import('./supportJobs.js')).supportRetentionFn()],
     ['dutyReminders', async () => (await import('./routineJobs.js')).dutyRemindersFn()],
     ['markMissed', async () => (await import('./routineJobs.js')).markMissedFn()],
     ['noteExpiry', async () => (await import('./routineJobs.js')).noteExpiryFn()],

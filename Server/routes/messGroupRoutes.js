@@ -4,6 +4,7 @@ import {
     getGroupById, addEntry, getEntries, calculate, excelExport,
     getJoinCode, regenerateCode, joinByCode, addExtra, removeExtra, getExtras,
     removeMember, inviteByEmail, pdfExport,
+    getFeatureFlags, updateFeatureFlags, getGroupAuditLog,
 } from '../controllers/messGroupController.js';
 import { upsertPaymentNote, getPaymentNote, getAllPaymentNotes } from '../controllers/paymentNoteController.js';
 import { createCategory, getCategories, updateCategory, deleteCategory, seedCategoriesEndpoint } from '../controllers/expenseCategoryController.js';
@@ -129,6 +130,28 @@ router.delete(
     validate(objectIdAndIdParamSchema, 'params'),
     requireGroupRole('admin'),
     deleteCategory
+);
+
+// ---------- Per-group feature flags ---------- (todo item 12)
+router.get(
+    '/feature-flags/:groupId',
+    validate(objectIdParamSchema, 'params'),
+    requireGroupRole('member'),
+    getFeatureFlags
+);
+router.patch(
+    '/feature-flags/:groupId',
+    validate(objectIdParamSchema, 'params'),
+    requireGroupRole('admin'),
+    updateFeatureFlags
+);
+
+// ---------- Owner-visible audit log ---------- (todo item 13)
+router.get(
+    '/audit-log/:groupId',
+    validate(objectIdParamSchema, 'params'),
+    requireGroupRole('member'),
+    getGroupAuditLog
 );
 
 export default router;

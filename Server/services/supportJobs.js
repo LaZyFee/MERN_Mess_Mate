@@ -5,6 +5,14 @@ import { runJob } from './jobRunner.js';
 import { SupportTicket, SupportMessage } from '../models/Support.js';
 import { slaStage, canTransition, AUTOCLOSE_WARNING_HOURS } from './supportRules.js';
 import { notify, notifyAdmins } from './inboxService.js';
+import {
+    needsAnonymisation,
+    anonymisationPatch,
+    auditRetentionCutoff,
+    RETENTION_TICKET_MONTHS,
+    RETENTION_AUDIT_MONTHS,
+} from './retentionRules.js';
+
 
 /**
  * Alerts at 75% and 100% of firstResponseDueAt while firstAdminReplyAt is null.
@@ -93,4 +101,38 @@ export const runSupportAutoClose = (now = new Date()) =>
 export const registerSupportJobs = (list) => {
     list.push(['supportSlaWatcher', supportSlaWatcherFn]);
     list.push(['supportAutoClose', supportAutoCloseFn]);
+    list.push(['supportRetention', supportRetentionFn]);
+};
+
+// ---------- Retention job (B3, §17/§18) ----------
+// Anonymise support tickets closed > 18 months ago and delete AuditEvents
+// older than 24 months. SecurityEvent & InboxNotification use Mongo TTLs.
+
+
+export const supportRetentionFn = async (now = new Date()) => {
+    let processed = 0;
+    let failed = 0;
+    const candidates = await SupportTicket.find({
+        status: { $in: ['closed', 'resolved'] },
+        anonymisedAt: null,
+    }).select('_id status closedAt resolvedAt updatedAt createdAt').lean();
+
+    for (const t of candidates) {
+        try {
+            if (!needsAnonymisation(t, now)) continue;
+            await SupportTicket.updateOne({ _id: t._id }, { $set: anonymisationPatch(now) });
+            processed++;
+        } catch { failed++; }
+    }
+
+    const cutoff = auditRetentionCutoff(now);
+    const { default: AuditEvent } = await import('../models/AuditEvent.js');
+    const { deletedCount = 0 } = await AuditEvent.deleteMany({ createdAt: { $lt: cutoff } });
+
+    return {
+        processed,
+        failed,
+        auditEventsDeleted: deletedCount,
+        cutoffs: { tickets: RETENTION_TICKET_MONTHS, audits: RETENTION_AUDIT_MONTHS },
+    };
 };

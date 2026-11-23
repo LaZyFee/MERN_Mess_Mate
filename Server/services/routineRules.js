@@ -106,6 +106,8 @@ export const generateDuties = ({
                     },
                     null
                 ).m;
+            } else if (mode === 'fair_amount') {
+                chosen = fairAmountOrder(eligible, memberLoads)[0];
             } else {
                 chosen = eligible[idx % eligible.length];
                 idx++;
@@ -174,4 +176,17 @@ export const doneHandoverTask = (note, taskId, doerMembershipId) => {
             doneAt: new Date(),
         },
     };
+};
+
+/**
+ * Fair rotation by cumulative amount spent: returns eligible members sorted by
+ * cumulative bazar amount spent (ascending = who should do bazar next).
+ * Used by the 'fair_amount' roster rotation mode.
+ */
+export const fairAmountOrder = (eligible, memberAmounts = {}) => {
+    return [...eligible].sort((a, b) => {
+        const aa = memberAmounts[String(a._id)] ?? 0;
+        const bb = memberAmounts[String(b._id)] ?? 0;
+        return aa - bb;
+    });
 };

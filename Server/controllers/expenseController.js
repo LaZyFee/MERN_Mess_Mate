@@ -16,6 +16,7 @@ import {
     expenseFilterQuerySchema,
 } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
+import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
 
 const monthOf = (date) => {
     const d = new Date(date);
@@ -412,7 +413,7 @@ export const getExpenses = [
             }
 
             const expenses = await Expense.find(filter)
-                .populate('userId', 'username profilePic')
+                .populate('userId', MEMBER_VISIBLE_FIELDS)
                 .populate('categoryId', 'name icon splitMode')
                 .sort({ date: 1 })
                 .lean();
@@ -428,7 +429,7 @@ export const getExpenses = [
 export const getExpensesByMonth = async (req, res, next) => {
     try {
         const expenses = await Expense.find({ groupId: req.params.groupId, month: req.params.month })
-            .populate('userId', 'username')
+            .populate('userId', MEMBER_VISIBLE_FIELDS)
             .populate('categoryId', 'name icon splitMode')
             .sort({ date: 1 })
             .lean();

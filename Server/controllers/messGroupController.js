@@ -9,8 +9,10 @@ import { validate } from '../validation/validate.js';
 import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
 import { audit } from '../models/AuditEvent.js';
+import AuditEvent from '../models/AuditEvent.js';
 import { sendGroupInviteEmail } from '../utils/mailer.js';
-import { publicProfile } from '../middleware/privacy.js';
+import { publicProfile, MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
+import { z } from 'zod';
 const makeJoinCode = () => {
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no ambiguous chars (0/O, 1/I/L)
     let code = '';
@@ -135,9 +137,9 @@ export const addMember = [
 export const getGroupById = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId)
-            .populate('admin', '_id username profilePic')
-            .populate('members.user', '_id username profilePic')
-            .populate('pendingRequests', '_id username profilePic').lean();
+            .populate('admin', MEMBER_VISIBLE_FIELDS)
+            .populate('members.user', MEMBER_VISIBLE_FIELDS)
+            .populate('pendingRequests', MEMBER_VISIBLE_FIELDS).lean();
         // Privacy: group existence + details are invisible to non-members
         const isMember = group && (
             group.admin.equals(req.user.id) ||
@@ -156,9 +158,9 @@ export const getGroupById = async (req, res, next) => {
 export const getAllGroups = async (req, res, next) => {
     try {
         const groups = await MessGroup.find({ 'members.user': req.user.id })
-            .populate('admin', '_id username profilePic')
-            .populate('members.user', '_id username profilePic')
-            .populate('pendingRequests', '_id username profilePic')
+            .populate('admin', MEMBER_VISIBLE_FIELDS)
+            .populate('members.user', MEMBER_VISIBLE_FIELDS)
+            .populate('pendingRequests', MEMBER_VISIBLE_FIELDS)
             .lean();
         // Apply publicProfile to strip any sensitive fields from user objects
         const sanitized = groups.map(g => {
@@ -221,7 +223,7 @@ export const addEntry = [
 // Get Group Entries (member only)
 export const getEntries = async (req, res, next) => {
     try {
-        const group = await MessGroup.findById(req.params.groupId).populate('members.user', 'username');
+        const group = await MessGroup.findById(req.params.groupId).populate('members.user', MEMBER_VISIBLE_FIELDS);
         if (!group) return res.status(404).json({ msg: 'Group not found' });
         const sanitizedAdmin = group.admin ? publicProfile(group.admin) : null;
         const sanitizedMembers = (group.members || []).map(m => ({ ...m, user: m.user ? publicProfile(m.user) : null }));
@@ -234,7 +236,7 @@ export const getEntries = async (req, res, next) => {
 // Calculate Totals (member only)
 export const calculate = async (req, res, next) => {
     try {
-        const group = await MessGroup.findById(req.params.groupId).populate('members.user', 'username');
+        const group = await MessGroup.findById(req.params.groupId).populate('members.user', MEMBER_VISIBLE_FIELDS);
         if (!group) return res.status(404).json({ msg: 'Group not found' });
         if (group.entries.length === 0) {
             return res.json({
@@ -291,7 +293,7 @@ export const calculate = async (req, res, next) => {
 // Export to Excel (member only) â€” ExcelJS (maintained, secure; replaces unmaintained SheetJS)
 export const excelExport = async (req, res, next) => {
     try {
-        const group = await MessGroup.findById(req.params.groupId).populate('members.user', 'username');
+        const group = await MessGroup.findById(req.params.groupId).populate('members.user', MEMBER_VISIBLE_FIELDS);
         if (!group) return res.status(404).json({ msg: 'Group not found' });
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Mess Data');
@@ -480,7 +482,7 @@ export const inviteByEmail = async (req, res, next) => {
 export const pdfExport = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId)
-            .populate('members.user', 'username');
+            .populate('members.user', MEMBER_VISIBLE_FIELDS);
         if (!group) return res.status(404).json({ msg: 'Group not found' });
         // Compute totals (same logic as calculate)
         let totalMeals = 0, totalBazar = 0;
@@ -542,6 +544,73 @@ export const pdfExport = async (req, res, next) => {
     } catch (err) {
         next(err);
     }
+};
+
+// ---------- Per-group feature flags ---------- (todo item 12)
+const flagSchema = z.object({
+    routines: z.boolean().optional(),
+    polls: z.boolean().optional(),
+    shoppingList: z.boolean().optional(),
+    kitchenInventory: z.boolean().optional(),
+    bazarRotation: z.boolean().optional(),
+    emergencyBroadcast: z.boolean().optional(),
+    weeklyDigest: z.boolean().optional(),
+});
+
+// GET /api/messgroups/feature-flags/:groupId
+export const getFeatureFlags = async (req, res, next) => {
+    try {
+        const group = await MessGroup.findById(req.params.groupId).select('featureFlags').lean();
+        if (!group) return res.status(404).json({ msg: 'Group not found' });
+        res.json({ flags: group.featureFlags || {} });
+    } catch (err) { next(err); }
+};
+
+// PATCH /api/messgroups/feature-flags/:groupId
+export const updateFeatureFlags = async (req, res, next) => {
+    try {
+        const updates = flagSchema.parse(req.body);
+        const existing = await MessGroup.findById(req.params.groupId).select('featureFlags').lean();
+        if (!existing) return res.status(404).json({ msg: 'Group not found' });
+        const group = await MessGroup.findByIdAndUpdate(
+            req.params.groupId,
+            { $set: { featureFlags: { ...(existing.featureFlags || {}), ...updates } } },
+            { new: true }
+        ).select('featureFlags');
+        await audit({ groupId: req.params.groupId, actorId: req.user.id, action: 'group.featureFlags_updated', targetType: 'messGroup', targetId: req.params.groupId, after: updates });
+        res.json({ flags: group.featureFlags });
+    } catch (err) { next(err); }
+};
+
+// ---------- Owner-visible audit log ---------- (todo item 13)
+// GET /api/messgroups/audit-log/:groupId?limit=&cursor= — owner/manager/treasurer only
+export const getGroupAuditLog = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { limit = 50, cursor } = req.query;
+
+        const membership = await Membership.findOne({ groupId, user: req.user.id }).lean();
+        if (!membership || !['owner', 'manager', 'treasurer', 'auditor'].includes(membership.role)) {
+            return res.status(403).json({ msg: 'Owner, manager, treasurer, or auditor role required' });
+        }
+
+        const filter = { groupId };
+        const sort = { createdAt: -1 };
+        const l = Math.min(parseInt(limit, 10) || 50, 100);
+
+        let query = AuditEvent.find(filter).sort(sort).limit(l + 1);
+        if (cursor) {
+            const cursorDate = new Date(cursor);
+            if (!isNaN(cursorDate.getTime())) query = query.where('createdAt').lt(cursorDate);
+        }
+
+        const events = await query.lean();
+        const hasMore = events.length > l;
+        const items = hasMore ? events.slice(0, l) : events;
+        const nextCursor = hasMore ? items[items.length - 1].createdAt : null;
+
+        res.json({ events: items, nextCursor, hasMore });
+    } catch (err) { next(err); }
 };
 
 

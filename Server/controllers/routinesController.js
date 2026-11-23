@@ -4,6 +4,8 @@ import SwapRequest from '../models/SwapRequest.js';
 import MenuPlan from '../models/MenuPlan.js';
 import Note from '../models/Note.js';
 import Membership from '../models/Membership.js';
+import ShoppingList from '../models/ShoppingList.js';
+import Expense from '../models/Expense.js';
 import { audit } from '../models/AuditEvent.js';
 import { notify } from '../services/inboxService.js';
 import {
@@ -402,6 +404,197 @@ export const boardToday = async (req, res, next) => {
         }
 
         res.json({ date: today, duties, menu: todayMenu, pinnedNotes, activeHandovers });
+    } catch (err) { next(err); }
+};
+
+// GET /api/routines/groups/:groupId/menu/bazar-suggestions?weekStart=YYYY-MM-DD
+// Reads the menu plan for the week and aggregates all items into a suggested
+// bazar list (item -> total quantity hint). Returns items the cook should buy.
+export const menuBazarSuggestions = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { weekStart } = req.query;
+
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+        const start = weekStart || today;
+
+        const menus = await MenuPlan.find({ groupId, weekStart: { $gte: start } })
+            .sort({ weekStart: 1 })
+            .limit(2)
+            .lean();
+
+        // Aggregate items across the week's days and slots
+        const itemMap = new Map();
+        for (const menu of menus) {
+            for (const day of menu.days || []) {
+                for (const slot of ['breakfast', 'lunch', 'snacks', 'dinner']) {
+                    const items = day.slots?.[slot] || [];
+                    for (const it of items) {
+                        const key = String(it.name).trim().toLowerCase();
+                        if (!key) continue;
+                        const existing = itemMap.get(key) || { name: it.name, qtyHint: 0, slots: [], days: [] };
+                        existing.qtyHint += (it.qtyHint || 1);
+                        existing.slots.push(slot);
+                        existing.days.push(day.weekday);
+                        itemMap.set(key, existing);
+                    }
+                }
+            }
+        }
+
+        const suggestions = Array.from(itemMap.values()).map(v => ({
+            name: v.name,
+            qtyHint: v.qtyHint,
+            suggestedSlots: [...new Set(v.slots)].join(', '),
+            suggestedDays: [...new Set(v.days)].join(', '),
+        }));
+
+        res.json({ weekStart: start, suggestions, totalItems: suggestions.length });
+    } catch (err) { next(err); }
+};
+
+// GET /api/routines/groups/:groupId/duties/fairness?month=YYYY-MM
+// Counts of duties done/missed per member for the month — powers the fairness
+// board and the `fair` rotation mode.
+export const dutyFairnessBoard = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { month } = req.query;
+        const targetMonth = month || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7);
+
+        const from = `${targetMonth}-01`;
+        const to = `${targetMonth}-31`;
+
+        const duties = await DutyAssignment.find({
+            groupId,
+            localDate: { $gte: from, $lte: to },
+        }).lean();
+
+        const memberships = await Membership.find({ groupId }).lean();
+        const memMap = new Map(memberships.map(m => [String(m._id), m]));
+
+        const board = [];
+        for (const m of memberships) {
+            const mid = String(m._id);
+            const md = duties.filter(d => String(d.membershipId) === mid);
+            board.push({
+                membershipId: m._id,
+                displayName: m.displayName,
+                role: m.role,
+                total: md.length,
+                done: md.filter(d => d.status === 'done').length,
+                missed: md.filter(d => d.status === 'missed').length,
+                scheduled: md.filter(d => d.status === 'scheduled').length,
+                swapped: md.filter(d => d.status === 'swapped').length,
+                skipped: md.filter(d => d.status === 'skipped').length,
+                bazarCount: md.filter(d => d.taskKey === 'bazar' && d.status === 'done').length,
+                cleaningCount: md.filter(d => d.taskKey === 'cleaning' && d.status === 'done').length,
+                cookingCount: md.filter(d => d.taskKey === 'cooking' && d.status === 'done').length,
+            });
+        }
+
+        board.sort((a, b) => b.done - a.done);
+
+        res.json({ month: targetMonth, board });
+    } catch (err) { next(err); }
+};
+
+// GET /api/routines/groups/:groupId/bazar-spend-rotation
+// Returns members sorted by cumulative bazar amount spent (ascending = who
+// should do bazar next). Powers the 'fair_amount' roster rotation mode.
+export const bazarSpendRotation = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { from, to } = req.query;
+
+        const match = { groupId, taskKey: 'bazar', status: 'done' };
+        if (from || to) match.localDate = {};
+        if (from) match.localDate.$gte = from;
+        if (to) match.localDate.$lte = to;
+
+        const duties = await DutyAssignment.find(match).lean();
+        const memberships = await Membership.find({ groupId }).lean();
+        const memMap = new Map(memberships.map(m => [String(m._id), m]));
+
+        // Sum linked expense amounts per member
+        const expenseIds = duties
+            .map(d => d.linkedExpenseId)
+            .filter(Boolean);
+        let expenseMap = {};
+        if (expenseIds.length) {
+            const expenses = await Expense.find({ _id: { $in: expenseIds } }).lean();
+            expenseMap = {};
+            for (const e of expenses) {
+                expenseMap[String(e._id)] = e.amount || 0;
+            }
+        }
+
+        const rotation = memberships.map(m => {
+            const mid = String(m._id);
+            const md = duties.filter(d => String(d.membershipId) === mid);
+            const totalSpent = md.reduce((s, d) => s + (expenseMap[String(d.linkedExpenseId)] || 0), 0);
+            return {
+                membershipId: m._id,
+                displayName: m.displayName,
+                role: m.role,
+                dutyCount: md.length,
+                totalBazarSpentPoisha: totalSpent,
+                totalBazarSpentTaka: (totalSpent / 100).toFixed(2),
+            };
+        });
+
+        rotation.sort((a, b) => a.totalBazarSpentPoisha - b.totalBazarSpentPoisha);
+
+        res.json({ rotation });
+    } catch (err) { next(err); }
+};
+
+// POST /api/routines/groups/:groupId/emergency-broadcast — owner/manager alert that bypasses quiet hours
+export const emergencyBroadcast = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { title, body } = req.body;
+
+        if (!title || !body) return res.status(400).json({ msg: 'title and body are required' });
+
+        const membership = await Membership.findOne({ groupId, user: req.user.id }).lean();
+        if (!membership || !['owner', 'manager'].includes(membership.role)) {
+            return res.status(403).json({ msg: 'Only owner or manager can send emergency broadcasts' });
+        }
+
+        const note = await Note.create({
+            groupId,
+            authorMembershipId: membership._id,
+            authorUserId: req.user.id,
+            kind: 'alert',
+            title: `[EMERGENCY] ${title}`,
+            body,
+            audience: { type: 'all' },
+            pinned: true,
+            validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            state: 'active',
+        });
+
+        const members = await Membership.find({ groupId, user: { $ne: null } }).populate('user', '_id username').lean();
+
+        for (const m of members) {
+            if (!m.user) continue;
+            await notify({
+                userIds: [m.user._id],
+                scope: 'user',
+                groupId,
+                type: 'emergency.broadcast',
+                title: note.title,
+                body,
+                link: { kind: 'note', id: note._id.toString() },
+                dedupeKey: `emergency:broadcast:${groupId}:${note._id}:${m.user._id}`,
+            });
+        }
+
+        await audit({ groupId, actorId: req.user.id, action: 'emergency.broadcast', targetType: 'note', targetId: note._id });
+        req.app.get('io')?.to(`group:${groupId}`).emit('emergency-broadcast', { groupId, noteId: note._id, title: note.title });
+
+        res.status(201).json({ note });
     } catch (err) { next(err); }
 };
 

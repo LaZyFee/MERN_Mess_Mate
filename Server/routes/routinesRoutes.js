@@ -15,7 +15,7 @@ import {
     createSwap, respondSwap,
     setMenuPlan, getMenuPlan,
     createNote, listNotes, getNote, updateNote, deleteNote, ackNote, claimTask, doneTask,
-    boardToday,
+    boardToday, menuBazarSuggestions, dutyFairnessBoard, bazarSpendRotation, emergencyBroadcast,
 } from '../controllers/routinesController.js';
 
 const router = express.Router();
@@ -54,5 +54,17 @@ router.post('/groups/:groupId/notes/:noteId/tasks/:taskId/done', validate(noteTa
 
 // Board today
 router.get('/groups/:groupId/board/today', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), boardToday);
+
+// Menu -> bazar suggestions
+router.get('/groups/:groupId/menu/bazar-suggestions', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), menuBazarSuggestions);
+
+// Duty fairness board
+router.get('/groups/:groupId/duties/fairness', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), dutyFairnessBoard);
+
+// Bazar rotation by cumulative amount spent
+router.get('/groups/:groupId/bazar-spend-rotation', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), bazarSpendRotation);
+
+// Emergency broadcast (owner/manager, bypasses quiet hours)
+router.post('/groups/:groupId/emergency-broadcast', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), emergencyBroadcast);
 
 export default router;

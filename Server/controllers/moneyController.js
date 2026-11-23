@@ -5,6 +5,7 @@ import Journal from '../models/Journal.js';
 import { audit } from '../models/AuditEvent.js';
 import { withTransaction } from '../utils/transaction.js';
 import { paginateQuery } from '../utils/pagination.js';
+import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
 
 // Money endpoints — deposits/contributions, payouts, supplier payments,
 // member-to-member settlements, fund transfers, with confirm/reject/reverse.
@@ -209,7 +210,7 @@ export const listTransactions = async (req, res, next) => {
         }
 
         const transactions = await MoneyTransaction.find(filter)
-            .populate('fromMember toMember', 'displayName')
+            .populate('fromMember toMember', MEMBER_VISIBLE_FIELDS)
             .sort({ paidAt: -1 })
             .limit(200)
             .lean();

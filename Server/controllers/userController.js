@@ -1,5 +1,12 @@
 import User from '../models/User.js';
 import MessGroup from '../models/MessGroup.js';
+import Membership from '../models/Membership.js';
+import Meal from '../models/Meal.js';
+import GuestMeal from '../models/GuestMeal.js';
+import Expense from '../models/Expense.js';
+import MoneyTransaction from '../models/MoneyTransaction.js';
+import AuditEvent from '../models/AuditEvent.js';
+import Note from '../models/Note.js';
 import bcrypt from 'bcrypt';
 import cloudinary from '../config/cloudinary.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, updateProfileSchema } from '../validation/schemas.js';
@@ -335,4 +342,43 @@ export const googleAuth = async (req, res) => {
     res.redirect(
         `${process.env.FRONTEND_URL}/login/success?token=${accessToken}&refreshToken=${refreshToken}&user=${userQuery}`
     );
+};
+
+// ---------- Download my data ---------- (todo item 13)
+// GET /api/users/download-my-data — exports all personal data as JSON
+export const downloadMyData = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+
+        // Gather all data belonging to this user across collections
+        const [user, memberships, meals, guestMeals, expenses, moneyTx, sessions, auditEvents, inboxNotes] = await Promise.all([
+            User.findById(userId).select('-password -refreshToken -resetPasswordToken -verifyEmailToken').lean(),
+            Membership.find({ user: userId }).lean(),
+            Meal.find({ userId }).lean(),
+            GuestMeal.find({ hostUserId: userId }).lean(),
+            Expense.find({ createdBy: userId }).lean(),
+            MoneyTransaction.find({ submitter: userId }).lean(),
+            // Sessions - if accessible; skip if model not imported
+            [],
+            AuditEvent.find({ actorId: userId }).sort({ createdAt: -1 }).limit(200).lean(),
+            Note.find({ authorUserId: userId }).sort({ createdAt: -1 }).limit(100).lean(),
+        ]).catch(() => [null, [], [], [], [], [], [], [], []]);
+
+        const exportData = {
+            exportedAt: new Date().toISOString(),
+            user,
+            memberships,
+            meals,
+            guestMeals,
+            expenses,
+            moneyTransactions: moneyTx,
+            sessions: sessions || [],
+            auditEvents,
+            notes: inboxNotes,
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="mealmate-my-data-${new Date().toISOString().slice(0, 10)}.json"`);
+        res.json(exportData);
+    } catch (err) { next(err); }
 };

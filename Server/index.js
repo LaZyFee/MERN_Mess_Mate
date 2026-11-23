@@ -33,6 +33,9 @@ import supportRoutes from './routes/supportRoutes.js';
 import supportAdminRoutes from './routes/supportAdminRoutes.js';
 import routinesRoutes from './routes/routinesRoutes.js';
 import totpRoutes from './routes/totpRoutes.js';
+import shoppingListRoutes from './routes/shoppingListRoutes.js';
+import kitchenInventoryRoutes from './routes/kitchenInventoryRoutes.js';
+import pollRoutes from './routes/pollRoutes.js';
 import { startOutboxWorker } from './services/outboxWorker.js';
 import { startScheduler } from './services/schedulerService.js';
 import { setSocketIo } from './services/inboxService.js';
@@ -171,6 +174,9 @@ app.use('/api/inbox', generalLimiter, inboxRoutes);
 app.use('/api/support', generalLimiter, supportRoutes);
 app.use('/api/admin/support', supportAdminRoutes);
 app.use('/api/routines', generalLimiter, routinesRoutes);
+app.use('/api/shopping-list', generalLimiter, shoppingListRoutes);
+app.use('/api/kitchen-inventory', generalLimiter, kitchenInventoryRoutes);
+app.use('/api/polls', generalLimiter, pollRoutes);
 app.use('/api/users', authLimiter, totpRoutes);
 
 // ---------- Socket.IO (JWT-authenticated realtime updates) ----------

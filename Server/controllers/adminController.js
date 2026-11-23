@@ -3,7 +3,7 @@ import Membership from '../models/Membership.js';
 import MessGroup from '../models/MessGroup.js';
 import AuditEvent from '../models/AuditEvent.js';
 import { audit } from '../models/AuditEvent.js';
-import { publicProfile } from '../middleware/privacy.js';
+import { publicProfile, MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
 
 // ADMIN-ONLY control plane. Never exposed in any user-facing route, sitemap,
 // or API listing. Guard fails CLOSED and responses are intentionally generic.
@@ -134,6 +134,8 @@ export const adminListUsers = async (req, res, next) => {
 
         const hasMore = users.length > limit;
         const items = hasMore ? users.slice(0, limit) : users;
+        // Sensitive read: this directory exposes email/phone/whatsapp — always audit.
+        await alog(req, 'admin.users.list', { after: { count: items.length, q: req.query.q || '' } });
         res.json({ items, nextCursor: hasMore ? items[items.length - 1]._id : null, hasMore });
     } catch (err) { next(err); }
 };
@@ -196,7 +198,8 @@ export const adminGetGroup = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId).populate('admin', '_id username profilePic').lean();
         if (!group) return res.status(404).json({ msg: 'Not found' });
-        const memberships = await Membership.find({ groupId: group._id }).populate('user', '_id username profilePic').lean();
+        const memberships = await Membership.find({ groupId: group._id }).populate('user', MEMBER_VISIBLE_FIELDS).lean();
+        await alog(req, 'admin.groups.view', { targetId: group._id });
         res.json({ group, memberships });
     } catch (err) { next(err); }
 };

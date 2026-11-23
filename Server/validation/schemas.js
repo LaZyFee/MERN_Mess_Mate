@@ -153,6 +153,13 @@ export const absenceRangeSchema = z.object({
 
 export const idParamSchema = z.object({ id: objectIdSchema });
 
+// ---------- Headcount for cook (tomorrow's portions per slot) ----------
+export const headcountQuerySchema = z.object({
+    groupId: objectIdSchema,
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').optional(),
+    includeGuests: z.enum(['true', 'false']).default('true').optional(),
+});
+
 export const objectIdAndIdParamSchema = z.object({
     groupId: objectIdSchema,
     categoryId: objectIdSchema,

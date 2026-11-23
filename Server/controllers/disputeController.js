@@ -1,5 +1,6 @@
 ﻿import Dispute from '../models/Dispute.js';
 import { audit } from '../models/AuditEvent.js';
+import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
 
 // Disputes — open/list/respond/resolve against a source or statement item.
 
@@ -25,7 +26,7 @@ export const listDisputes = async (req, res, next) => {
         const filter = { groupId: req.params.groupId };
         if (req.validated?.query?.status) filter.status = req.validated.query.status;
         const disputes = await Dispute.find(filter)
-            .populate('raisedBy', 'username')
+            .populate('raisedBy', MEMBER_VISIBLE_FIELDS)
             .sort({ createdAt: -1 }).limit(100).lean();
         res.json({ disputes });
     } catch (err) { next(err); }

@@ -2,9 +2,12 @@ import Meal from '../models/Meal.js';
 import GuestMeal from '../models/GuestMeal.js';
 import Membership from '../models/Membership.js';
 import MessGroup from '../models/MessGroup.js';
-import { mealEntrySchema, guestMealSchema, mealBulkSchema, absenceRangeSchema, idParamSchema, monthParamSchema, mealFilterQuerySchema } from '../validation/schemas.js';
+import DutyAssignment from '../models/DutyAssignment.js';
+import Note from '../models/Note.js';
+import { mealEntrySchema, guestMealSchema, mealBulkSchema, absenceRangeSchema, idParamSchema, monthParamSchema, mealFilterQuerySchema, headcountQuerySchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import { ensureOpen, bumpRevision } from '../services/periodService.js';
+import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
 
 const SLOT_NAMES = ['breakfast', 'lunch', 'snacks', 'dinner'];
 
@@ -126,7 +129,7 @@ export const listGuestMeals = async (req, res, next) => {
             if (req.query.from) query.localDate.$gte = String(req.query.from);
             if (req.query.to) query.localDate.$lte = String(req.query.to);
         }
-        const guests = await GuestMeal.find(query).populate('hostUserId', 'username').sort({ localDate: 1, slot: 1 }).lean();
+        const guests = await GuestMeal.find(query).populate('hostUserId', MEMBER_VISIBLE_FIELDS).sort({ localDate: 1, slot: 1 }).lean();
         res.json(guests);
     } catch (err) { next(err); }
 };
@@ -201,25 +204,81 @@ export const previewAbsence = [
     },
 ];
 
-// POST /api/meals/:groupId/absence/apply — mark the window confirmed_zero (source: absence)
+// POST /api/meals/:groupId/absence/apply — mark the window confirmed_zero (source: absence),
+// auto-skip future duties, and create a prefilled handover note.
 export const applyAbsence = [
     validate(absenceRangeSchema),
     async (req, res, next) => {
         try {
             const groupId = req.params.groupId;
-            const from = dayString(req.body.from); const to = dayString(req.body.to);
+            const from = dayString(req.body.from);
+            const to = dayString(req.body.to);
             const days = enumerateDays(from, to);
-            const members = await Membership.find({ groupId, ...(req.body.userId ? { user: req.body.userId } : {}), startDate: { $lte: dateAtDay(to) }, $or: [{ endDate: null }, { endDate: { $gte: dateAtDay(from) } }] }).select('user').lean();
+            const targetUserId = req.body.userId || req.user.id;
+            const members = await Membership.find({
+                groupId,
+                user: targetUserId,
+                startDate: { $lte: dateAtDay(to) },
+                $or: [{ endDate: null }, { endDate: { $gte: dateAtDay(from) } }],
+            }).lean();
             const affected = [];
-            for (const member of members) for (const day of days) {
-                await assertPeriodOpen({ groupId, day });
-                let meal = await Meal.findOne({ groupId, userId: member.user, date: dateAtDay(day) });
-                if (!meal) meal = new Meal({ groupId, userId: member.user, date: dateAtDay(day), month: monthOfDay(day) });
-                for (const slot of req.body.slots) meal[slot] = slotPayload({ state: 'confirmed_zero' }, req.user.id, 'absence');
-                await meal.save(); affected.push({ userId: member.user, date: day });
-                await revisePeriod({ groupId, day });
+            const skippedDuties = [];
+
+            for (const member of members) {
+                for (const day of days) {
+                    await assertPeriodOpen({ groupId, day });
+                    let meal = await Meal.findOne({ groupId, userId: member.user, date: dateAtDay(day) });
+                    if (!meal) meal = new Meal({ groupId, userId: member.user, date: dateAtDay(day), month: monthOfDay(day) });
+                    for (const slot of req.body.slots) meal[slot] = slotPayload({ state: 'confirmed_zero' }, req.user.id, 'absence');
+                    await meal.save();
+                    affected.push({ userId: member.user, date: day });
+                    await revisePeriod({ groupId, day });
+                }
+
+                // ---- Auto-skip future scheduled duties during absence ----
+                const futureDuties = await DutyAssignment.find({
+                    groupId,
+                    membershipId: member._id,
+                    localDate: { $gte: from, $lte: to },
+                    status: 'scheduled',
+                }).lean();
+
+                for (const duty of futureDuties) {
+                    duty.status = 'skipped';
+                    await duty.save();
+                    skippedDuties.push({
+                        dutyId: duty._id,
+                        taskKey: duty.taskKey,
+                        localDate: duty.localDate,
+                    });
+                }
             }
-            res.json({ affected });
+
+            // ---- Prefilled handover note ----
+            const membership = await Membership.findOne({ groupId, user: targetUserId }).lean();
+            const handover = await Note.create({
+                groupId,
+                authorMembershipId: membership?._id || null,
+                authorUserId: req.user.id,
+                kind: 'handover',
+                title: `Absence handover: ${from} to ${to}`,
+                body: `I will be away from ${from} to ${to}. My meals are marked absent and my duties are auto-skipped.`,
+                audience: { type: 'all' },
+                validFrom: from,
+                validUntil: to,
+                absence: { from, to },
+                tasks: skippedDuties.map(d => ({
+                    text: `Cover ${d.taskKey} duty on ${d.localDate}`,
+                    status: 'open',
+                    assigneeMembershipId: null,
+                })),
+                state: 'active',
+            });
+
+            await audit({ groupId, actorId: req.user.id, action: 'absence.applied', targetType: 'absence', after: { from, to, skippedDuties: skippedDuties.length } });
+            req.app.get('io')?.to(`group:${groupId}`).emit('absence-updated', { groupId, userId: targetUserId, from, to });
+
+            res.json({ affected, skippedDuties, handover });
         } catch (err) { next(err); }
     },
 ];
@@ -242,7 +301,7 @@ export const getMealsByMonth = [
             if (q.userId) filter.userId = q.userId;
 
             const meals = await Meal.find(filter)
-                .populate('userId', 'username')
+                .populate('userId', MEMBER_VISIBLE_FIELDS)
                 .sort({ date: 1 })
                 .lean();
 
@@ -289,7 +348,7 @@ export const getMeals = [
             if (q.userId) filter.userId = q.userId;
 
             const meals = await Meal.find(filter)
-                .populate('userId', 'username profilePic')
+                .populate('userId', MEMBER_VISIBLE_FIELDS)
                 .sort({ date: 1 })
                 .lean();
 
@@ -297,3 +356,91 @@ export const getMeals = [
         } catch (err) { next(err); }
     },
 ];
+
+// GET /api/meals/:groupId/headcount/tomorrow?date=YYYY-MM-DD&includeGuests=true
+// Returns consumed portions per slot for the target day (default tomorrow,
+// Dhaka civil date) plus universal guest meals, so the cook knows how many
+// portions to prepare per slot.
+export const getTomorrowHeadcount = [
+    validate(headcountQuerySchema, 'query'),
+    async (req, res, next) => {
+        try {
+            const groupId = req.params.groupId;
+            const targetDate = req.query.date || dayString(addDays(new Date(), 1));
+            const includeGuests = req.query.includeGuests !== 'false';
+
+            // ---- Member meals: sum consumed portionSubunits per slot ----
+            const meals = await Meal.find({
+                groupId,
+                date: dateAtDay(targetDate),
+            }).lean();
+
+            const slotTotals = { breakfast: 0, lunch: 0, snacks: 0, dinner: 0 };
+            const memberCounts = { breakfast: 0, lunch: 0, snacks: 0, dinner: 0 };
+
+            for (const m of meals) {
+                for (const slot of Object.keys(slotTotals)) {
+                    const s = m[slot];
+                    if (s && s.state === 'consumed' && s.portionSubunits) {
+                        slotTotals[slot] += s.portionSubunits;
+                        memberCounts[slot] += 1;
+                    }
+                }
+            }
+
+            // ---- Guest meals: universal guests add to group pool ----
+            let guestTotals = { breakfast: 0, lunch: 0, snacks: 0, dinner: 0 };
+            let guestCount = { breakfast: 0, lunch: 0, snacks: 0, dinner: 0 };
+            if (includeGuests) {
+                const guests = await GuestMeal.find({
+                    groupId,
+                    localDate: targetDate,
+                    status: 'active',
+                }).lean();
+                for (const g of guests) {
+                    if (g.poolMode === 'universal') {
+                        guestTotals[g.slot] += g.portionSubunits;
+                        guestCount[g.slot] += 1;
+                    }
+                    // individual guests are already inside the host's own meal
+                    // total, so we don't double-count them here.
+                }
+            }
+
+            // ---- Per-slot headcount in portions (thousandths) ----
+            const slots = {};
+            for (const slot of Object.keys(slotTotals)) {
+                const total = slotTotals[slot] + guestTotals[slot];
+                slots[slot] = {
+                    memberPortionSubunits: slotTotals[slot],
+                    guestPortionSubunits: guestTotals[slot],
+                    totalPortionSubunits: total,
+                    totalPortions: Number((total / 1000).toFixed(3)),
+                    memberCount: memberCounts[slot],
+                    guestCount: guestCount[slot],
+                    portionsPerMember: memberCounts[slot] > 0
+                        ? Number(((slotTotals[slot] / memberCounts[slot]) / 1000).toFixed(3))
+                        : null,
+                };
+            }
+
+            const grandTotal = Object.values(slots).reduce(
+                (sum, s) => sum + s.totalPortionSubunits, 0);
+
+            res.json({
+                groupId,
+                date: targetDate,
+                slots,
+                grandTotalPortionSubunits: grandTotal,
+                grandTotalPortions: Number((grandTotal / 1000).toFixed(3)),
+                generatedAt: new Date(),
+            });
+        } catch (err) { next(err); }
+    },
+];
+
+const addDays = (date, n) => {
+    const d = new Date(date);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d;
+};
