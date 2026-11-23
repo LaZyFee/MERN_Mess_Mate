@@ -22,19 +22,24 @@ MealMate is a **mess/mess-group management and accounting system** for shared li
 
 | Concern | Implementation |
 |---|---|
-| Security headers | `helmet()` |
-| Rate limiting | `express-rate-limit` — auth: 50 req/15min; general: 300 req/15min |
+| Security headers | `helmet()` with CSP (`default-src 'self'`, `img-src` incl. Cloudinary, `connect-src` self + frontend), `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/mic/geolocation disabled), HSTS in production |
+| Cache control | `Cache-Control: no-store` on authenticated JSON responses |
+| Trust proxy | `app.set('trust proxy', 1)` for rate limiting behind reverse proxies |
+| Rate limiting | `express-rate-limit` — auth: 50 req/15min; general: 300 req/15min; support actions: 20/15min; appeal: 1/day/IP |
 | CORS | Strict allowlist from `FRONTEND_URL` env (comma-separated), credentials enabled |
 | Body limits | `express.json({limit:'10kb'})` + urlencoded — rejects oversized payloads |
 | Parameter pollution | `hpp()` |
-| CSRF | `middleware/csrf.js` mounted globally (origin check for cookie mutations) |
-| Sessions | `express-session` (MemoryStore) — only for the Google OAuth handshake (10 min cookie) |
+| CSRF | `middleware/csrf.js` — double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; Bearer clients bypass |
+| Sessions | `express-session` with **MongoDB-backed store** (`config/mongoSessionStore.js`) — only for the Google OAuth handshake (10 min cookie, TTL index) |
 | Auth | `passport.initialize()/session()` with Google OAuth20 strategy (`config/passportJs.js`) |
-| Realtime | Socket.IO server with JWT handshake (`?token=`), rooms `group:<id>`; `io` exposed to controllers via `app.set('io', io)` |
-| Background jobs | `startOutboxWorker()` (notification delivery) and `startScheduler()` (cron) started at boot |
+| Access-token auth | `middleware/auth.js` — reads `mm_at` HttpOnly cookie, `x-auth-token` header, or `Authorization: Bearer`; enforces `User.suspended` on every request |
+| 2FA / AMR | `utils/totp.js` (RFC 6238, no external deps); `middleware/amrGate.js` requires `amr: otp` for admin routes; `controllers/totpController.js` setup/verify/disable/login step-up |
+| Realtime | Socket.IO server authenticates from `mm_at` cookie only (query-string tokens **rejected**); rooms `user:<id>` (inbox) and `group:<id>`; `io` exposed via `app.set('io', io)` and wired into `inboxService` |
+| Background jobs | `startOutboxWorker()` (notification delivery) and `startScheduler()` (cron with `JobLock`/`JobRun` distributed locking) started at boot; all jobs run through `jobRunner.runJob()` |
 | Error handling | Global handler — never leaks internal messages; 404 catch-all |
+| Exports | `app` and `httpServer` exported for supertest integration tests; boot guarded by `process.argv[1]` check |
 
-**Mounted route prefixes:** `/api/users`, `/api/admin` (hidden control plane — replies **404** to non-admins), `/api/messgroups`, `/api/meals`, `/api/expenses`, `/api/summary`, `/api/stats`, `/api/memberships`, `/api/policies`, `/api/periods`, `/api/money`, `/api/statements`, `/api/recurring`, `/api/reconciliation`, `/api/disputes`, `/api/notifications`, `/api/sessions`, `/api/attachments`, `/api/assets`.
+**Mounted route prefixes:** `/api/users` (incl. `/2fa` TOTP routes), `/api/admin` (hidden control plane — replies **404** to non-admins; requires `amr: otp`), `/api/admin/support` (platform support desk), `/api/messgroups`, `/api/meals`, `/api/expenses`, `/api/summary` (legacy, deprecated), `/api/stats`, `/api/memberships`, `/api/policies`, `/api/periods`, `/api/money`, `/api/statements`, `/api/recurring`, `/api/reconciliation`, `/api/disputes`, `/api/notifications`, `/api/sessions`, `/api/attachments`, `/api/assets`, `/api/inbox` (B0), `/api/support` (B1 user side), `/api/routines` (B2 roster/duty/menu/note/board), `/api/shopping-list` (B2), `/api/kitchen-inventory` (B2), `/api/polls` (B2), `/api/invite` (B3.1 hashed join codes).
 
 ---
 
@@ -144,9 +149,43 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **`Attachment`** (`models/Attachment.js`) — private receipt/document metadata: original/stored names, storagePath, mimeType whitelist (jpeg/png/webp/pdf), size ≤ 10MB, `sha256`, `scanStatus`, target (expense_receipt/payment_evidence/other) + targetId. Download is authenticated and group-scoped.
 
----
+### 3.9 Routine & Notice Board models (B2 — implemented)
 
-## 4. SERVICES (admin visibility note: `audit()` events feed both the in-app audit trail and the admin traffic dashboard)
+**`Roster`** (`models/Roster.js`) — a named rotation for one duty type (`bazar`/`cleaning`/`cooking`/`custom`). Fields: `title`, `type`, `areas[]`, `rotation` (`mode: round_robin|weekly_template|fair|manual`, `memberOrder[]`, `weeklyTemplate`, `daysOfWeek[]`), `skipWhenAbsent`, `weekStartsOn` (default Saturday), `horizonDays` (default 30), `state` (draft|published|archived), `revision`, `createdBy`. Unique `(groupId, title)`.
+
+**`DutyAssignment`** (`models/DutyAssignment.js`) — one member + one Dhaka civil day + one task. Fields: `rosterId`, `taskKey`, `localDate` (`YYYY-MM-DD`), `membershipId`, `status` (scheduled|done|missed|swapped|skipped|cancelled), `doneAt`, `doneNote`, `linkedExpenseId`, `origin` (generated|manual|swap|reassign), `revision`. Unique `(rosterId, taskKey, localDate)`.
+
+**`SwapRequest`** (`models/SwapRequest.js`) — a member asks to swap/give away a duty. Fields: `assignmentId`, `fromMembershipId`, `toMembershipId` (null = open offer), `status` (pending|accepted|declined|cancelled|expired), `reason`, `respondedBy`, `expiresAt` (TTL = duty date). Accepting writes a new assignment `origin:'swap'` and marks the old one `swapped`.
+
+**`MenuPlan`** (`models/MenuPlan.js`) — weekly cooking schedule. Fields: `weekStart`, `isTemplate`, `days[{weekday, slots:{breakfast/lunch/snacks/dinner}[{name,qtyHint?}], cookMembershipId?, estCostPoisha?, note?}]`, `revision`. Unique `(groupId, weekStart)`.
+
+**`Note`** (`models/Note.js`) — board post: `note`/`announcement`/`handover`/`alert`. Fields: `authorMembershipId`, `authorUserId`, `kind`, `title` (≤120), `body` (≤2000 plain text), `audience` (all/members/role), `pinned` (max 3), `validFrom/validUntil` (auto-archive TTL), `absence{from,to}`, `tasks[{_id,text,assigneeMembershipId,claimedBy,doneBy,doneAt,status}]` (≤20), `readBy[]`, `state` (active|archived|deleted — soft delete), `revision`.
+
+**`ShoppingList`** (`models/ShoppingList.js`) — shared bazar list. Fields: `title`, `items[{name,quantity,unit,estimatedPricePoisha,addedBy,addedByName,checked,checkedBy,checkedAt,note}]`, `status` (open|closed), `expenseDraftId`, `closedAt`, `closedBy`. Convertible to an expense draft via `toExpense`.
+
+**`KitchenItem`** (`models/KitchenItem.js`) — kitchen inventory tracker. Fields: `name`, `unit`, `currentStock`, `reorderThreshold`, `averageConsumptionPerDay`, `lastRefill`, `refills[]`, `isActive`, `createdBy`. Computes `daysRemaining` and `needsRefill`.
+
+**`Poll`** (`models/Poll.js`) — quick polls for the menu. Fields: `question`, `options[{text,voteCount,votedBy[]}]`, `createdBy`, `status` (open|closed), `expiresAt`, `relatedMenuItem`.
+
+### 3.10 Support Desk models (B1 — implemented)
+
+**`SupportTicket`** (`models/Support.js`) — `ticketNo` (`MM-T-000123` via atomic `Counter`), `userId`, `groupId?`, `category` (account|bug|billing_dispute|feature|group_access|appeal|other), `subject` (≤120), `status` (open|answered|awaiting_admin|resolved|closed), `priority` (low|normal|high|urgent — admin-set only), `assignedAdminId?`, `firstAdminReplyAt`, `lastUserMessageAt`, `lastAdminMessageAt`, `firstResponseDueAt` (SLA: normal 24h, urgent 4h), `resolvedAt`, `closedAt`, `closedBy` (user|admin|system), `resolutionNote`, `reopenCount`, `relatedTicketId?`, `rating?{score 1-5, comment}`, `contextSnapshot` (opt-in group context), `revision`. Strict turn-taking enforced server-side by `services/supportRules.js`.
+
+**`SupportMessage`** (`models/Support.js`) — `ticketId`, `authorType` (user|admin|system), `authorId`, `body` (≤2000), `isInternal` (admin-only, never returned to user), `attachmentIds[]` (reuses `Attachment` target `support_ticket`). Immutable — no edit/delete API; admin can `redact` (body → `[removed]`, audit-logged).
+
+**`SupportActionToken`** (`models/Support.js`) — single-use signed links in notification emails (resolve|close|rate). Fields: `ticketId`, `userId`, `purpose`, `tokenHash` (sha256 at rest), `expiresAt` (7-day TTL), `usedAt`. Redeemed via public but rate-limited `POST /api/support/actions/:token`.
+
+**`SupportCannedReply`** (`models/Support.js`) — admin snippets (`title`, `body`, `category`).
+
+### 3.11 Security & Inbox models (B0/B3 — implemented)
+
+**`InboxNotification`** (`models/InboxNotification.js`) — in-app notification row for one user (`scope: user|admin`). Fields: `userId`, `groupId?`, `type`, `title` (≤120), `body` (≤300), `link{kind,id}`, `readAt`, `dedupeKey` (sparse unique), `expiresAt` (90-day TTL). Admin alerts fanned out per-admin with own `readAt`. Sockets auto-join `user:<id>` and receive `inbox-new`.
+
+**`SecurityEvent`** (`models/SecurityEvent.js`) — anomaly audit events. Fields: `userId`, `groupId?`, `type` (refresh_token_reuse|new_device|new_country|device_enrolment_burst|repeated_failures|join_code_failure|new_sign_in|token_from_query_string), `ip`, `ua`, `meta`, `createdAt` (90-day TTL). Recorded via `recordSecurityEvent()` helper that never breaks the request path.
+
+**`JobLock` + `JobRun`** (`models/JobRun.js`) — distributed cron locking (`JobLock {name, lockedUntil, owner}`) and per-run audit log (`JobRun {name, startedAt, finishedAt,status,processed,failed,error}`, 30-day TTL). Used by `services/jobRunner.js`.
+
+**`InviteCode`** (`models/InviteCode.js`) — hashed join codes (B3.1). Fields: `groupId`, `codeHash` (sha256 + pepper, unique), `prefix` (first 4 chars for lookup), `expiresAt` (default 7-day TTL), `maxUses` (default 20), `usedCount`, `revokedAt`, `createdBy`. Plaintext shown once at creation; `GET /api/invite/codes/:groupId` returns only metadata. Helpers: `hashInviteCode()`, `inviteCodePrefix()`, `generateInviteCode()`.
 
 | Service | File | What it does |
 |---|---|---|
@@ -159,6 +198,13 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | **schedulerService** | `services/schedulerService.js` | Cron-driven jobs: `generateRecurringDraftsForMonth(costPeriod)` for all due active rules (idempotent via generatedKeys), deadline reminders, expired-idempotency cleanup, and `applyDefaultMealsForPreviousDay()` — fills only `unknown` slots of the prior Dhaka day from the group's `defaultMealSubunits`. |
 | **outboxWorker** | `services/outboxWorker.js` | Leases pending/failed batches (findOneAndUpdate claim), delivers via `mailer.sendMail` (email) or WhatsApp template/direct send (checks recipient consent first → `skipped` when opted out, `not_configured` when env missing), retries with backoff up to maxAttempts. |
 | **duplicateDetection** | `services/duplicateDetection.js` | `checkDuplicateExpense()` — exact `receiptReference` match + fuzzy supplier+amount within ±3-day window; returns `duplicateWarnings[]` surfaced by create/submit. |
+| **inboxService** | `services/inboxService.js` (+ `inboxService.rules.js`) | `notify()` — inserts InboxNotification rows with dedupe, emits `inbox-new` to Socket.IO `user:<id>` rooms. `notifyAdmins()` — fans out to platform admins resolved from `ADMIN_EMAILS`. |
+| **jobRunner** | `services/jobRunner.js` (+ `jobRunner.rules.js`) | `runJob(name, fn)` — distributed Mongo lock (`JobLock`) + run log (`JobRun`, 30-day TTL). Prevents overlapping cron ticks across instances. |
+| **routineJobs** | `services/routineJobs.js` (+ `routineRules.js`) | Duty reminders (20:00 eve / 07:00 day), mark-missed (00:10), note expiry, roster horizon, departed-member duty reassignment. Pure rule engine in `routineRules.js` (generateDuties, visibleNoteAudience, claim/done handover tasks, fairAmountOrder). |
+| **securityService** | `services/securityService.js` | `runAnomalySweep()` — 15-min sweep: refresh-token reuse, device bursts, repeated failures → admin inbox alerts. `recordNewSignIn()`. |
+| **supportJobs** | `services/supportJobs.js` | SLA watcher (75%/100% alerts), auto-close (resolved > 72h → system closed), retention (anonymise tickets > 18 months, delete audits > 24 months). |
+| **supportRules** | `services/supportRules.js` | Pure rule engine: `canUserComment`, `canAdminComment`, `nextStatusAfterMessage`, `canTransition` (resolve/close/reopen/autoClose), `slaStage`, `isAutoCloseable`. Implements the comment-lock matrix. |
+| **retentionRules** | `services/retentionRules.js` | Pure retention policy: `needsAnonymisation`, `anonymisationPatch`, ticket cutoff 18 months, audit cutoff 24 months. |
 
 ---
 
@@ -167,7 +213,8 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | Util | File | Contents |
 |---|---|---|
 | **money** | `utils/money.js` | The money constitution: `POISHA_PER_TAKA=100`; `parsePoisha` (exact canonical decimal-string → integer poisha, regex-validated, safe-integer check); `toDecimalString`; `sumPoisha`; `allocateByWeights` (deterministic largest-remainder, tie-break by index); `allocateEqual`; `allocationsBalanced`. |
-| **tokens** | `utils/tokens.js` | `signAccessToken` (1h), `signRefreshToken` (7d, jti + type:'refresh'), `hashToken` (sha256 at-rest), `verifyRefreshToken` (signature + stored-hash match), cookie helpers `setRefreshTokenCookie` / `clearRefreshTokenCookie` / `getCookie` — HttpOnly, Path=/api/users, SameSite Strict(prod)/Lax(dev), Secure in prod. |
+| **tokens** | `utils/tokens.js` | `signAccessToken` (1h, includes `amr` claim), `signRefreshToken` (7d, jti + type:'refresh'), `hashToken` (sha256 at-rest), `verifyRefreshToken` (signature + stored-hash match), cookie helpers `setRefreshTokenCookie` / `clearRefreshTokenCookie` / `setAccessTokenCookie` / `clearAccessTokenCookie` / `getCookie` — HttpOnly, `mm_at` Path=/, `refreshToken` Path=/api/users (wide `/api` for BFF), SameSite Strict(prod)/Lax(dev), Secure in prod. |
+| **totp** | `utils/totp.js` | TOTP (RFC 6238) using Node built-in crypto only: `generateTOTPSecret`, `generateTOTP`, `verifyTOTP` (±1 step clock drift), `buildOTPAuthURL` (QR provisioning), `generateRecoveryCodes` / `verifyRecoveryCode`, `encryptSecret` / `decryptSecret` (AES-256-GCM, key from `TOTP_ENCRYPTION_KEY`). |
 | **transaction** | `utils/transaction.js` | `withTransaction(fn)` — detects replica-set/sharded topology and wraps in `session.withTransaction()`; graceful standalone fallback for local dev. Used by approve/reverse/confirm/finalize. |
 | **pagination** | `utils/pagination.js` | Stable cursor pagination: base64 cursor encode/decode, `paginateQuery({model, filter, cursor, limit, sortField…})` fetching limit+1 → returns `{items, nextCursor, hasMore, count}`. Used on expense & transaction lists. |
 | **dhakaTime** | `utils/dhakaTime.js` | Civil-day helpers for UTC+6: `dayString` (YYYY-MM-DD in Asia/Dhaka), `dateAtDay` (UTC midnight), `monthOfDay`, `enumerateDays`. All day bucketing goes through here. |
@@ -218,6 +265,28 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **statsController** — `getStats` (legacy aggregates + category breakdown) and `getV2Dashboard` — ledger-derived dashboard: period state, expense counts by status, money totals, fund balances, statement/settlement figures with draft-preview fallback.
 
+**adminController** (`controllers/adminController.js`) — hidden platform admin (already documented in §3.6/§7): `getOverview`, `getTraffic`, `listAuditEvents`, `adminListUsers`, `adminGetUser`, `adminUpdateUser` (suspend/verify), `adminListGroups`, `adminGetGroup`, `adminDeleteGroup`. Guard `requirePlatformAdmin` + `requireAdminAMR` (2FA mandatory).
+
+**inviteController** (`controllers/inviteController.js`) — B3.1 hashed join codes: `joinByCode` (rate-limited, failure lockout), `createInviteCode` (admin, revokes all prior codes, returns plaintext once), `getInviteCodeMetadata` (prefix/expiry/usesLeft only — no plaintext).
+
+**routinesController** (`controllers/routinesController.js`) — B2 Routine & Notice Board: rosters (create/list/get/update/publish/extend-horizon), duties (list/mark-done/reassign), swaps (create/respond), menu (set/get), notes (create/list/get/update/delete/ack/claim/done), `boardToday`, `menuBazarSuggestions`, `dutyFairnessBoard`, `bazarSpendRotation`, `emergencyBroadcast`. Emits Socket.IO events (`roster-published`, `duty-updated`, `menu-updated`, `note-created`, `note-updated`).
+
+**kitchenInventoryController** (`controllers/kitchenInventoryController.js`) — B2: `listKitchenItems`, `createKitchenItem`, `updateKitchenItem`, `recordRefill`, `deleteKitchenItem` (archive).
+
+**shoppingListController** (`controllers/shoppingListController.js`) — B2: `getShoppingList`, `addItem`, `toggleItem`, `removeItem`, `toExpense` (convert checked items to expense draft), `listHistory`.
+
+**pollController** (`controllers/pollController.js`) — B2: `listPolls`, `createPoll`, `votePoll`, `closePoll`, `pollResults`.
+
+**totpController** (`controllers/totpController.js`) — B3.2 TOTP 2FA: `setup`, `verify`, `disable`, `loginChallenge`, `login2fa`. Exports `makeChallenge` for login step-up.
+
+**inboxController** (`controllers/inboxController.js`) — B0: `listInbox`, `unreadCount`, `markRead`, `getPreferences`, `updatePreferences`.
+
+**supportController** (`controllers/supportController.js`) — B1 user side: `createTicket` (idempotent, 3-open/5-per-day limits), `listMyTickets`, `getTicketThread` (returns `permissions.canComment` + reason), `addMessage` (rate-limited, turn-locked), `ticketAction` (resolve/close/reopen/rate), `publicAction` (public action-token redeem, neutral responses), `appeal` (public, suspended-user appeal, CAPTCHA hook).
+
+**supportAdminController** (`controllers/supportAdminController.js`) — B1 admin side (mounted behind `requirePlatformAdmin`): `adminListTickets`, `adminGetTicket`, `adminReply`, `adminInternalNote`, `adminAssign`, `adminPatchTicket`, `adminAction` (resolve/close/reopen), `adminRedactMessage`, `adminStats`, canned-replies CRUD.
+
+**jobController** (`controllers/jobController.js`) — `listJobStatuses` (GET `/api/admin/jobs` — last run + lock state per background job).
+
 ---
 
 ## 7. ROUTES (all under `/api`, `auth` middleware enforced per-router)
@@ -242,6 +311,16 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | `depositAssetRoutes` | GET/POST `/groups/:groupId`; POST `/:assetId/refund` |
 | `statsRoutes` | GET `/groups/:groupId/dashboard` (V2); GET `/:groupId` (legacy stats) |
 | `summaryRoutes` (legacy) | GET `/:groupId/:month`; POST `/finalize/:groupId/:month`; GET `/whatsapp/:groupId/:month` |
+| `inboxRoutes` | GET `/` (list, `?unread=1&cursor=`), GET `/unread-count`, POST `/read` (`{ids[]|all:true}`), GET/PUT `/preferences` |
+| `supportRoutes` | **Public** POST `/actions/:token`, POST `/appeal`; (auth) POST `/tickets` (idempotent), GET `/tickets`, GET `/tickets/:ticketId`, POST `/tickets/:ticketId/messages` (rate-limited), POST `/tickets/:ticketId/resolve|close|reopen|rate` |
+| `supportAdminRoutes` | (auth + `requirePlatformAdmin` + `requireAdminAMR`) GET/POST `/tickets` (work queue), GET/POST/PATCH `/tickets/:ticketId` (reply/internal-note/assign/patch), POST `/tickets/:ticketId/resolve|close|reopen`, POST `/tickets/:ticketId/messages/:messageId/redact`, GET `/stats`, canned-replies CRUD |
+| `routinesRoutes` | (auth + `requireGroupRoleV2`) Rosters: GET/POST `/groups/:groupId/rosters`, GET/PATCH/POST(publish)/POST(extend-horizon) `/groups/:groupId/rosters/:rosterId`; Duties: GET `/groups/:groupId/duties`, POST done/reassign `/groups/:groupId/duties/:assignmentId/…`; Swaps: POST `/groups/:groupId/swaps`, POST respond `/groups/:groupId/swaps/:swapId/respond`; Menu: GET/POST `/groups/:groupId/menu`; Notes: GET/POST/PATCH/DELETE `/groups/:groupId/notes/…`, POST ack/claim/done tasks; GET `/groups/:groupId/board/today`, `/menu/bazar-suggestions`, `/duties/fairness`, `/bazar-spend-rotation`, POST `/emergency-broadcast` |
+| `shoppingListRoutes` | (auth + `requireGroupRoleV2`) GET `/groups/:groupId`, POST items, PATCH/DELETE items/:itemId, POST `/to-expense`, GET `/history` |
+| `kitchenInventoryRoutes` | (auth + `requireGroupRoleV2`) GET/POST `/groups/:groupId`, PATCH/DELETE `/groups/:groupId/:itemId`, POST `/:itemId/refill` |
+| `pollRoutes` | (auth + `requireGroupRoleV2`) GET/POST `/groups/:groupId`, POST `/:pollId/vote`, POST `/:pollId/close`, GET `/:pollId/results` |
+| `totpRoutes` | (auth) POST `/2fa/setup|verify|disable`; (public) POST `/login/2fa-challenge`, `/login/2fa` |
+| `inviteRoutes` | (auth) POST `/join-by-code`, POST `/codes`, GET `/codes/:groupId` |
+| `adminRoutes` | (auth + `requirePlatformAdmin` + `requireAdminAMR`) GET `/overview|/traffic|/audit`, GET/PATCH `/users/:userId`, GET `/users` (directory), GET `/jobs`, GET/DELETE `/groups/:groupId` |
 
 ---
 
@@ -249,14 +328,18 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 | Middleware | File | Behavior |
 |---|---|---|
-| **auth** | `middleware/auth.js` | Reads `x-auth-token` header, verifies JWT against `JWT_SECRET`, validates ObjectId-shaped `user.id`, attaches `req.user`. |
+| **auth** | `middleware/auth.js` | Reads `mm_at` HttpOnly cookie, `x-auth-token` header, or `Authorization: Bearer`; verifies JWT against `JWT_SECRET`; validates ObjectId-shaped `user.id`; enforces `User.suspended` on every request (blocks login/refresh/all API access). Attaches `req.user`. |
 | **roles (legacy)** | `middleware/roles.js` | `requireGroupRole('admin'|'member')` checks embedded MessGroup members/admin; `allowSelfOrAdmin` sets `req.canEditOthers`. |
 | **roles V2** | `middleware/roles.js` | `requireGroupRoleV2(minRole)` resolves effective role from active Membership interval (`owner>manager>treasurer>auditor>member`, RANK comparison), falls back to group.admin→owner; sets `req.group`, `req.groupRole`, `req.membership`. Plus `flagSelfApproval` (self-approval needs a reason → 422), `assertOwnerTransfer`, `auditRoleChange`. |
-| **csrf** | `middleware/csrf.js` | For unsafe methods without `Bearer` token or `X-Requested-With`/`X-CSRF-Token` headers, verifies Origin/Referer against the CORS allowlist → 403 otherwise. Protects cookie-carried refresh tokens. |
+| **csrf** | `middleware/csrf.js` | Double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; Bearer/`X-Requested-With` clients bypass. Origin/Referer check against CORS allowlist. Exposes `setCSRFCookie(res)` for login/register responses. |
+| **amrGate** | `middleware/amrGate.js` | Requires `amr` claim to include `otp` (2FA verified). Returns generic 404 if not satisfied — used on admin routes so non-2FA users cannot confirm they exist. |
+| **rateLimiters** | `middleware/rateLimiters.js` | `joinCodeLimiter` — per-IP (10/15min) and per-user (20/hour) join-by-code limits with exponential lockout after 5 failures. Exposes buckets for recording failures/resets. |
 | **idempotency** | `middleware/idempotency.js` | `idempotent(operation)` — honors `Idempotency-Key` header; sha256 request hash; replays cached responses (`__idempotentReplay: true`); key-reuse with a different body → 409; duplicate concurrent create → 409 retry. |
+| **deprecate** | `middleware/deprecate.js` | Sets `Deprecation: true`, `Sunset`, and `Link: rel="successor-version"` headers on legacy routes kept for back-compat. |
 | **receiptUpload** | `middleware/receiptUpload.js` | Multer disk storage in `/uploads/receipts` with random names; MIME whitelist + 10MB limit; `verifyMagicBytes()` (JPEG FFD8FF, PNG signature, `%PDF`, RIFF/WEBP); `computeFileSha256()`. |
 | **upload** | `middleware/upload.js` | Multer for profile pictures → Cloudinary. |
 | **validate** | `validation/validate.js` | Generic Zod middleware `validate(schema, source)`; deep-strips Mongo operator keys (`$…`, dotted) from body/params — NoSQL-injection defense (Express 5 forbids reassigning `req.query`, so queries land on `req.validated`). Returns 400 with field-level errors. |
+| **privacy** | `middleware/privacy.js` | `requireGroupMembership` — hard gate: active-membership lookup; non-members get generic 404. `resolveHistoryWindow` — ex-member reads clamped to `[firstJoin, lastDeparture]`. `MEMBER_VISIBLE_FIELDS` / `publicProfile()` — central allowlist (`username`, `profilePic`). |
 
 ---
 
@@ -277,6 +360,9 @@ Schema groups:
 - **Recurring:** `recurringSchema`, `generateSchema`.
 - **Reconciliation / Disputes / Notifications / Sessions:** their respective create/resolve/query schemas.
 - **Filters:** `mealFilterQuerySchema`, `expenseFilterQuerySchema` — month XOR from/to, from ≤ to; `statsQuerySchema` (granularity month|year).
+- **Routine (B2):** `routineSchemas.js` — `rosterCreateSchema`, `rosterUpdateSchema`, `rosterIdParam`, `groupIdParam`, `dutyMarkDoneSchema`, `dutyReassignSchema`, `swapCreateSchema`, `swapRespondSchema`, `menuPlanCreateSchema`, `noteCreateSchema`, `noteUpdateSchema`, `noteIdParam`, `noteTaskParam`, `noteAckSchema`.
+- **Support (B1):** `supportSchemas.js` — `ticketCreateSchema`, `ticketListQuery`, `ticketMessageSchema`, `ticketTransitionSchema`, `ticketRateSchema`, `appealSchema`, `adminReplySchema`, `adminTicketPatchSchema`, `adminAssignSchema`, `adminRedactSchema`, `adminTicketListQuery`, `cannedReplySchema`.
+- **Inbox (B0):** `inboxSchemas.js` — `inboxListQuery`, `inboxReadSchema`, `inboxPrefsSchema`.
 
 ---
 
@@ -284,15 +370,19 @@ Schema groups:
 
 - **`config/db.js`** — single Mongoose connection from `MONGO_URI`; exits the process on failure.
 - **`config/cloudinary.js`** — Cloudinary SDK config for profile pictures.
+- **`config/mongoSessionStore.js`** — MongoDB-backed express-session store (replaces MemoryStore; TTL index on `express_sessions`).
 - **`config/passportJs.js`** — Google OAuth20 strategy.
-- **`scripts/migrateLegacyData.js`** — idempotent legacy→V2 migration: initialize PolicyVersion, seed categories, migrate embedded members→Memberships, convert extras→RecurringRules, normalize legacy expense rows to integer poisha + lines. Run: `node scripts/migrateLegacyData.js`.
-- **`tests/`** — `goldenCalculation.test.js`, `moneyPrecision.test.js`, `journalBalance.test.js`, `acceptanceGates.test.js`, `scenarioGates.test.js`. 26/26 passing: §8 golden calc, precision, journal invariants, randomized allocation conservation/permutation trials, leap-day & Dhaka-midnight boundaries, member-days + absence, guest pools, idempotency misuse, cross-group isolation, all-10-kind ledger event matrix, finalize race semantics, supersession chains, delivery-failure matrix.
+- **`scripts/migrateLegacyData.js`** — idempotent legacy→V2 migration: initialize PolicyVersion, seed categories, migrate embedded members→Memberships, convert extras→RecurringRules, normalize legacy expense rows to integer poisha + lines, **rewrite legacy 2-slot float Meal rows into 4-slot integer-subunit state form**. Run: `node scripts/migrateLegacyData.js [--dry-run]`.
+- **`scripts/migrateInviteCodes.js`** — B3.1: hashes existing `MessGroup.code` values into `InviteCode` collection. Idempotent. Run: `node scripts/migrateInviteCodes.js`.
+- **`scripts/checkIndexes.js`** — asserts every expected index (including TTL indexes) exists across all collections. Run: `node scripts/checkIndexes.js`.
+- **`scripts/smoke/*.sh`** — smoke test scripts for B0 (`b0.sh`), B2 (`b2.sh`), B3 (`b3.sh`), B4 (`b4.sh`), and live-infrastructure gates (`live-infra-gates.sh`).
+- **`tests/`** — 19 suites / 111 passing: `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules`. Plus `tests/integration/` (supertest, needs live server): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`.
 
 ---
 
 ## 11. PACKAGE.JSON — Dependency Inventory
 
-**Scripts:** `test` → `node --test tests/*.test.js` · `dev` → `nodemon index.js` · `"type": "module"`.
+**Scripts:** `test` → `node --test tests/*.test.js` · `test:integration` → `node --test --test-concurrency 1 tests/integration/*.test.js` · `dev` → `nodemon index.js` · `"type": "module"`.
 
 ### Runtime dependencies
 
@@ -304,24 +394,29 @@ Schema groups:
 | `socket.io` | ^4.8.4 | Realtime group-room updates |
 | `zod` | ^4.6.7 | All input validation |
 | `jsonwebtoken` | ^9.0.3 | Access/refresh JWTs + Socket.IO handshake auth |
-| `bcrypt` | ^6.0.0 | Password hashing (**the one actually used**) |
-| `bcryptjs` | ^3.0.2 | ⚠️ Unused duplicate — candidate for removal |
+| `bcrypt` | ^6.0.0 | Password hashing |
 | `passport` + `passport-google-oauth20` | ^0.7.0 / ^2.0.0 | Google OAuth login |
-| `express-session` | ^1.18.2 | OAuth handshake session (MemoryStore ⚠️) |
+| `express-session` | ^1.18.2 | OAuth handshake session (MongoDB-backed store via `config/mongoSessionStore.js`) |
 | `cloudinary` | ^2.11.0 | Profile-picture storage |
 | `multer` | ^2.5.0 | File uploads (profile pic + receipts) |
 | `nodemailer` | ^10.6.0 | SMTP email (outbox channel, resets, invites) |
-| `exceljs` | ^3.4.0 | Excel export |
-| `pdfkit` | ^0.20.2 | PDF export (**the one actually used**) |
-| `pdfmake` | ^0.3.14 | ⚠️ Unused duplicate — candidate for removal |
-| `helmet` | ^8.3.0 | Security headers |
+| `exceljs` | 4.4.0 | Excel export |
+| `pdfkit` | ^0.20.2 | PDF export |
+| `helmet` | ^8.3.0 | Security headers (CSP, Referrer-Policy, Permissions-Policy, HSTS) |
 | `cors` | ^2.8.5 | CORS allowlist |
-| `express-rate-limit` | ^8.1.0 | Auth + general rate limits |
+| `express-rate-limit` | ^8.1.0 | Auth + general rate limits + support action/appeal limits |
 | `hpp` | ^0.2.3 | HTTP parameter-pollution defense |
-| `express-validator` | ^7.2.1 | ⚠️ Installed but unused (Zod handles validation) |
-| `express-mongo-sanitize` | ^2.2.0 | ⚠️ Installed but unused (incompatible w/ Express 5 `req.query`; sanitization done in `validate.js`) |
 | `dotenv` | ^17.2.2 | Env config |
-| `mongoose-unique-validator` | ^5.0.1 | Friendlier unique-index errors (User.email) |
+| `mongoose-unique-validator` | ^5.0.1 | Friendlier unique-index errors (User.email, InboxNotification dedupe) |
+
+**Removed (cleanup done):** `bcryptjs`, `pdfmake`, `express-validator`, `express-mongo-sanitize`.
+
+### Dev dependencies
+
+| Package | Version | Purpose |
+|---|---|---|
+| `mongodb-memory-server` | ^11.4.0 | In-memory MongoDB for integration tests |
+| `supertest` | ^7.3.2 | HTTP assertion for integration tests |
 
 ---
 
@@ -340,30 +435,27 @@ Schema groups:
 ## 13. REMAINING PLAN / NEXT STEPS
 
 ### Privacy & Admin Control Plane (implemented)
-1. ✅ **Hidden admin panel** — `/api/admin` (traffic overview/daily buckets, audit-feed, global user & group directories with search + cursor pagination, suspend/verify, group archive). Guard = `ADMIN_EMAILS` allowlist + optional `X-Admin-Key`; denials are audit-logged and answered with the generic global **404** so the surface is invisible to users.
+1. ✅ **Hidden admin panel** — `/api/admin` + `/api/admin/support` (traffic overview/daily buckets, audit-feed, global user & group directories with search + cursor pagination, suspend/verify, group archive, support work queue). Guard = `ADMIN_EMAILS` allowlist + `requireAdminAMR` (2FA mandatory, `amr: otp`); denials are audit-logged and answered with the generic global **404** so the surface is invisible to users.
 2. ✅ **User suspension** — `User.suspended` enforced at login, refresh, and on every authenticated request (`auth` middleware).
 3. ✅ **Group privacy** — non-members get a generic 404 on group detail and the co-member directory; no endpoint lists groups globally for users; profile data across members is allowlisted (username/profilePic only via the directory; whatsapp only among co-members).
-4. ✅ **Invite codes & shareable links** — `GET /api/messgroups/code/:groupId` returns `{ code, inviteLink: "{FRONTEND_URL}/join?code=MM-XXXXXX" }` ready to copy/share; joining happens only through the code.
+4. ✅ **Invite codes & shareable links** — Hashed `InviteCode` model (sha256 + pepper, 7-day TTL, max-uses). `GET /api/invite/codes/:groupId` returns metadata only (prefix/expiry/usesLeft — no plaintext). Plaintext shown once at creation via `POST /api/invite/codes`. Joining happens only through the code (`POST /api/invite/join-by-code`).
 5. ✅ **Kick / leave with history cutoff** — `removeMember` closes the V2 Membership interval instantly, audit-logs `membership.self_left|kicked`, preserves balances; `resolveHistoryWindow` clamps meal/expense history reads to the ex-member's interval (future info invisible).
+6. ✅ **Cookie-only access token** — `mm_at` HttpOnly cookie (Path=/) read by `auth` middleware; query-string Socket.IO tokens rejected; CSRF double-submit (`mm_csrf` + `x-csrf-token`).
+7. ✅ **MongoDB session store** — `config/mongoSessionStore.js` replaces MemoryStore (multi-instance safe, TTL index).
+8. ✅ **Deprecation headers** — `middleware/deprecate.js` on legacy routes (`/api/messgroups/entries`, `/api/messgroups/calculate`).
+9. ✅ **CSP + Referrer-Policy + Permissions-Policy + HSTS** — configured in `index.js` via helmet.
+10. ✅ **Consent timestamps** — `termsAcceptedAt`, `privacyAcceptedAt`, `supportContextConsentAt`, `emailNotificationsConsentAt` on `User`.
+11. ✅ **Cache-Control: no-store** on authenticated JSON responses.
 
-### Follow-ups
-6. Migrate remaining legacy readers (`getEntries`, `calculate`, stats, summary) onto `resolveHistoryWindow` clamping.
-7. Client admin shell (separate lazy-loaded admin app section reading `/api/admin/*`), plus `.env` docs for `ADMIN_EMAILS` / `ADMIN_PANEL_KEY`.
-8. Legacy cleanup (Priority 4): remove `bcryptjs`, `pdfmake`, `express-validator`, `express-mongo-sanitize`; `Deprecation` headers on legacy routes; Redis/Mongo OAuth session store.
-9. Meal migration: rewrite legacy 2-slot float Meal rows into slot-state form in `migrateLegacyData.js`.
-10. Cloud receipt storage (S3/R2 signed URLs + AV-scan hook).
-11. Production Mongo replica set to activate real `withTransaction()` atomicity.
-12. Live-infrastructure test gates: §17.8 race drill, §17.13 restore drill, §17.14 load test.
+### Follow-ups (remaining)
+12. Client admin shell (separate lazy-loaded admin app section reading `/api/admin/*`), plus `.env` docs for `ADMIN_EMAILS` / `ADMIN_PANEL_KEY`.
+13. Cloud receipt storage (S3/R2 signed URLs + AV-scan hook — `Attachment.scanStatus` field already modeled).
+14. Production Mongo replica set to activate real `withTransaction()` atomicity (standalone fallback works for dev).
+15. Live-infrastructure test gates: race drill, restore drill, load test.
+16. Invite-link TTL enforcement via `migrateInviteCodes.js` + `INVITE_DEFAULT_TTL_DAYS` env var.
+17. Redis-backed join-code limiter (currently in-memory Map — single instance only).
 
-> **Superseded by Part B (§14–§21 below):** the security ideas are now specified in §18, and new modules (Routine/Board, Support Desk, Inbox, cron hardening, cookie-only SSR frontend) are planned in §14–§19 with a phased delivery plan in §21.
-
-### Security hardening ideas (recommended)
-- **Invite-link TTL & one-time tokens** — hash codes at rest, 7-day expiry, max-use counters, rotate on suspicion; strict per-IP limiter on `join-by-code` to defeat brute-force.
-- **2FA** — mandatory for platform admins; offered for owner/treasurer roles.
-- **Anomaly detection** — alert on refresh-token reuse (family revocation already exists), impossible-travel IPs, bursty device enrollment.
-- **Data minimization** — strip email/phone from every group populate; log reads of sensitive fields.
-- **Retention policy** — archive (never hard-delete) groups; statements already immutable.
-- **CSP + Referrer-Policy** headers; backup/restore drill runbook (pairs with Gate §17.13); consent timestamps for all processing.
+> **Part B status:** All of Part B (§14–§21) is implemented in code. The phased delivery plan below reflects what has been delivered; remaining items are production-hardening and frontend migration.
 
 
 ---
@@ -649,19 +741,26 @@ The existing hard rules (CSS variables only, react-icons only, zustand, shared c
 
 | Phase | Scope | Depends on | Exit criteria |
 |---|---|---|---|
-| **B0 — Foundations** | `InboxNotification` + `/api/inbox` + socket `user:<id>` room; `JobLock`/`JobRun`; scheduler audit fixes (§17.1); `notificationPrefs`; `Counter` | — | Cron safe for 2 instances; inbox feed works end-to-end |
-| **B1 — Support Desk** | Models, user + admin APIs, comment-lock rules, SLA/auto-close jobs, admin alerts, action tokens, appeal route | B0 | Rule-matrix tests green (every status × actor), admin gets in-app + email on new ticket |
-| **B2 — Routine & Board** | Roster/Assignment/Swap/Menu/Note models, generation service, reminders, `board/today`, handover tasks | B0 | Generation idempotent; departed-member reassignment test; handover banner works |
-| **B3 — Security hardening** | InviteCode hashing + join limiter, TOTP 2FA (admin mandatory), SecurityEvent sweep, CSP/Referrer headers, retention job, runbook | B0 | Pen-test checklist; admin routes 404 without 2FA |
-| **B4 — Cookie-only auth backend** | §19.1 changes | B3 | Web client works with zero tokens in JS-readable storage |
-| **B5 — Frontend (Next.js BFF)** | Foundation rewrite, then Support, Board/Routine, Inbox UI | B1, B2, B4 | Frontend TODO phases P0′, P9–P11 |
-| **B6 — Extras** | §20 items 1–6 first | B2 | — |
+| **B0 — Foundations** ✅ DONE | `InboxNotification` + `/api/inbox` + socket `user:<id>` room; `JobLock`/`JobRun`; scheduler audit fixes; `notificationPrefs`; `Counter` | — | 111 unit tests pass; inbox feed works end-to-end |
+| **B1 — Support Desk** ✅ DONE | Models, user + admin APIs, comment-lock rules, SLA/auto-close jobs, admin alerts, action tokens, appeal route | B0 | Rule-matrix tests green (`supportRules.test.js`); admin gets in-app + email on new ticket |
+| **B2 — Routine & Board** ✅ DONE | Roster/Assignment/Swap/Menu/Note models, generation service, reminders, `board/today`, handover tasks, shopping list, kitchen inventory, polls | B0 | Generation idempotent (`rosterGeneration.test.js`); departed-member reassignment (`departedReassignment.test.js`); handover tasks (`noteVisibility.test.js`) |
+| **B3 — Security hardening** ✅ DONE | InviteCode hashing + join limiter, TOTP 2FA (admin mandatory via `amrGate`), SecurityEvent sweep, CSP/Referrer/Permissions/HSTS headers, retention job, `checkIndexes.js` | B0 | `inviteCode.test.js`, `totp.test.js`, `anomalySweep.test.js`, `privacyPayload.test.js` all pass |
+| **B4 — Cookie-only auth backend** ✅ DONE | `mm_at` HttpOnly access cookie + `mm_csrf` double-submit; Socket.IO cookie auth (query-string rejected); `setAccessTokenCookie`/`setRefreshTokenCookieWide`; `X-Client: web` cookie-only responses | B3 | `cookies.test.js` integration tests pass |
+| **B5 — Frontend (Next.js BFF)** ⬜ PENDING | Foundation rewrite, then Support, Board/Routine, Inbox UI | B1, B2, B4 | Frontend TODO phases P0′, P9–P11 |
+| **B6 — Extras** ⬜ PENDING | Cook headcount, shared shopping list (done via shoppingList), fairness board (done via `dutyFairnessBoard`), inventory tracker (done via `kitchenInventory`), polls (done via `pollController`), weekly digest (done via `schedulerService.weeklyDigestFn`) | B2 | — |
 
-### 21.1 Tests to add (same `node --test` harness)
+### 21.1 Tests (same `node --test` harness — 19 suites / 111 passing)
 
 - `supportRules.test.js` — full status × actor × action matrix incl. closed, strict-turn on/off, reopen-window.
 - `rosterGeneration.test.js` — round-robin continuity, skip-absent, departed member, DST-free Dhaka day edges, idempotent regeneration.
 - `noteVisibility.test.js` — audience filtering, ex-member clamp, no HTML, task claim race (two claimers → one wins).
 - `inviteCode.test.js` — expiry, max-uses race, revoked, hashed at rest.
-- `schedulerLock.test.js` — two concurrent runners → one executes.
+- `jobLockRules.test.js` — lock decision rules for cron runner.
 - `privacyPayload.test.js` — group payloads never contain `email`/`phone`.
+- `totp.test.js` — TOTP generation/verification, recovery codes, encrypt/decrypt round-trip.
+- `anomalySweep.test.js` — security anomaly detection sweep.
+- `departedReassignment.test.js` — duty reassignment on member departure.
+- `legacyMealMigration.test.js` — legacy 2-slot float meal migration to 4-slot state form.
+- `retention.test.js` — ticket anonymisation and audit retention cutoffs.
+- `inboxRules.test.js` — inbox dedupe and expiry helpers.
+- Integration tests (`tests/integration/`, needs live server): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`.

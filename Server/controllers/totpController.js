@@ -17,7 +17,7 @@ import { z } from 'zod';
 const CHALLENGE_TTL = 5 * 60 * 1000;
 const challenges = new Map();
 
-const makeChallenge = (userId) => {
+export const makeChallenge = (userId) => {
     const id = require('crypto').randomBytes(16).toString('hex');
     challenges.set(id, { userId, expiresAt: Date.now() + CHALLENGE_TTL, used: false });
     return id;

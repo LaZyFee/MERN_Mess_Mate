@@ -29,6 +29,12 @@ export const csrfProtection = (req, res, next) => {
     }
 
     // --- Cookie-authenticated path: require double-submit ---
+    // Requests carrying no auth cookies at all (login / register / refresh by
+    // body token) cannot ride someone else's cookies — skip the check.
+    const hasAuthCookies = !!getCookie(req, 'mm_at') || !!getCookie(req, 'refreshToken');
+    if (!hasAuthCookies) {
+        return next();
+    }
     const csrfCookie = getCookie(req, CSRF_COOKIE);
     const csrfHeader = req.headers['x-csrf-token'];
 
