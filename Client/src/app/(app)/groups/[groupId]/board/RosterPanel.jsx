@@ -55,10 +55,6 @@ export default function RosterPanel({ groupId, memberships = [], initialRosters 
     }
   }, [groupId, showToast]);
 
-  useEffect(() => {
-    return undefined;
-  }, []);
-
   const move = (index, delta) => {
     setEditing((prev) => {
       const next = [...prev.order];

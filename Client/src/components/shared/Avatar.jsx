@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getAvatarUrl } from "@/utils/profileUtils";
+import { getAvatarUrl } from "@/lib/utils/profileUtils";
 
 /**
  * Avatar component for user profile images

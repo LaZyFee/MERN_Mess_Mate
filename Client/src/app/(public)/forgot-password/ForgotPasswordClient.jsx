@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { LuUtensils } from "react-icons/lu";
-import Input from "@/components/shared/Input";
-import Button from "@/components/shared/Button";
+import Link from "next/link";
+import AuthShell from "@/components/auth/AuthShell";
 import Alert from "@/components/shared/Alert";
+import Button from "@/components/shared/Button";
+import Input from "@/components/shared/Input";
 import { authApi } from "@/lib/api/auth";
-import styles from "../auth.module.css";
 
 export default function ForgotPasswordClient() {
   const [email, setEmail] = useState("");
@@ -18,10 +18,10 @@ export default function ForgotPasswordClient() {
     if (!email.trim()) return;
     setLoading(true);
     try {
-      // Server always returns 200 regardless of whether the email exists (privacy)
+      // The server always answers 200 so this form can't be used to probe accounts.
       await authApi.forgotPassword(email.trim());
     } catch {
-      // intentionally swallowed — neutral UX
+      // swallowed on purpose — neutral response
     } finally {
       setLoading(false);
       setSent(true);
@@ -29,45 +29,36 @@ export default function ForgotPasswordClient() {
   }
 
   return (
-    <main className={styles.authWrap}>
-      <div className={styles.authCard}>
-        <div className={styles.authLogo}>
-          <LuUtensils size={28} className="text-(--p)" />
-          <span>MealMate</span>
-        </div>
-        <h1 className={styles.authTitle}>Reset your password</h1>
-        <p className={styles.authSub}>Enter your email and we&apos;ll send a reset link.</p>
-
-        {sent ? (
-          <Alert status="success">
-            If that email is registered, a reset link has been sent. Check your inbox.
-          </Alert>
-        ) : (
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="flex flex-col gap-4">
-              <Input
-                label="Email"
-                type="email"
-                size="lg"
-                isRequired
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                inputMode="email"
-              />
-              <Button type="submit" size="lg" isFullWidth isLoading={loading} isDisabled={loading || !email.trim()}>
-                Send reset link
-              </Button>
-            </div>
-          </form>
-        )}
-
-        <p className={styles.authFooter}>
-          <a href="/login" className="font-semibold text-(--p)">
-            Back to sign in
-          </a>
-        </p>
-      </div>
-    </main>
+    <AuthShell
+      title="Reset your password"
+      subtitle="Enter your email and we'll send you a link to choose a new one."
+      footer={
+        <Link href="/login" className="font-semibold text-(--p) no-underline hover:underline">
+          Back to sign in
+        </Link>
+      }
+    >
+      {sent ? (
+        <Alert status="success" title="Check your inbox">
+          If that email is registered, a reset link is on its way. It can take a few minutes.
+        </Alert>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+          <Input
+            size="lg"
+            label="Email"
+            type="email"
+            isRequired
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            inputMode="email"
+          />
+          <Button type="submit" size="lg" isFullWidth isLoading={loading} isDisabled={loading || !email.trim()}>
+            Send reset link
+          </Button>
+        </form>
+      )}
+    </AuthShell>
   );
 }

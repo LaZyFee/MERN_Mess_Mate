@@ -8,25 +8,12 @@ import React, {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import flags from "react-phone-number-input/flags";
 import { LuChevronDown } from "react-icons/lu";
 
 function CountryFlag({ country, label }) {
   const iso = country ? String(country).toUpperCase() : "";
-  const Flag = iso ? flags[iso] : null;
-  if (!Flag) {
-    return (
-      <span className="phone-country-empty-flag" aria-hidden="true">
-        --
-      </span>
-    );
-  }
-
-  return (
-    <span className="phone-country-flag shrink-0" aria-hidden="true">
-      <Flag title={label || iso} />
-    </span>
-  );
+  if (!iso) return <span className="phone-country-empty-flag" aria-hidden="true">--</span>;
+  return <span className="phone-country-flag shrink-0" aria-label={label || iso}>{iso}</span>;
 }
 
 const Select = forwardRef(

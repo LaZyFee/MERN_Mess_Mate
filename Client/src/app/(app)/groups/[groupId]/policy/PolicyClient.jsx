@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { LuSave, LuHistory } from "react-icons/lu";
-import { useGroup } from "../layout";
+import { useGroup } from "../GroupShell";
 import { groupsApi } from "@/lib/api/groups";
 import Input from "@/components/shared/Input";
 import Button from "@/components/shared/Button";

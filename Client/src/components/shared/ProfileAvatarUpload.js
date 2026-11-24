@@ -4,7 +4,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { FiCamera, FiUploadCloud, FiTrash2 } from "react-icons/fi";
 import Avatar from "@/components/shared/Avatar";
 import Button from "@/components/shared/Button";
-import { getAvatarUrl } from "@/utils/profileUtils";
+import { getAvatarUrl } from "@/lib/utils/profileUtils";
 
 /**
  * Shared ProfileAvatarUpload component

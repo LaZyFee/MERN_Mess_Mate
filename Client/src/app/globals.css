@@ -1,8 +1,5 @@
 @import "tailwindcss";
 
-/* Theme shim: the codebase styles with [data-theme="dark"] + var(--*) tokens. */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
 /* ============================================================
    Design tokens — light theme
    ============================================================ */
@@ -66,6 +63,16 @@
   --space-6: 24px;
   --space-8: 32px;
   --transition: 180ms var(--ease);
+  --space-5: 20px;
+  --r-sm: 8px;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.06);
+  /* Brand panel (stays dark in BOTH themes) */
+  --brand-bg: #03180d;
+  --brand-fg: #f1f6e8;
+  --brand-mute: #8fae98;
+  --brand-on: #9fd32a;
+
+
 }
 
 /* ============================================================
@@ -106,6 +113,10 @@
   --warning-bg: #78350f;
   --info: #38bdf8;
   --info-bg: #0c4a6e;
+  --brand-bg: #020f08;
+  --brand-fg: #f1f6e8;
+  --brand-mute: #86a592;
+  --brand-on: #9fd32a;
 }
 
 html,
@@ -127,6 +138,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -158,6 +170,7 @@ body {
     opacity: 0;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -169,9 +182,11 @@ body {
   width: 7px;
   height: 7px;
 }
+
 *::-webkit-scrollbar-track {
   background: var(--bgm);
 }
+
 *::-webkit-scrollbar-thumb {
   background: var(--bd3);
   border-radius: 999px;

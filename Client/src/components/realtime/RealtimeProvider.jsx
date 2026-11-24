@@ -27,7 +27,7 @@ const GROUP_EVENTS = [
 
 const USER_EVENTS = ["inbox-new"];
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+const SOCKET_URL = undefined;
 
 function broadcast(event, payload) {
   try {

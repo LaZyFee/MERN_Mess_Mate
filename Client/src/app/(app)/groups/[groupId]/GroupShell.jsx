@@ -12,10 +12,9 @@ import {
   LuReceipt,
   LuBanknote,
   LuFileText,
-  LuBarChart2,
   LuCalendarCheck,
   LuUsers,
-  LuMoreHorizontal,
+  LuMenu,
   LuArrowLeft,
 } from "react-icons/lu";
 import { useGroupStore } from "@/lib/store/groupStore";
@@ -33,9 +32,9 @@ const TABS = [
   { key: "money", label: "Money", icon: LuBanknote, path: "/money" },
   { key: "statements", label: "Statements", icon: LuFileText, path: "/statements" },
   { key: "board", label: "Board", icon: LuCalendarCheck, path: "/board" },
-  { key: "charts", label: "Charts", icon: LuBarChart2, path: "/charts" },
+  { key: "charts", label: "Charts", icon: LuLayoutDashboard, path: "/charts" },
   { key: "members", label: "Members", icon: LuUsers, path: "/members" },
-  { key: "more", label: "More", icon: LuMoreHorizontal, path: "/more" },
+  { key: "more", label: "More", icon: LuMenu, path: "/more" },
 ];
 
 export default function GroupShell({ initialGroup, groupId, children }) {

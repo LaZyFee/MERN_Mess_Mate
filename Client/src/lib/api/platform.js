@@ -1,5 +1,4 @@
 "use client";
-/* global process */
 
 import apiClient from "@/lib/api/browserApi";
 

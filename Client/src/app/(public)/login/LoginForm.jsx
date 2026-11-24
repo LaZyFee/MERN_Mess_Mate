@@ -8,7 +8,7 @@ import { useToast } from "@/components/shared/ToastProvider";
 import { useAuthStore } from "@/lib/store/authStore";
 import { authApi } from "@/lib/api/auth";
 
-// ── 2FA step ────────────────────────────────────────────────────────────────
+// 2FA step 
 function TwoFAStep({ challengeToken, onBack }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,7 +62,7 @@ function TwoFAStep({ challengeToken, onBack }) {
   );
 }
 
-// ── Main login form ──────────────────────────────────────────────────────────
+// Main login form
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();

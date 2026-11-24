@@ -39,7 +39,6 @@ export default function BoardClient({
   memberships = [],
   categories = [],
   initialBoard,
-  initialDuties = [],
   initialMenus = [],
   initialNotes = [],
   initialShopping = null,

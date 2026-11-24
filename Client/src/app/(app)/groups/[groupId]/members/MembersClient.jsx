@@ -7,7 +7,7 @@ import {
   LuUserMinus,
   LuUser,
 } from "react-icons/lu";
-import { useGroup } from "../layout";
+import { useGroup } from "../GroupShell";
 import { groupsApi } from "@/lib/api/groups";
 import Avatar from "@/components/shared/Avatar";
 import Badge from "@/components/shared/Badge";

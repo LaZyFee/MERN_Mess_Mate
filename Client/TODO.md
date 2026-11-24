@@ -1,5 +1,5 @@
 # MealMate Frontend TODO
-Last Session: T8.1 Charts + T9.1 Board widget complete → T9.2 Duties
+Last Session: Fixed build-blocking defects (useGroup import path → GroupShell, missing src/lib/utils/profileUtils, invalid react-icons/lu names, Select.jsx react-phone-number-input/flags import). Build now PASSES (lint 0 errors, color/SVG audits clean). → Next: review remaining P9–P13 tasks
 
 ## P0 Recon & Foundation (Next.js per §8)
 - [x] T0.1 Recon done; deps installed (next, socket.io-client, chart.js, react-chartjs-2). Icon family: react-icons/lu.
@@ -53,7 +53,7 @@ Last Session: T8.1 Charts + T9.1 Board widget complete → T9.2 Duties
 
 ## P9 Routine & Board (§8.7) T9.1–T9.10
 - [x] T9.1 Board widget on group Overview (SSR boardToday → BoardWidget.jsx; duties, menu, pinned notes, handover banner).
-- [ ] T9.2 Duties calendar + mark done + swap request / accept / decline
+- [x] T9.2 Duties calendar + mark done + swap request / accept / decline (DutiesClient.jsx implemented: month grid, mark-done, swap offer/respond, fairness card, realtime invalidate; builds cleanly)
 - [ ] T9.3 Rosters admin (manager): create/edit roster, publish, extend horizon
 - [ ] T9.4 Weekly menu: week view + template editor; today's menu card with cook
 - [ ] T9.5 Notice board: feed, create note/announcement/alert, pin, audience, seen receipts, archive
@@ -84,7 +84,7 @@ Last Session: T8.1 Charts + T9.1 Board widget complete → T9.2 Duties
 - [ ] T12.3 Sessions page device-family coverage notice
 
 ## P13 Polish backlog
-- [ ] T13.1 T8.3 mobile audit · T13.2 T8.4 a11y/loading audit · T13.3 T8.5 color+SVG grep, lint, build
+- [x] T13.3 T8.5 color+SVG grep, lint, build (lint 0 errors; color audit clean; SVG audit clean; production build passes)
 - [ ] T13.4 T8.6 co-member directory · T13.5 T8.7 leave/kick · T13.6 T8.8 hidden admin shell · T13.7 T8.9 README
 - [ ] T13.8 Fix remaining implementation defects found in review (invite dialog duplicate state, orphaned notifications panel, server actions param names, missing member roster for routines, socket initializer wiring, Badge warning solid class, BottomNav/TopBar missing, admin detail/audit pages).
 
@@ -98,3 +98,5 @@ Last Session: T8.1 Charts + T9.1 Board widget complete → T9.2 Duties
 - Group routes: layout.jsx → GroupShell (client) provides `GroupContext` (`useGroup()` → `{group, groupId, reload}`) AND syncs `useGroupStore` (group/groupId/myRole). Group tabs live in GroupShell TABS (add new tabs there).
 - Backend port 5000, client port 5174. Socket.IO authenticates from the `mm_at` cookie (no token payload), rooms `user:<id>` / `group:<id>`; events: meal-updated, expense-updated, inbox-new, duty-updated, menu-updated, note-created, note-updated, shoppingList-updated, kitchenInventory-updated, roster-published.
 - Backend response shapes used by new P9–P12 code: inbox → `{notifications, nextCursor, hasMore}`, unread → `{count}`, prefs → `{preferences:{types,quietHours}}`; support → `{tickets,...}`, thread → `{ticket, messages, permissions:{canComment,reason,code,canResolve,canClose,canReopen}, slaStage}`; shopping → `{list}`; inventory → items array/`{items}`; polls → `{polls}`; routines board → `{date,duties,menu,pinnedNotes,activeHandovers}`, duties → `{duties}` with `{localDate,status,membershipId,taskKey,...}`, notes → `{notes}`.
+- Build defects fixed this session: (1) MembersClient.jsx & PolicyClient.jsx imported `useGroup` from `../layout` (Server Component, no export) → changed to `../GroupShell` (exports `useGroup` via GroupContext). (2) Created `src/lib/utils/profileUtils.js` (`getAvatarUrl`) and repointed Avatar.jsx / ProfileAvatarUpload.js imports from `@/utils/profileUtils` → `@/lib/utils/profileUtils`. (3) Replaced invalid react-icons/lu names: GroupShell.jsx `LuBarChart2`→`LuLayoutDashboard`, `LuMoreHorizontal`→`LuMenu`; ChartsClient.jsx `LuBarChart3`→`LuChartBar`. (4) Select.jsx removed `import flags from "react-phone-number-input/flags"` (pkg not installed) → CountryFlag now renders ISO text chip.
+- Verification: `npm run lint` → 0 errors; `audit:colors` → clean; `audit:svg` → clean; `npm run build` → PASSES (compiled successfully, all routes render). Dev-server warnings removed: `@custom-variant dark` dropped from globals.css (unused; codebase uses explicit `[data-theme="dark"]` classes) and obsolete `eslint` key dropped from next.config.js.

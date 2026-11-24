@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LuBarChart3, LuRefreshCw } from "react-icons/lu";
+import { LuChartBar, LuRefreshCw } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Select from "@/components/shared/Select";
@@ -129,7 +129,7 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
 
       <Card padding="md" className="min-w-0">
         <h2 className="mb-2 flex items-center gap-2 text-sm font-bold text-(--tp)">
-          <LuBarChart3 size={16} className="text-(--p)" /> Meals over time
+          <LuChartBar size={16} className="text-(--p)" /> Meals over time
         </h2>
         {mealSeries.length === 0 ? (
           <p className="py-6 text-center text-xs text-(--tm)">No meal data for this range.</p>

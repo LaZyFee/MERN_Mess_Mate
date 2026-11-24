@@ -8,7 +8,7 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 
 **Priorities, in order:** (1) follow the rules below, (2) **mobile responsiveness — top priority for every screen and component**, (3) token efficiency, (4) working code, (5) modern UI polish.
 
-**Fixed stack decisions:** Next.js App Router + React · **zustand** for state · **react-icons** for all icons (no SVG) · Chart.js (canvas) for charts · CSS variables from `app/globals.css` for all colors. New backend modules covered: Invite Codes, TOTP 2FA, In-App Inbox, Support Desk, Routine & Board, Shopping List, Kitchen Inventory, Polls, cookie-only auth (`mm_at`/`mm_csrf` cookies).
+**Fixed stack decisions:** Next.js App Router + React · Zustand (chosen shared store, used selectively) · react-icons (one family: `react-icons/lu`) · Chart.js + react-chartjs-2 (canvas) · CSS variables from `app/globals.css` for all colors. New backend modules covered: Invite Codes, TOTP 2FA, In-App Inbox, Support Desk, Routine & Board, Shopping List, Kitchen Inventory, Polls, cookie-only auth (`mm_at`/`mm_csrf` cookies).
 
 ---
 
@@ -56,14 +56,16 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 - Favicon: use `public/favicon.ico` or `public/favicon.png`; remove any `vite.svg` / `react.svg` references.
 - Verify at the end of every phase: `grep -rniE "<svg|\.svg" Client/src Client/app Client/public` → must return nothing.
 
-### 1.5 State management — zustand only
+### 1.5 State Management — React-first; Zustand is the chosen shared store
 
-- Hydrate the in-memory Zustand authStore with user and roles. Clear user and group data on sign-out or group change.
-- **No React Context for app state, no Redux.** Local, component-only state stays in `useState`.
-- Always use selectors (`useStore(s => s.x)`; `useShallow` for multiple fields) to prevent re-renders. Don't store derived data — compute it via selectors/memo.
-- Non-React code (axios interceptors, socket client) reads state with `useAuthStore.getState()`.
-- Create one tiny reusable helper for the `{data, loading, error}` fetch pattern instead of repeating it in every store.
-- Socket events (`meal-updated`, `expense-updated`) call the matching store's `invalidate/fetch`.
+- Default to Server Components and server-owned data, props, `useState`, and `useReducer`.
+- Use React Context for genuinely shared UI state within a client-component subtree (e.g. a group shell). Do not prohibit Context categorically.
+- **Zustand is the chosen shared store** (already in dependencies). Use it only for cross-route or widely shared client state that props/Context cannot reasonably provide. Do not install it merely to hold API responses.
+- Never duplicate server-owned data across React state, Context, Zustand and a query cache without a documented synchronization reason.
+- Keep authentication tokens out of all client state and persistence. Client auth state, if needed, may contain only safe display data (`user`, `roles`), hydrated from server-rendered props.
+- Keep temporary UI state local. Derive values instead of storing redundant derived state.
+- If Zustand is used, keep stores small and domain-specific, use selectors (`useStore(s => s.x)`; `useShallow` for multiple fields), avoid persistence for sensitive data, and clear user/group-scoped state on logout or group change.
+- Socket events should refresh or invalidate only the relevant active data source. Do not assume every domain needs a Zustand store.
 
 ### 1.6 Mobile-first — TOP PRIORITY
 
@@ -233,7 +235,7 @@ src/features/     Interactive domain components and hooks
 
 - Uses existing components (listed in `COMPONENTS.md`) — no duplicates.
 - Zero literal colors (variables only) and zero SVG (react-icons only).
-- Shared state in zustand stores (selectors used), no React Context for app state.
+- State uses the simplest appropriate mechanism; Zustand store has a documented purpose and does not duplicate server-owned data.
 - **Mobile verified at 360px first** (no horizontal scroll, 44px targets), then tablet/desktop; light + dark both fine.
 - Follows the modern design language from §1.7 using shared components; statuses always icon + color.
 - Money rendered via `formatPoisha`; integers sent to the server.
@@ -357,9 +359,9 @@ Extend P0 once with T0.11 edge routing and headers, T0.12 shared role guards, T0
 
 
 
-### 8.9 SSR/CSR/Actions — MANDATORY 3-LAYER SPLIT (overrides any implied CSR-only approach)
+### 8.9 Feature architecture — flexible Server/Client boundaries
 
-Every feature MUST be split into exactly three layers. **This is not optional and overrides any earlier section that implies putting fetch logic in client components.**
+There is **no mandatory three-file or three-layer structure** for every feature. Choose only the Next.js boundaries the feature actually needs. Keep Server Components as the default and put `"use client"` at the lowest practical component boundary.
 
 #### Layer 1 — Server Action file: `src/lib/actions/<domain>.js`
 - Keep SSR query helpers server-only in the action layer. A function invoked exclusively by a Server Component needs no "use server" directive. Any action exported to a client needs that directive and must validate its session and input.
@@ -481,3 +483,65 @@ Use existing routes and components before adding screens. Group pages share the 
 Use Skeleton, Select, DateTimePicker, ConfirmationModal and the existing table/form controls where their documented props fit. Each task covers SSR first paint, a successful empty result, validation errors, denied access, pending mutation and authoritative success. Verify keyboard navigation and a narrow viewport. Test unrelated-member access and group switching. Run lint and production build at phase boundaries.
 
 The refreshToken cookie is scoped to /api. Page middleware cannot infer logout from its absence on a page request. Route an expired session through a same-origin handler under /api that can relay each rotated cookie. Use a request-scoped client for SSR. Keep refresh coordination isolated per user. Server Components read cookies. Route Handlers and Server Actions can write them. Pass only safe initial props to the browser. Cookie-authenticated state changes require CSRF even through the BFF. Preserve Origin on forwarded requests and validate same-origin requests before any server-side CSRF header injection.
+
+---
+
+## 9. MODERN UI DESIGN SYSTEM (concrete specs for a polished UI)
+
+### 9.1 Design tokens (`app/globals.css`)
+
+All colors, radii, shadows, spacing and transitions come from CSS variables in `app/globals.css`, defined for both `:root` (light) and `[data-theme="dark"]`. Existing tokens (do not duplicate; add missing ones in pairs):
+
+| Category | Variables |
+|---|---|
+| Backgrounds | `--background`, `--bg`, `--bgs` (surface), `--bgm` (muted), `--bgl` (lighter border) |
+| Foregrounds | `--tp` (primary text), `--ts` (secondary text), `--tm` (tertiary/muted), `--tl` (light text) |
+| Borders | `--bd`, `--bd2`, `--bd3` |
+| Brand | `--p`, `--p2`, `--p3`, `--p4`, `--p5`, `--pale`, `--pale2`, `--gold` |
+| Shadows | `--shadow-md`, `--shadow-lg`, `--shadow-xl` |
+| Radii | `--r-md`, `--r-lg`, `--r-xl`, `--r-2xl`, `--r-pill` |
+| Spacing | `--space-1` (4px), `--space-2` (8px), `--space-3` (12px), `--space-4` (16px), `--space-6`, `--space-8` |
+| Motion | `--transition` (180ms var(--ease)), `--ease`, `--expo` |
+| Status | `--success`/`--success-bg`, `--danger`/`--danger-bg`, `--warning`/`--warning-bg`, `--info`/`--info-bg` |
+| Charts | `--chart-1`…`--chart-5` |
+
+Never add literal colors. If a needed token is missing, add it to `globals.css` for both themes.
+
+### 9.2 Component visual specs (use shared components; extend via props)
+
+- **Button:** variants `primary` (brand fill), `ghost`, `outline`, `danger`; sizes `xs/sm/md/lg/xl`; `isRound` for icon-only (≥ 44×44px); `isLoading` spinner. 44px min touch target. Press feedback `active:scale-[0.98]`, hover lift `hover:-translate-y-[1px]`, `:focus-visible` ring `ring-(--p)/50`.
+- **Card:** variants `elevated` (soft shadow), `outlined` (subtle border), `filled` (muted bg), `unstyled`; radius `--r-lg`; padding `sm/md/lg`; `isHoverable` lift on desktop only.
+- **Badge / StatusBadge:** pill (`--r-pill`) for filters; `StatusBadge` with **icon + color** per status family (`expense`, `money`, `period`, `statement_item`, `outbox`, `ticket`). Never color alone.
+- **Input / Select / Textarea:** ≥ 16px font, `--r-lg` radius, variable-based border/focus ring, clear invalid state with `--danger`.
+- **Modal:** bottom sheet on mobile (`max-h-[90dvh]`, rounded top `--r-xl`/`--r-2xl`, internal scroll), centered dialog from `md` up. Extend `Modal.jsx`.
+- **Table:** stacked cards below `md`; `overflow-x-auto` + sticky first column on desktop via `Table.jsx`.
+- **Skeleton / Loading:** shimmer animation, respect `prefers-reduced-motion`.
+- **Avatar:** initials fallback, variable-based bg hash, `--r-pill` or `--r-lg`.
+- **Toast:** `ToastProvider`/`Toast` for all notifications; success/error/warning/loading variants with icons.
+
+### 9.3 Interaction & motion
+
+- 150–200ms transitions on hover/focus/press using `--transition`.
+- Subtle press feedback (`active:scale-[0.98]`).
+- `:focus-visible` rings via variable (`2px solid var(--p)`).
+- Skeleton shimmer on load; light route fade (`.page-enter` 220ms).
+- Respect `prefers-reduced-motion` (zero out animation/transition durations).
+
+### 9.4 Mobile specifics
+
+- Design at 360px first; verify 320/360/390/768/1024/1280.
+- Bottom nav (Home · Meals · Expenses · Summary · More) + sticky bottom action bar or FAB for primary actions.
+- Horizontally scrollable group tabs.
+- Bottom sheets for modals; stacked tables below `md`.
+- `dvh`, `env(safe-area-inset-*)`, viewport meta, `overflow-x: hidden` on `html,body`.
+- No hover-only interactions; tooltips work on tap.
+
+### 9.5 Dark mode
+
+- First-class. Toggle via `ThemeToggle` + `mm_theme` cookie. All colors, shadows, borders use variables that have both light and dark values. Verify every screen in both themes.
+
+### 9.6 Money as hero
+
+- Prominent "Total due" / balance card on Summary and Home (meal cost + other costs breakdown).
+- `formatPoisha` for all ৳ display (2 decimals, `tabular-nums`). Send integer poisha to server.
+- Negative balances shown with `--danger`; positive/receives with `--success`.
