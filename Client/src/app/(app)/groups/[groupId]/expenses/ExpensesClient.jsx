@@ -3,17 +3,24 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   LuFilter,
+  LuPlus,
   LuReceipt,
   LuRefreshCw,
+  LuX,
 } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
-import { StatusBadge } from "@/components/shared/StatusBadge";
-import Toast from "@/components/shared/Toast";
+import Skeleton from "@/components/shared/Skeleton";
+import Tabs, { TabList, Tab, TabPanels, TabPanel } from "@/components/shared/Tabs";
+import { useToast } from "@/components/shared/ToastProvider";
+import { useGroupStore } from "@/lib/store/groupStore";
+import { useAuthStore } from "@/lib/store/authStore";
 import { expensesApi } from "@/lib/api/expenses";
-import { formatPoisha, formatMonth } from "@/lib/utils/format";
+import ExpenseCard from "./ExpenseCard";
+import ExpenseDraftForm from "./ExpenseDraftForm";
+import LegacyExpensePanel from "./LegacyExpensePanel";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -29,23 +36,27 @@ const PAYABLE_OPTIONS = [
   { value: "true", label: "Payable only" },
 ];
 
-function civilDate(value) {
-  if (!value) return "";
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-    return value.slice(0, 10);
-  }
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Dhaka",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
+const TREASURER_ROLES = ["owner", "manager", "treasurer"];
 
 export default function ExpensesClient({
   groupId,
+  initialGroup,
   initialExpensePage,
+  initialCategories = [],
+  initialMemberships = [],
 }) {
+  const { showToast } = useToast();
+  const storeRole = useGroupStore((s) => s.myRole);
+  const userId = useAuthStore((s) => s.user?._id);
+  const group = initialGroup;
+  const myMembership = useMemo(
+    () => (group?.memberships || []).find((m) => String(m.userId?._id || m.userId) === String(userId)),
+    [group, userId],
+  );
+  const role = storeRole || group?.myRole || myMembership?.role || "member";
+  const canTreasurer = TREASURER_ROLES.includes(role);
+
+  const [tab, setTab] = useState("list");
   const [expenses, setExpenses] = useState(initialExpensePage?.expenses ?? []);
   const [nextCursor, setNextCursor] = useState(initialExpensePage?.nextCursor || null);
   const [hasMore, setHasMore] = useState(Boolean(initialExpensePage?.hasMore));
@@ -54,166 +65,196 @@ export default function ExpensesClient({
   const [payable, setPayable] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [toast, setToast] = useState(null);
 
   const filters = useMemo(
-    () => ({
-      status,
-      costPeriod,
-      payable: payable === "true" ? true : "",
-      limit: 30,
-    }),
+    () => ({ status, costPeriod, payable: payable === "true" ? true : "", limit: 30 }),
     [status, costPeriod, payable],
   );
+  const filtersActive = Boolean(status || costPeriod || payable);
 
-  const load = useCallback(async (reset = true) => {
-    setLoading(reset);
-    setLoadingMore(!reset);
-    try {
-      const data = await expensesApi.list(
-        groupId,
-        reset ? filters : { ...filters, cursor: nextCursor },
-      );
-      const pageExpenses = Array.isArray(data?.expenses) ? data.expenses : [];
-      setExpenses((current) => reset ? pageExpenses : [...current, ...pageExpenses]);
-      setNextCursor(data?.nextCursor || null);
-      setHasMore(Boolean(data?.hasMore));
-    } catch (error) {
-      setToast({
-        type: "error",
-        message: error?.message || "Could not load expenses",
-      });
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [filters, groupId, nextCursor]);
+  const load = useCallback(
+    async (reset = true) => {
+      setLoading(reset);
+      setLoadingMore(!reset);
+      try {
+        const data = await expensesApi.list(
+          groupId,
+          reset ? filters : { ...filters, cursor: nextCursor },
+        );
+        const page = Array.isArray(data?.expenses) ? data.expenses : [];
+        setExpenses((current) => (reset ? page : [...current, ...page]));
+        setNextCursor(data?.nextCursor || null);
+        setHasMore(Boolean(data?.hasMore));
+      } catch (error) {
+        showToast({
+          status: "error",
+          title: "Could not load expenses",
+          description: error?.data?.msg || error?.message,
+        });
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [groupId, filters, nextCursor, showToast],
+  );
 
-  const applyFilters = () => load(true);
+  const resetFilters = () => {
+    setStatus("");
+    setCostPeriod("");
+    setPayable("");
+    setNextCursor(null);
+  };
+
+  const afterCreate = () => {
+    setTab("list");
+    load(true);
+  };
 
   return (
     <div className="min-w-0 space-y-4">
-      {toast && (
-        <Toast
-          type={toast.type}
-          message={toast.message}
-          onClose={() => setToast(null)}
-        />
-      )}
+      <Tabs value={tab} onChange={setTab} variant="solid-rounded" size="lg" isFitted>
+        <TabList className="overflow-x-auto">
+          <Tab value="list">All expenses</Tab>
+          <Tab value="new">New draft</Tab>
+          {canTreasurer && <Tab value="advanced">Advanced</Tab>}
+        </TabList>
 
-      <Card
-        header={
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <LuReceipt size={20} className="text-(--p)" />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-(--tm)">Workflow</p>
-                <h1 className="text-lg font-bold text-(--tp)">Expenses</h1>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="lg"
-              isRound
-              ariaLabel="Refresh expenses"
-              isLoading={loading}
-              onClick={() => load(true)}
-            >
-              <LuRefreshCw size={18} />
-            </Button>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Select
-            label="Status"
-            size="lg"
-            value={status}
-            options={STATUS_OPTIONS}
-            onChange={(event) => setStatus(event.target.value)}
-          />
-          <Input
-            label="Cost period"
-            size="lg"
-            type="month"
-            value={costPeriod}
-            onChange={(event) => setCostPeriod(event.target.value)}
-          />
-          <Select
-            label="Payment"
-            size="lg"
-            value={payable}
-            options={PAYABLE_OPTIONS}
-            onChange={(event) => setPayable(event.target.value)}
-          />
-        </div>
-        <div className="mt-3">
-          <Button
-            variant="secondary"
-            size="lg"
-            isFullWidth
-            leftIcon={<LuFilter size={16} />}
-            onClick={applyFilters}
-          >
-            Apply filters
-          </Button>
-        </div>
-      </Card>
+        <TabPanels className="mt-4">
+          <TabPanel value="list">
+            <div className="min-w-0 space-y-3">
+              <Card padding="sm" variant="outlined">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Select
+                    size="lg"
+                    label="Status"
+                    options={STATUS_OPTIONS}
+                    value={status}
+                    onChange={(event) => setStatus(event.target.value)}
+                  />
+                  <Input
+                    size="lg"
+                    type="month"
+                    label="Cost period"
+                    value={costPeriod}
+                    onChange={(event) => setCostPeriod(event.target.value)}
+                  />
+                  <Select
+                    size="lg"
+                    label="Payment"
+                    options={PAYABLE_OPTIONS}
+                    value={payable}
+                    onChange={(event) => setPayable(event.target.value)}
+                  />
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    isFullWidth
+                    leftIcon={<LuFilter size={15} />}
+                    isLoading={loading}
+                    onClick={() => load(true)}
+                  >
+                    Apply filters
+                  </Button>
+                  {filtersActive && (
+                    <Button
+                      variant="ghost"
+                      size="lg"
+                      leftIcon={<LuX size={15} />}
+                      onClick={() => {
+                        resetFilters();
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </Card>
 
-      {loading && expenses.length === 0 ? (
-        <Card variant="outlined">
-          <p className="text-sm text-(--tm)">Loading expenses…</p>
-        </Card>
-      ) : expenses.length === 0 ? (
-        <Card variant="outlined">
-          <div className="flex flex-col items-center py-8 text-center">
-            <LuReceipt size={28} className="mb-3 text-(--tm)" />
-            <p className="font-semibold text-(--tp)">No expenses found</p>
-            <p className="mt-1 text-sm text-(--tm)">Try changing the filters.</p>
-          </div>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {expenses.map((expense) => (
-            <Card key={expense._id} variant="outlined" padding="sm">
-              <div className="flex min-w-0 items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge type="expense" status={expense.status} />
-                    {expense.isPayable && (
-                      <span className="rounded-full bg-(--warning-bg) px-2 py-1 text-[10px] font-bold text-(--warning)">
-                        Payable
-                      </span>
+              {loading && expenses.length === 0 ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((key) => (
+                    <Skeleton key={key} variant="rect" height={84} />
+                  ))}
+                </div>
+              ) : expenses.length === 0 ? (
+                <Card variant="outlined">
+                  <div className="flex flex-col items-center py-8 text-center">
+                    <LuReceipt size={28} className="mb-3 text-(--tm)" />
+                    <p className="font-semibold text-(--tp)">No expenses found</p>
+                    <p className="mt-1 text-sm text-(--tm)">
+                      {filtersActive ? "Try changing the filters." : "Create the first draft to get started."}
+                    </p>
+                    {!filtersActive && (
+                      <Button size="md" className="mt-4" leftIcon={<LuPlus size={15} />} onClick={() => setTab("new")}>
+                        New draft
+                      </Button>
                     )}
                   </div>
-                  <h2 className="mt-2 truncate font-bold text-(--tp)">
-                    {expense.description || expense.supplierName || "Expense"}
-                  </h2>
-                  <p className="mt-1 text-xs text-(--tm)">
-                    {civilDate(expense.date)}
-                    {expense.costPeriod ? ` · ${formatMonth(expense.costPeriod)}` : ""}
-                  </p>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {expenses.map((expense) => (
+                    <ExpenseCard
+                      key={expense._id}
+                      groupId={groupId}
+                      expense={expense}
+                      canTreasurer={canTreasurer}
+                      onChanged={() => load(true)}
+                    />
+                  ))}
                 </div>
-                <p className="shrink-0 text-right text-base font-bold tabular-nums text-(--tp)">
-                  {formatPoisha(expense.amount)}
-                </p>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+              )}
 
-      {hasMore && (
-        <Button
-          variant="outline"
-          size="lg"
-          isFullWidth
-          isLoading={loadingMore}
-          onClick={() => load(false)}
-        >
-          Load more
-        </Button>
-      )}
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<LuRefreshCw size={14} />}
+                  isLoading={loading}
+                  onClick={() => load(true)}
+                >
+                  Refresh
+                </Button>
+                {hasMore && (
+                  <Button
+                    variant="outline"
+                    size="md"
+                    isLoading={loadingMore}
+                    onClick={() => load(false)}
+                  >
+                    Load more
+                  </Button>
+                )}
+              </div>
+            </div>
+          </TabPanel>
+
+          <TabPanel value="new">
+            <Card padding="md">
+              <h2 className="mb-3 text-base font-bold text-(--tp)">Expense draft</h2>
+              <ExpenseDraftForm
+                groupId={groupId}
+                categories={initialCategories}
+                memberships={initialMemberships}
+                onCreated={afterCreate}
+              />
+            </Card>
+          </TabPanel>
+
+          {canTreasurer && (
+            <TabPanel value="advanced">
+              <LegacyExpensePanel
+                groupId={groupId}
+                categories={initialCategories}
+                onChanged={() => load(true)}
+              />
+            </TabPanel>
+          )}
+        </TabPanels>
+      </Tabs>
     </div>
   );
 }

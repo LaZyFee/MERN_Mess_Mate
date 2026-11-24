@@ -911,7 +911,7 @@ export const DataTable = forwardRef(function DataTable(
      if (!isNaN(d.getTime())) {
       return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
      }
-    } catch { }
+    } catch { /* ignore */ }
    }
    return trimmed.replace(/\s+/g, " ");
   }
@@ -978,7 +978,7 @@ export const DataTable = forwardRef(function DataTable(
    if (typeof col.exportValue === "function") {
     try {
      raw = col.exportValue(row);
-    } catch { }
+    } catch { /* ignore */ }
    } else if (typeof col.exportValue === "string") {
     raw = getNestedValue(row, col.exportValue);
    }
@@ -989,7 +989,7 @@ export const DataTable = forwardRef(function DataTable(
    if (typeof col.printable === "function") {
     try {
      raw = col.printable(row);
-    } catch { }
+    } catch { /* ignore */ }
    } else if (typeof col.printable === "string") {
     raw = getNestedValue(row, col.printable);
    }
@@ -1000,7 +1000,7 @@ export const DataTable = forwardRef(function DataTable(
    if (typeof col.accessor === "function") {
     try {
      raw = col.accessor(row);
-    } catch { }
+    } catch { /* ignore */ }
    } else if (typeof col.accessor === "string") {
     raw = getNestedValue(row, col.accessor);
    }
@@ -1033,7 +1033,7 @@ export const DataTable = forwardRef(function DataTable(
     ) {
      raw = rendered;
     }
-   } catch { }
+   } catch { /* ignore */ }
   }
 
   // 5. Fallback to col.id property access

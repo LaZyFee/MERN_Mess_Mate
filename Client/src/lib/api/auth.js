@@ -17,6 +17,11 @@ export const authApi = {
   getProfile: () => apiClient.get("/users/profile"),
   updateProfile: (body) => apiClient.put("/users/profile", body),
   getSessions: () => apiClient.get("/sessions/users/sessions"),
+  uploadProfilePic: (file) => {
+    const form = new FormData();
+    form.append("image", file);
+    return apiClient.request("/users/profile-pic", { method: "POST", body: form, isFormData: true });
+  },
   revokeSession: (familyId) => apiClient.delete(`/sessions/users/sessions/${familyId}`),
   revokeAllSessions: () => apiClient.delete("/sessions/users/sessions"),
 };

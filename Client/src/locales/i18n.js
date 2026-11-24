@@ -2,12 +2,12 @@ import en from './en.json';
 import bn from './bn.json';
 
 const locales = { en, bn };
-let current = null || 'en';
+let current = 'en';
 
 export const setLocale = (lang) => {
   if (locales[lang]) {
     current = lang;
-    /* locale persistence disabled — §8.2 */;
+    /* locale persistence disabled ï¿½ ï¿½8.2 */;
   }
 };
 

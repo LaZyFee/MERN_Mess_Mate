@@ -41,21 +41,21 @@ function MemberRow({ m, canEdit, onEdit, onDepart }) {
   const isPlaceholder = m.isPlaceholder;
   return (
     <div
-      className={["[display:flex]", "[align-items:center]", "[gap:var(--space-3)]", "[padding:var(--space-3)_var(--space-4)]", "[background:var(--bgs)]", "[border:1px_solid_var(--bd)]", "[border-radius:var(--r-md)]"].filter(Boolean).join(" ")}
+      className="flex items-center gap-3 [padding:var(--space-3)_var(--space-4)] [background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-md)]"
     >
       <Avatar name={name} size="md" />
-      <div className={["flex-1", "[min-width:0px]"].filter(Boolean).join(" ")}>
-        <div className={["[display:flex]", "[align-items:center]", "[gap:var(--space-2)]", "[flex-wrap:wrap]"].filter(Boolean).join(" ")}>
-          <span className={["font-semibold", "[color:var(--tp)]", "[font-size:0.9rem]"].filter(Boolean).join(" ")}>{name}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold [color:var(--tp)] [font-size:0.9rem]">{name}</span>
           {isPlaceholder && <Badge colorScheme="default" size="sm" isRounded>Placeholder</Badge>}
         </div>
-        <div className={["[display:flex]", "[align-items:center]", "[gap:var(--space-2)]", "[margin-top:2px]", "[flex-wrap:wrap]"].filter(Boolean).join(" ")}>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <Badge colorScheme={ROLE_COLOR[m.role] || "default"} size="sm" isRounded>{m.role}</Badge>
-          {m.room && <span className={["[font-size:0.75rem]", "[color:var(--tl)]"].filter(Boolean).join(" ")}>Room {m.room}</span>}
+          {m.room && <span className="text-xs [color:var(--tl)]">Room {m.room}</span>}
         </div>
       </div>
       {canEdit && (
-        <div className={["[display:flex]", "[gap:var(--space-2)]"].filter(Boolean).join(" ")}>
+        <div className="flex gap-2">
           <Button size="sm" variant="ghost" ariaLabel="Edit membership" onClick={() => onEdit(m)}>
             <LuPencil size={15} />
           </Button>
@@ -161,8 +161,8 @@ export default function MembersClient({ initialMembers = [] }) {
 
   return (
     <div>
-      <div className={["[display:flex]", "[justify-content:space-between]", "[align-items:center]", "[margin-bottom:var(--space-4)]"].filter(Boolean).join(" ")}>
-        <h2 className={["[font-size:1rem]", "font-bold", "[color:var(--tp)]"].filter(Boolean).join(" ")}>Members</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-base font-bold [color:var(--tp)]">Members</h2>
         {canEdit && (
           <Button size="sm" leftIcon={<LuUserPlus size={15} />} onClick={() => setAddOpen(true)}>
             Add Member
@@ -171,16 +171,16 @@ export default function MembersClient({ initialMembers = [] }) {
       </div>
 
       {loading ? (
-        <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+        <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} variant="rect" height={72} />)}
         </div>
       ) : members.length === 0 ? (
-        <div className={["[text-align:center]", "[padding:var(--space-8)]", "[color:var(--tm)]"].filter(Boolean).join(" ")}>
-          <LuUser size={40} className={["[color:var(--tl)]", "[margin-bottom:var(--space-3)]"].filter(Boolean).join(" ")} />
+        <div className="text-center p-8 [color:var(--tm)]">
+          <LuUser size={40} className="[color:var(--tl)] mb-3" />
           <p>No members yet.</p>
         </div>
       ) : (
-        <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+        <div className="flex flex-col gap-3">
           {members.map((m) => (
             <MemberRow
               key={m._id}
@@ -199,13 +199,13 @@ export default function MembersClient({ initialMembers = [] }) {
         onClose={() => setEditing(null)}
         header="Edit Membership"
         footer={
-          <div className={["[display:flex]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+          <div className="flex gap-3">
             <Button variant="outline" onClick={() => setEditing(null)} isDisabled={saving}>Cancel</Button>
             <Button onClick={saveEdit} isLoading={saving} isDisabled={saving}>Save</Button>
           </div>
         }
       >
-        <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}>
+        <div className="flex flex-col gap-4">
           <Select
             label="Role"
             value={editRole}
@@ -223,13 +223,13 @@ export default function MembersClient({ initialMembers = [] }) {
         onClose={() => setAddOpen(false)}
         header="Add Member / Placeholder"
         footer={
-          <div className={["[display:flex]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+          <div className="flex gap-3">
             <Button variant="outline" onClick={() => setAddOpen(false)} isDisabled={saving}>Cancel</Button>
             <Button onClick={addMember} isLoading={saving} isDisabled={saving || !newName.trim()}>Add</Button>
           </div>
         }
       >
-        <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}>
+        <div className="flex flex-col gap-4">
           <Input label="Display Name" isRequired value={newName} onChange={(e) => setNewName(e.target.value)} />
           <Select label="Role" value={newRole} onChange={(e) => setNewRole(e.target.value)} options={ROLE_OPTIONS} />
         </div>

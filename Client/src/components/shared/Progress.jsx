@@ -42,16 +42,6 @@ const Progress = ({
       default: return "bg-(--p)";
     }
   };
-  const getTextColorClass = () => {
-    switch (colorScheme) {
-      case "primary": return "text-(--p)";
-      case "secondary": return "text-(--p2)";
-      case "danger": return "text-(--danger)";
-      case "success": return "text-(--success)";
-      case "warning": return "text-(--warning)";
-      default: return "text-(--p)";
-    }
-  };
   const deg = Math.round((percent / 100) * 360);
   const getCircleTextColor = () => {
     switch (colorScheme) {

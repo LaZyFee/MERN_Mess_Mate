@@ -1,5 +1,5 @@
 # MealMate Frontend TODO
-Last Session: T0.15 complete inline-style migration done → T4.2 (expense draft builder)
+Last Session: T4+T5+T6+T7 (+T8.2 profile) complete → T8.1 Charts tab
 
 ## P0 Recon & Foundation (Next.js per §8)
 - [x] T0.1 Recon done; deps installed (next, socket.io-client, chart.js, react-chartjs-2). Icon family: react-icons/lu.
@@ -31,6 +31,24 @@ Last Session: T0.15 complete inline-style migration done → T4.2 (expense draft
 - [x] T3.4 Absence and bulk entry: preview/apply workflows for absence windows and bulk JSON entries.
 - [x] T3.5 Edit/delete rules: own entry delete, cutoff-hour lock warning and disabled mutations.
 - [x] T4.1 Expenses tab: cursor list, status/costPeriod/payable filters, and load more.
+- [x] T4.2 Expense draft builder: multi-line lines[] (category, ৳→poisha, per-line split mode + beneficiaries/fixed/weights/usage), payer, supplier, receiptReference, isPayable; duplicate warnings in amber Alert. Files: ExpenseDraftForm.jsx, ExpenseLineEditor.jsx, expenseHelpers.js, lib/utils/money.js (SPLIT_MODES).
+- [x] T4.3 Workflow actions: submit/approve/reject/reverse with reason modal (ExpenseActions.jsx), role-gated (owner/manager/treasurer).
+- [x] T4.4 Receipt upload + authenticated download links (ReceiptsPanel.jsx, attachmentsApi in lib/api/expenses.js, ≤10MB jpeg/png/webp/pdf).
+- [x] T4.5 Legacy simple CRUD behind "Advanced" tab (LegacyExpensePanel.jsx, treasurer+).
+- [x] T5.1 Money tab: cursor list + status/kind filters (MoneyClient.jsx, TransactionCard.jsx).
+- [x] T5.2 Submit transaction form with per-kind from/to member & fund pickers, method, TrxID, evidence (TransactionForm.jsx).
+- [x] T5.3 Confirm/reject/reverse with reason modal, treasurer-gated (TransactionCard.jsx).
+- [x] T5.4 Funds panel: ledger balances, masked ids, custody history, create fund, owner handover (FundsPanel.jsx + fundKinds.js).
+- [x] T5.5 My balance card from /money/.../balance with owes/receives status (MyBalanceCard.jsx).
+- [x] T6.1 Statements tab: list + detail totals + per-member items (desktop table / mobile stacked cards) — StatementList.jsx, StatementDetail.jsx.
+- [x] T6.2 Version history chips (superseded vs current) in StatementDetail.
+- [x] T6.3 Close workflow: month picker, checklist, preview (no persist), begin-review / return-to-open, finalize modal w/ expectedRevision, 409 refresh-and-retry toast, 422 unresolved chips — ClosePanel.jsx.
+- [x] T6.4 Corrections path: finalized months show "corrections create a new version"; refinalize with reason allowed (server versions N+1).
+- [x] T7.1 Notifications outbox panel (state filter, resend, manual wa.me links) — more/NotificationsPanel.jsx.
+- [x] T7.2 WhatsApp consent toggle on /profile (ProfileClient.jsx + notificationsApi.setWhatsappConsent).
+- [x] T7.3 Disputes panel: open/respond/resolve|reject with note — more/DisputesPanel.jsx.
+- [x] T7.4 Reconciliation panel: equation health, record count, variance colors, resolve select — more/ReconciliationPanel.jsx.
+- [x] T8.2 Profile page (/profile): edit username/phone/whatsapp, avatar upload, change password (partial — 2FA/inbox prefs pending).
 
 ## P9 Routine & Board (§8.7) T9.1–T9.10
 ## P10 Support T10.1–T10.7

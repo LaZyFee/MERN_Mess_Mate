@@ -55,7 +55,7 @@ function ResetForm({ token }) {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}>
+      <div className="flex flex-col gap-4">
         <Input
           label="New Password"
           type="password"
@@ -90,14 +90,14 @@ export default function ResetPasswordClient({ token = "" }) {
     <main className={styles.authWrap}>
       <div className={styles.authCard}>
         <div className={styles.authLogo}>
-          <LuUtensils size={28} className={["[color:var(--p)]"].filter(Boolean).join(" ")} />
+          <LuUtensils size={28} className="[color:var(--p)]" />
           <span>MealMate</span>
         </div>
         <h1 className={styles.authTitle}>Set new password</h1>
         <p className={styles.authSub}>Choose a strong password for your account.</p>
         <ResetForm token={token} />
         <p className={styles.authFooter}>
-          <a href="/login" className={["[color:var(--p)]", "font-semibold"].filter(Boolean).join(" ")}>← Back to sign in</a>
+          <a href="/login" className="[color:var(--p)] font-semibold">← Back to sign in</a>
         </p>
       </div>
     </main>

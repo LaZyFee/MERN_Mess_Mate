@@ -67,16 +67,16 @@ export default function PolicyClient({ initialPolicies = [] }) {
   }
 
   if (!isOwner) {
-    return <p className={["[color:var(--tm)]", "[padding:var(--space-4)]"].filter(Boolean).join(" ")}>Only the group owner can manage policies.</p>;
+    return <p className="[color:var(--tm)] p-4">Only the group owner can manage policies.</p>;
   }
 
   return (
-    <div className={["[max-width:560px]"].filter(Boolean).join(" ")}>
-      <h2 className={["[font-size:1rem]", "font-bold", "[color:var(--tp)]", "[margin-bottom:var(--space-5)]"].filter(Boolean).join(" ")}>Policy Editor</h2>
+    <div className="[max-width:560px]">
+      <h2 className="text-base font-bold [color:var(--tp)] mb-5">Policy Editor</h2>
 
       {loading ? <Skeleton variant="rect" height={180} /> : (
         <form onSubmit={handleSave} noValidate>
-          <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}>
+          <div className="flex flex-col gap-4">
             <Input
               label="Effective From (YYYY-MM)"
               isRequired
@@ -112,14 +112,14 @@ export default function PolicyClient({ initialPolicies = [] }) {
 
       {/* Version history */}
       {policies.length > 1 && (
-        <div className={["[margin-top:var(--space-6)]"].filter(Boolean).join(" ")}>
-          <div className={["[display:flex]", "[align-items:center]", "[gap:var(--space-2)]", "[margin-bottom:var(--space-3)]"].filter(Boolean).join(" ")}>
-            <LuHistory size={15} className={["[color:var(--tm)]"].filter(Boolean).join(" ")} />
-            <span className={["[font-size:0.875rem]", "font-semibold", "[color:var(--tp)]"].filter(Boolean).join(" ")}>Version History</span>
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <LuHistory size={15} className="[color:var(--tm)]" />
+            <span className="text-sm font-semibold [color:var(--tp)]">Version History</span>
           </div>
-          <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-2)]"].filter(Boolean).join(" ")}>
+          <div className="flex flex-col gap-2">
             {policies.slice(1).map((p, i) => (
-              <div key={i} className={["[padding:var(--space-3)]", "[background:var(--bgm)]", "[border-radius:var(--r-md)]", "[font-size:0.8125rem]", "[color:var(--tm)]"].filter(Boolean).join(" ")}>
+              <div key={i} className="p-3 [background:var(--bgm)] [border-radius:var(--r-md)] [font-size:0.8125rem] [color:var(--tm)]">
                 {p.effectiveFrom} — Cutoff {p.entryCutoffHour}h, Grace {p.reviewGraceDays}d
               </div>
             ))}

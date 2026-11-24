@@ -99,7 +99,7 @@ const Avatar = ({
     />
    ) : (
     <div
-     className={[avatarClasses, "[background-color:var(--avatar-bg)]"].filter(Boolean).join(" ")}
+     className={`${avatarClasses} [background-color:var(--avatar-bg)]`}
      style={{ "--avatar-bg": bgColor || getBackgroundColor() }}
      {...props}
     >

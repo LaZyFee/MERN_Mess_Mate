@@ -72,21 +72,21 @@ export default function GroupShell({ initialGroup, groupId, children }) {
 
   return (
     <GroupContext.Provider value={{ group, groupId, reload }}>
-      <div className={["[min-height:100dvh]", "[background:var(--bg)]"].filter(Boolean).join(" ")}>
+      <div className="[min-height:100dvh] [background:var(--bg)]">
         {/* Sticky header */}
         <div
-          className={["[background:var(--bgs)]", "[border-bottom:1px_solid_var(--bd)]", "[padding:var(--space-3)_var(--space-4)]", "[display:flex]", "[align-items:center]", "[gap:var(--space-3)]", "[position:sticky]", "[top:0px]", "z-30"].filter(Boolean).join(" ")}
+          className="[background:var(--bgs)] [border-bottom:1px_solid_var(--bd)] [padding:var(--space-3)_var(--space-4)] flex items-center gap-3 [position:sticky] top-0 z-30"
         >
           <button
             onClick={() => router.push("/")}
-            className={["[background:none]", "[border:none]", "[cursor:pointer]", "[color:var(--tm)]", "[display:flex]", "[align-items:center]", "[padding:0px]", "[min-height:44px]", "[min-width:44px]", "[justify-content:center]"].filter(Boolean).join(" ")}
+            className="bg-none border-0 cursor-pointer [color:var(--tm)] flex items-center p-0 [min-height:44px] [min-width:44px] justify-center"
             aria-label="Back to home"
           >
             <LuArrowLeft size={20} />
           </button>
-          <div className={["flex-1", "[min-width:0px]"].filter(Boolean).join(" ")}>
+          <div className="flex-1 min-w-0">
             <h1
-              className={["font-extrabold", "[font-size:1.0625rem]", "[color:var(--tp)]", "[white-space:nowrap]", "[overflow:hidden]", "[text-overflow:ellipsis]"].filter(Boolean).join(" ")}
+              className="font-extrabold [font-size:1.0625rem] [color:var(--tp)] whitespace-nowrap [overflow:hidden] [text-overflow:ellipsis]"
             >
               {group?.name || "Group"}
             </h1>
@@ -95,7 +95,7 @@ export default function GroupShell({ initialGroup, groupId, children }) {
 
         {/* Tab nav — horizontally scrollable, no horizontal page scroll */}
         <div
-          className={["[background:var(--bgs)]", "[border-bottom:1px_solid_var(--bd)]", "[overflow-x:auto]", "[display:flex]", "[-webkit-overflow-scrolling:touch]", "[scrollbar-width:none]"].filter(Boolean).join(" ")}
+          className="[background:var(--bgs)] [border-bottom:1px_solid_var(--bd)] [overflow-x:auto] flex [-webkit-overflow-scrolling:touch] [scrollbar-width:none]"
         >
           {TABS.map(({ key, label, icon: Icon, path }) => {
             const href = base + path;
@@ -104,17 +104,17 @@ export default function GroupShell({ initialGroup, groupId, children }) {
               <a
                 key={key}
                 href={href}
-                className={["[display:flex]", "[flex-direction:column]", "[align-items:center]", "[gap:2px]", "[padding:var(--space-3)]", "[white-space:nowrap]", "[font-size:0.75rem]", (isActive) ? "font-bold" : "font-medium", (isActive) ? "[color:var(--p)]" : "[color:var(--tm)]", (isActive) ? "[border-bottom:2px_solid_var(--p)]" : "[border-bottom:2px_solid_transparent]", "[text-decoration:none]", "[transition:var(--transition)]", "[min-width:60px]", "[min-height:48px]", "[justify-content:center]"].filter(Boolean).join(" ")}
+                className={`flex flex-col items-center gap-0.5 p-3 whitespace-nowrap text-xs ${isActive ? "font-bold" : "font-medium"} ${isActive ? "[color:var(--p)]" : "[color:var(--tm)]"} ${isActive ? "[border-bottom:2px_solid_var(--p)]" : "[border-bottom:2px_solid_transparent]"} [text-decoration:none] [transition:var(--transition)] [min-width:60px] [min-height:48px] justify-center`}
               >
                 <Icon size={18} />
-                <span className={["flex-1"].filter(Boolean).join(" ")}>{label}</span>
+                <span className="flex-1">{label}</span>
               </a>
             );
           })}
         </div>
 
         {/* Page content */}
-        <div className={["[padding:var(--space-4)]", "[max-width:1100px]", "[margin:0_auto]"].filter(Boolean).join(" ")}>
+        <div className="p-4 [max-width:1100px] mx-auto">
           {children}
         </div>
       </div>

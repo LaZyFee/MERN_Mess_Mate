@@ -125,10 +125,7 @@ const Tooltip = ({
     <div
      ref={tooltipRef}
      
-     className={[`
-      absolute z-50 bg-(--bgs) text-(--ts) px-3 py-1.5 rounded-lg text-sm shadow-lg border border-(--bd)
-      ${className}
-     `, "[top:var(--inline-top)]", "[left:var(--inline-left)]"].filter(Boolean).join(" ")} style={{ "--inline-top": `${position.top}px`, "--inline-left": `${position.left}px` }}
+     className={`absolute z-50 bg-(--bgs) text-(--ts) px-3 py-1.5 rounded-lg text-sm shadow-lg border border-(--bd) ${className} [top:var(--inline-top)] [left:var(--inline-left)]`} style={{ "--inline-top": `${position.top}px`, "--inline-left": `${position.left}px` }}
      {...props}
     >
      {content}

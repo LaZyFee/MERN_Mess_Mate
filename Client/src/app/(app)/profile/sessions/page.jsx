@@ -13,8 +13,8 @@ export default async function SessionsPage() {
     throw error;
   }
   return (
-    <main className={["[max-width:640px]", "[margin:0_auto]", "[padding:var(--space-6)_var(--space-4)]"].filter(Boolean).join(" ")}>
-      <h1 className={["[font-size:1.25rem]", "font-extrabold", "[color:var(--tp)]", "[margin-bottom:var(--space-6)]"].filter(Boolean).join(" ")}>
+    <main className="[max-width:640px] mx-auto [padding:var(--space-6)_var(--space-4)]">
+      <h1 className="text-xl font-extrabold [color:var(--tp)] mb-6">
         Device Sessions
       </h1>
       <SessionsPanel initialSessions={initialSessions} />

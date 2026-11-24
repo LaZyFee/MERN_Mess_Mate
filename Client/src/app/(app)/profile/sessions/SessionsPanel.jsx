@@ -75,9 +75,9 @@ export default function SessionsPanel({ initialSessions = [] }) {
 
   return (
     <div>
-      <div className={["[display:flex]", "[justify-content:space-between]", "[align-items:center]", "[margin-bottom:var(--space-4)]"].filter(Boolean).join(" ")}>
-        <h2 className={["[font-size:1rem]", "font-bold", "[color:var(--tp)]"].filter(Boolean).join(" ")}>Active Sessions</h2>
-        <div className={["[display:flex]", "[gap:var(--space-2)]"].filter(Boolean).join(" ")}>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-base font-bold [color:var(--tp)]">Active Sessions</h2>
+        <div className="flex gap-2">
           <Button variant="ghost" size="sm" leftIcon={<LuRefreshCw size={15} />} onClick={load} isDisabled={loading}>
             Refresh
           </Button>
@@ -90,31 +90,31 @@ export default function SessionsPanel({ initialSessions = [] }) {
       </div>
 
       {loading ? (
-        <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+        <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} variant="rect" height={72} />)}
         </div>
       ) : sessions.length === 0 ? (
-        <p className={["[color:var(--tm)]", "[font-size:0.875rem]", "[text-align:center]", "[padding:var(--space-8)]"].filter(Boolean).join(" ")}>
+        <p className="[color:var(--tm)] text-sm text-center p-8">
           No active sessions found.
         </p>
       ) : (
-        <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+        <div className="flex flex-col gap-3">
           {sessions.map((s) => (
             <div
               key={s.familyId || s._id}
-              className={["[display:flex]", "[align-items:center]", "[gap:var(--space-3)]", "[padding:var(--space-4)]", "[background:var(--bgs)]", "[border:1px_solid_var(--bd)]", "[border-radius:var(--r-md)]"].filter(Boolean).join(" ")}
+              className="flex items-center gap-3 p-4 [background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-md)]"
             >
-              <span className={["[color:var(--tm)]", "shrink-0"].filter(Boolean).join(" ")}>{deviceIcon(s.userAgent)}</span>
-              <div className={["flex-1", "[min-width:0px]"].filter(Boolean).join(" ")}>
-                <div className={["[display:flex]", "[align-items:center]", "[gap:var(--space-2)]", "[flex-wrap:wrap]"].filter(Boolean).join(" ")}>
-                  <span className={["[font-size:0.875rem]", "font-semibold", "[color:var(--tp)]", "[white-space:nowrap]"].filter(Boolean).join(" ")}>
+              <span className="[color:var(--tm)] shrink-0">{deviceIcon(s.userAgent)}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold [color:var(--tp)] whitespace-nowrap">
                     {s.deviceName || s.userAgent?.slice(0, 40) || "Unknown device"}
                   </span>
                   {s.isCurrent && (
                     <Badge colorScheme="success" size="sm" isRounded>This device</Badge>
                   )}
                 </div>
-                <div className={["[font-size:0.75rem]", "[color:var(--tl)]", "[margin-top:2px]"].filter(Boolean).join(" ")}>
+                <div className="text-xs [color:var(--tl)] mt-0.5">
                   Last seen: {relativeTime(s.lastUsedAt || s.createdAt)} · {s.ipAddress || "IP unknown"}
                 </div>
               </div>

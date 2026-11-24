@@ -236,7 +236,7 @@ const TextEditor = forwardRef(
     >
      <div
       ref={editorRef}
-      className={["[height:var(--inline-height)]"].filter(Boolean).join(" ")} style={{ "--inline-height": maxHeights[size] }}
+      className="[height:var(--inline-height)]" style={{ "--inline-height": maxHeights[size] }}
       id={editorId}
      />
     </div>

@@ -143,14 +143,7 @@ export const TabList = ({ children, className = "", ...props }) => {
    {showIndicator && indicator && (
     <span
      aria-hidden="true"
-     className={[
-      "absolute rounded-full bg-(--p) pointer-events-none",
-      ready ? "transition-[transform,width,height] duration-300 ease-out" : "",
-      isHoriz
-       ? "[bottom:var(--ind-bottom)] [left:var(--ind-left)] [width:var(--ind-width)] [height:2px]"
-       : "[right:var(--ind-right)] [top:var(--ind-top)] [width:2px] [height:var(--ind-height)]",
-      "[transform:var(--ind-transform)]",
-     ].filter(Boolean).join(" ")}
+     className={`absolute rounded-full bg-(--p) pointer-events-none ${ready ? "transition-[transform,width,height] duration-300 ease-out" : ""} ${isHoriz ? "[bottom:var(--ind-bottom)] [left:var(--ind-left)] [width:var(--ind-width)] [height:2px]" : "[right:var(--ind-right)] [top:var(--ind-top)] [width:2px] [height:var(--ind-height)]"} [transform:var(--ind-transform)]`}
      style={{
       "--ind-bottom": isHoriz ? "-1px" : undefined,
       "--ind-left": isHoriz ? "0px" : undefined,

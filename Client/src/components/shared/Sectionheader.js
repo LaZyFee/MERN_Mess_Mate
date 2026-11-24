@@ -1,18 +1,9 @@
-' "use client";
+"use client";
 import Link from "next/link";
+import { LuArrowRight } from "react-icons/lu";
 import { sanitizeHtml } from "@/utils/sanitize";
-
 /**
- * SectionHeader
- *
- * @prop {string}  rotatedLabel  — vertical side label     default: ""
- * @prop {string}  eyebrow    — small line above headline  default: ""
- * @prop {string[]} headingLines  — array of 1–4 lines; middle line(s) get the gradient
- * @prop {string}  ctaLabel    — button text         default: ""
- * @prop {string}  ctaHref    — button link         default: ""
- * @prop {string}  description  — supporting copy below header default: ""
- * @prop {string}  accentFrom   — gradient start color     default: "var(--p)"
- * @prop {string}  accentTo    — gradient end color      default: "var(--p2)"
+ * SectionHeader — marketing header block (props: rotatedLabel, eyebrow, headingLines[], ctaLabel, ctaHref, description).
  */
 export default function SectionHeader({
  rotatedLabel = "",
@@ -21,8 +12,6 @@ export default function SectionHeader({
  ctaLabel = "",
  ctaHref = "",
  description = "",
- accentFrom = "var(--p)",
- accentTo = "var(--p2)",
 }) {
  const isAccent = (i) => i > 0 && i < headingLines.length - 1;
 
@@ -82,7 +71,7 @@ export default function SectionHeader({
        >
         <span>{ctaLabel}</span>
         <span className="text-lg text-(--p) group-hover:text-(--bg) transition-colors duration-300">
-         ↗
+         <LuArrowRight size={18} aria-hidden="true" />
         </span>
        </Link>
       )}
@@ -101,4 +90,3 @@ export default function SectionHeader({
   </div>
  );
 }
-'

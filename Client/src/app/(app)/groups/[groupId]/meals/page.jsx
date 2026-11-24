@@ -1,4 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
+ 
 import { notFound, redirect } from "next/navigation";
 import { getGroup, getGroupMemberships, getGroupPolicy } from "@/lib/actions/groups";
 import { getProfile } from "@/lib/actions/auth";

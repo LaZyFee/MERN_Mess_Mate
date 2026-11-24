@@ -68,21 +68,21 @@ export default function CreateGroupPage() {
   }
 
   return (
-    <main className={["[min-height:100dvh]", "[background:var(--bg)]", "[padding:var(--space-6)_var(--space-4)]"].filter(Boolean).join(" ")}>
-      <div className={["[max-width:560px]", "[margin:0_auto]"].filter(Boolean).join(" ")}>
+    <main className="[min-height:100dvh] [background:var(--bg)] [padding:var(--space-6)_var(--space-4)]">
+      <div className="[max-width:560px] mx-auto">
         <button
           onClick={() => router.back()}
-          className={["[display:flex]", "[align-items:center]", "[gap:6px]", "[color:var(--tm)]", "[font-size:0.875rem]", "[margin-bottom:var(--space-5)]", "[background:none]", "[border:none]", "[cursor:pointer]", "[padding:0px]"].filter(Boolean).join(" ")}
+          className="flex items-center gap-1.5 [color:var(--tm)] text-sm mb-5 bg-none border-0 cursor-pointer p-0"
         >
           <LuArrowLeft size={16} /> Back
         </button>
 
-        <h1 className={["[font-size:1.375rem]", "font-extrabold", "[color:var(--tp)]", "[margin-bottom:var(--space-6)]"].filter(Boolean).join(" ")}>
+        <h1 className="[font-size:1.375rem] font-extrabold [color:var(--tp)] mb-6">
           Create a Group
         </h1>
 
         <form onSubmit={handleSubmit} noValidate>
-          <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-5)]"].filter(Boolean).join(" ")}>
+          <div className="flex flex-col [gap:var(--space-5)]">
             <Input
               label="Group Name"
               isRequired
@@ -95,14 +95,14 @@ export default function CreateGroupPage() {
 
             {/* Meal Slots */}
             <div>
-              <p className={["[font-size:0.875rem]", "font-semibold", "[color:var(--tp)]", "[margin-bottom:var(--space-3)]"].filter(Boolean).join(" ")}>
+              <p className="text-sm font-semibold [color:var(--tp)] mb-3">
                 Meal Slots
               </p>
-              <div className={["[display:grid]", "[grid-template-columns:1fr_1fr]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+              <div className="grid [grid-template-columns:1fr_1fr] gap-3">
                 {SLOTS.map(({ key, label }) => (
                   <div
                     key={key}
-                    className={["[border:1px_solid_var(--bd)]", "[border-radius:var(--r-md)]", "[padding:var(--space-3)]", (slots[key]) ? "[background:var(--pale)]" : "[background:var(--bgs)]", "[transition:var(--transition)]"].filter(Boolean).join(" ")}
+                    className={`[border:1px_solid_var(--bd)] [border-radius:var(--r-md)] p-3 ${(slots[key]) ? "[background:var(--pale)]" : "[background:var(--bgs)]"} [transition:var(--transition)]`}
                   >
                     <Checkbox
                       isChecked={slots[key]}
@@ -110,7 +110,7 @@ export default function CreateGroupPage() {
                       label={label}
                     />
                     {slots[key] && (
-                      <div className={["[margin-top:var(--space-2)]"].filter(Boolean).join(" ")}>
+                      <div className="mt-2">
                         <Input
                           label="Weight"
                           type="number"
@@ -120,17 +120,17 @@ export default function CreateGroupPage() {
                           min={0}
                           max={10}
                           step={0.25}
-                          helperText="Relative weight (0–10)"
+                          helperText="Relative weight (0â€“10)"
                         />
-                        <div className={["[margin-top:var(--space-2)]"].filter(Boolean).join(" ")}>
-                          <p className={["[font-size:0.75rem]", "[color:var(--tm)]", "[margin-bottom:var(--space-1)]"].filter(Boolean).join(" ")}>Default portions</p>
-                          <div className={["[display:flex]", "[gap:var(--space-1)]", "[flex-wrap:wrap]"].filter(Boolean).join(" ")}>
+                        <div className="mt-2">
+                          <p className="text-xs [color:var(--tm)] mb-1">Default portions</p>
+                          <div className="flex gap-1 flex-wrap">
                             {SUBUNIT_OPTIONS.map((v) => (
                               <button
                                 key={v}
                                 type="button"
                                 onClick={() => setDefaultSubunits((d) => ({ ...d, [key]: v }))}
-                                className={["[padding:2px_8px]", "[border-radius:var(--r-pill)]", "[font-size:0.75rem]", (defaultSubunits[key] === v) ? "font-bold" : "font-normal", "[border:1px_solid_var(--bd)]", (defaultSubunits[key] === v) ? "[background:var(--p)]" : "[background:var(--bgs)]", (defaultSubunits[key] === v) ? "[color:var(--bgs)]" : "[color:var(--tm)]", "[cursor:pointer]", "[min-height:28px]"].filter(Boolean).join(" ")}
+                                className={`[padding:2px_8px] [border-radius:var(--r-pill)] text-xs ${(defaultSubunits[key] === v) ? "font-bold" : "font-normal"} [border:1px_solid_var(--bd)] ${(defaultSubunits[key] === v) ? "[background:var(--p)]" : "[background:var(--bgs)]"} ${(defaultSubunits[key] === v) ? "[color:var(--bgs)]" : "[color:var(--tm)]"} cursor-pointer [min-height:28px]`}
                               >
                                 {v === 0 ? "0" : `${v / 1000}`}
                               </button>
@@ -159,3 +159,4 @@ export default function CreateGroupPage() {
     </main>
   );
 }
+

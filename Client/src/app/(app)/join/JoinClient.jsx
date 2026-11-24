@@ -10,7 +10,6 @@ import { useToast } from "@/components/shared/ToastProvider";
 import { groupsApi } from "@/lib/api/groups";
 
 function JoinForm({ initialCode }) {
-  const router = useRouter();
   const { showToast } = useToast();
 
   const [code, setCode] = useState(initialCode);
@@ -45,14 +44,14 @@ function JoinForm({ initialCode }) {
     return (
       <Alert status="success">
         Your join request was submitted! An admin will approve it soon. You can{" "}
-        <a href="/" className={["[color:var(--p)]", "font-semibold"].filter(Boolean).join(" ")}>go home</a> while you wait.
+        <a href="/" className="[color:var(--p)] font-semibold">go home</a> while you wait.
       </Alert>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}>
+      <div className="flex flex-col gap-4">
         {error && <Alert status="error">{error}</Alert>}
         <Input
           label="Invite Code"
@@ -83,19 +82,19 @@ function JoinForm({ initialCode }) {
 export default function JoinClient({ initialCode = "" }) {
   const router = useRouter();
   return (
-    <main className={["[min-height:100dvh]", "[background:var(--bg)]", "[padding:var(--space-6)_var(--space-4)]", "[display:flex]", "[flex-direction:column]", "[align-items:center]", "[justify-content:center]"].filter(Boolean).join(" ")}>
-      <div className={["[width:100%]", "[max-width:480px]"].filter(Boolean).join(" ")}>
+    <main className="[min-height:100dvh] [background:var(--bg)] [padding:var(--space-6)_var(--space-4)] flex flex-col items-center justify-center">
+      <div className="w-full [max-width:480px]">
         <button
           onClick={() => router.back()}
-          className={["[display:flex]", "[align-items:center]", "[gap:6px]", "[color:var(--tm)]", "[font-size:0.875rem]", "[margin-bottom:var(--space-5)]", "[background:none]", "[border:none]", "[cursor:pointer]", "[padding:0px]"].filter(Boolean).join(" ")}
+          className="flex items-center gap-1.5 [color:var(--tm)] text-sm mb-5 bg-none border-0 cursor-pointer p-0"
         >
           <LuArrowLeft size={16} /> Back
         </button>
-        <div className={["[background:var(--bgs)]", "[border:1px_solid_var(--bd)]", "[border-radius:var(--r-xl)]", "[box-shadow:var(--shadow-lg)]", "[padding:var(--space-8)]"].filter(Boolean).join(" ")}>
-          <h1 className={["[font-size:1.375rem]", "font-extrabold", "[color:var(--tp)]", "[margin-bottom:var(--space-2)]"].filter(Boolean).join(" ")}>
+        <div className="[background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-xl)] [box-shadow:var(--shadow-lg)] p-8">
+          <h1 className="[font-size:1.375rem] font-extrabold [color:var(--tp)] mb-2">
             Join a Group
           </h1>
-          <p className={["[color:var(--tm)]", "[font-size:0.875rem]", "[margin-bottom:var(--space-6)]"].filter(Boolean).join(" ")}>
+          <p className="[color:var(--tm)] text-sm mb-6">
             Enter the invite code and Group ID shared by your admin.
           </p>
           <JoinForm initialCode={initialCode} />

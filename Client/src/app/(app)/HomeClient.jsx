@@ -23,21 +23,21 @@ function GroupCard({ group, onClick }) {
     <button
       onClick={onClick}
       
-      className="hover:border-[var(--p)] hover:shadow-[var(--shadow-lg)] [display:flex] [flex-direction:column] [gap:var(--space-3)] [padding:var(--space-5)] [background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-lg)] [box-shadow:var(--shadow-md)] [text-align:left] [width:100%] [cursor:pointer] [transition:var(--transition)]"
+      className="hover:border-[var(--p)] hover:shadow-[var(--shadow-lg)] flex flex-col gap-3 [padding:var(--space-5)] [background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-lg)] [box-shadow:var(--shadow-md)] text-left w-full cursor-pointer [transition:var(--transition)]"
     >
-      <div className={["[display:flex]", "[align-items:flex-start]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}>
+      <div className="flex items-start gap-3">
         <Avatar name={group.name} size="lg" isSquare />
-        <div className={["flex-1", "[min-width:0px]"].filter(Boolean).join(" ")}>
+        <div className="flex-1 min-w-0">
           <div
-            className={["font-bold", "[font-size:1rem]", "[color:var(--tp)]", "[white-space:nowrap]", "[overflow:hidden]", "[text-overflow:ellipsis]"].filter(Boolean).join(" ")}
+            className="font-bold text-base [color:var(--tp)] whitespace-nowrap [overflow:hidden] [text-overflow:ellipsis]"
           >
             {group.name}
           </div>
           <div
-            className={["[display:flex]", "[align-items:center]", "[gap:var(--space-2)]", "[margin-top:var(--space-1)]", "[flex-wrap:wrap]"].filter(Boolean).join(" ")}
+            className="flex items-center gap-2 mt-1 flex-wrap"
           >
-            <span className={["[font-size:0.8125rem]", "[color:var(--tm)]"].filter(Boolean).join(" ")}>
-              <LuUsers size={13} className={["[display:inline]", "[margin-right:3px]"].filter(Boolean).join(" ")} />
+            <span className="[font-size:0.8125rem] [color:var(--tm)]">
+              <LuUsers size={13} className="inline [margin-right:3px]" />
               {memberCount} member{memberCount !== 1 ? "s" : ""}
             </span>
             {group.myRole && (
@@ -47,7 +47,7 @@ function GroupCard({ group, onClick }) {
             )}
           </div>
         </div>
-        <LuArrowRight size={18} className={["[color:var(--tl)]", "shrink-0"].filter(Boolean).join(" ")} />
+        <LuArrowRight size={18} className="[color:var(--tl)] shrink-0" />
       </div>
     </button>
   );
@@ -56,17 +56,17 @@ function GroupCard({ group, onClick }) {
 function EmptyState({ onCreate, onJoin }) {
   return (
     <div
-      className={["[text-align:center]", "[padding:var(--space-8)_var(--space-4)]", "[display:flex]", "[flex-direction:column]", "[align-items:center]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}
+      className="text-center [padding:var(--space-8)_var(--space-4)] flex flex-col items-center gap-4"
     >
-      <LuUtensilsCrossed size={56} className={["[color:var(--tl)]"].filter(Boolean).join(" ")} />
+      <LuUtensilsCrossed size={56} className="[color:var(--tl)]" />
       <div>
-        <p className={["font-bold", "[font-size:1.125rem]", "[color:var(--tp)]"].filter(Boolean).join(" ")}>No groups yet</p>
-        <p className={["[color:var(--tm)]", "[font-size:0.875rem]", "[margin-top:var(--space-1)]"].filter(Boolean).join(" ")}>
+        <p className="font-bold text-lg [color:var(--tp)]">No groups yet</p>
+        <p className="[color:var(--tm)] text-sm mt-1">
           Create a mess group or join one with an invite code.
         </p>
       </div>
       <div
-        className={["[display:flex]", "[gap:var(--space-3)]", "[flex-wrap:wrap]", "[justify-content:center]"].filter(Boolean).join(" ")}
+        className="flex gap-3 flex-wrap justify-center"
       >
         <Button leftIcon={<LuPlus size={16} />} onClick={onCreate}>
           Create Group
@@ -80,14 +80,14 @@ function EmptyState({ onCreate, onJoin }) {
 }
 
 /**
- * Layer 3 — CSR Component.
+ * Layer 3 â€” CSR Component.
  * Receives initialGroups from SSR page; uses browserApi for refresh.
  */
 export default function HomeClient({ initialGroups }) {
   const router = useRouter();
   const { showToast } = useToast();
 
-  // Seed from server — no useEffect re-fetch on mount
+  // Seed from server â€” no useEffect re-fetch on mount
   const [groups, setGroups] = useState(initialGroups ?? []);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -107,10 +107,10 @@ export default function HomeClient({ initialGroups }) {
     <div>
       {/* Header row */}
       <div
-        className={["[display:flex]", "[align-items:center]", "[justify-content:space-between]", "[margin-bottom:var(--space-5)]", "[flex-wrap:wrap]", "[gap:var(--space-3)]"].filter(Boolean).join(" ")}
+        className="flex items-center justify-between mb-5 flex-wrap gap-3"
       >
-        <h2 className={["[font-size:1.125rem]", "font-extrabold", "[color:var(--tp)]"].filter(Boolean).join(" ")}>My Groups</h2>
-        <div className={["[display:flex]", "[gap:var(--space-2)]"].filter(Boolean).join(" ")}>
+        <h2 className="text-lg font-extrabold [color:var(--tp)]">My Groups</h2>
+        <div className="flex gap-2">
           <Button size="sm" variant="ghost" leftIcon={<LuRefreshCw size={15} />} onClick={refresh} isLoading={refreshing}>
             Refresh
           </Button>
@@ -125,7 +125,7 @@ export default function HomeClient({ initialGroups }) {
 
       {refreshing ? (
         <div
-          className={["[display:grid]", "[gap:var(--space-4)]", "[grid-template-columns:repeat(auto-fill,_minmax(280px,_1fr))]"].filter(Boolean).join(" ")}
+          className="grid gap-4 [grid-template-columns:repeat(auto-fill,_minmax(280px,_1fr))]"
         >
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} variant="rect" height={100} />
@@ -138,7 +138,7 @@ export default function HomeClient({ initialGroups }) {
         />
       ) : (
         <div
-          className={["[display:grid]", "[gap:var(--space-4)]", "[grid-template-columns:repeat(auto-fill,_minmax(280px,_1fr))]"].filter(Boolean).join(" ")}
+          className="grid gap-4 [grid-template-columns:repeat(auto-fill,_minmax(280px,_1fr))]"
         >
           {groups.map((g) => (
             <GroupCard
@@ -152,3 +152,4 @@ export default function HomeClient({ initialGroups }) {
     </div>
   );
 }
+

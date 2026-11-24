@@ -366,7 +366,7 @@ const Toast = ({
  return isModal ? (
   <div
    
-   className={[containerClass, "[z-index:var(--inline-z-index)]"].filter(Boolean).join(" ")} style={{ "--inline-z-index": zIndex }}
+   className={`${containerClass} [z-index:var(--inline-z-index)]`} style={{ "--inline-z-index": zIndex }}
    role="dialog"
    aria-modal="true"
    {...props}
@@ -426,11 +426,7 @@ const Toast = ({
  ) : (
   <div
    
-   className={[`${containerClass} shadow-(--shadow-lg) rounded-xl border-l-4 ${
-    config.bgColor
-   } ${config.textColor} ${
-    config.borderColor
-   } ${className} ${getAnimationClasses()}`, "[z-index:var(--inline-z-index)]"].filter(Boolean).join(" ")} style={{ "--inline-z-index": zIndex }}
+   className={`${containerClass} shadow-(--shadow-lg) rounded-xl border-l-4 ${config.bgColor} ${config.textColor} ${config.borderColor} ${className} ${getAnimationClasses()} [z-index:var(--inline-z-index)]`} style={{ "--inline-z-index": zIndex }}
    role="alert"
    {...props}
   >
@@ -439,7 +435,7 @@ const Toast = ({
     <div className="h-1 w-full bg-(--bd2) rounded-t-xl overflow-hidden">
      <div
       
-      className={[`h-1 ${config.progressBarColor}`, "[width:var(--inline-width)]", "[transition:width_0.1s_linear]"].filter(Boolean).join(" ")} style={{ "--inline-width": `${progress}%` }}
+      className={`h-1 ${config.progressBarColor} [width:var(--inline-width)] [transition:width_0.1s_linear]`} style={{ "--inline-width": `${progress}%` }}
      ></div>
     </div>
    )}

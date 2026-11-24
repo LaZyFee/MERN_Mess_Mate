@@ -54,12 +54,7 @@ const Radio = forwardRef(
    lg: "text-base",
   };
 
-  // Label spacing classes
-  const labelSpacingClasses = {
-   sm: "",
-   md: "",
-   lg: "",
-  };
+  // Label spacing classes removed — spacing is handled by the container utility classes.
 
   // State classes using CSS variables
   const stateClasses = {

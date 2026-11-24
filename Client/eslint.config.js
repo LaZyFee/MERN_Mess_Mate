@@ -23,7 +23,9 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
+      // Server Components (page/layout/actions) legitimately export non-components.
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       // T0.14 — zero tokens in JS-reachable storage
       'no-restricted-properties': [
         'error',
@@ -44,6 +46,13 @@ export default defineConfig([
       ],
       // No NEXT_PUBLIC_ secrets beyond the app URL
       'no-restricted-imports': ['off'],
+    },
+  },
+  {
+    // Server Components (page.jsx / layout.jsx) may export metadata alongside the component.
+    files: ['src/app/**/*.jsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])

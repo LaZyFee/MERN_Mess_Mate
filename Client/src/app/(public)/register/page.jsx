@@ -10,7 +10,7 @@ export default function RegisterPage() {
     <main className={styles.authWrap}>
       <div className={styles.authCard}>
         <div className={styles.authLogo}>
-          <LuUtensils size={28} className={["[color:var(--p)]"].filter(Boolean).join(" ")} />
+          <LuUtensils size={28} className="[color:var(--p)]" />
           <span>MealMate</span>
         </div>
         <h1 className={styles.authTitle}>Create your account</h1>

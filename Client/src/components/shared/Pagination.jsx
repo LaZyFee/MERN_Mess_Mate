@@ -53,9 +53,9 @@ export default function Pagination({
  totalPages,
  onPageChange,
  siblingCount = 1,
- size = "md",
+
  showFirstLast = true,
- isCompact = false,
+
  className = "",
 
  // Advanced/DataTable props

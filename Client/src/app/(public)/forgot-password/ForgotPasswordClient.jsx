@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { LuUtensils } from "react-icons/lu";
 import Input from "@/components/shared/Input";
 import Button from "@/components/shared/Button";
 import Alert from "@/components/shared/Alert";
-import { useToast } from "@/components/shared/ToastProvider";
 import { authApi } from "@/lib/api/auth";
 import styles from "../auth.module.css";
 
-export default function ForgotPasswordPage() {
-  const { showToast } = useToast();
+export default function ForgotPasswordClient() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,7 +18,7 @@ export default function ForgotPasswordPage() {
     if (!email.trim()) return;
     setLoading(true);
     try {
-      // Server always returns 200 regardless of whether email exists (privacy)
+      // Server always returns 200 regardless of whether the email exists (privacy)
       await authApi.forgotPassword(email.trim());
     } catch {
       // intentionally swallowed — neutral UX
@@ -34,7 +32,7 @@ export default function ForgotPasswordPage() {
     <main className={styles.authWrap}>
       <div className={styles.authCard}>
         <div className={styles.authLogo}>
-          <LuUtensils size={28} className={["[color:var(--p)]"].filter(Boolean).join(" ")} />
+          <LuUtensils size={28} className="text-(--p)" />
           <span>MealMate</span>
         </div>
         <h1 className={styles.authTitle}>Reset your password</h1>
@@ -46,25 +44,28 @@ export default function ForgotPasswordPage() {
           </Alert>
         ) : (
           <form onSubmit={handleSubmit} noValidate>
-            <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}>
+            <div className="flex flex-col gap-4">
               <Input
                 label="Email"
                 type="email"
+                size="lg"
                 isRequired
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
                 inputMode="email"
               />
-              <Button type="submit" isFullWidth isLoading={loading} isDisabled={loading || !email.trim()}>
-                Send Reset Link
+              <Button type="submit" size="lg" isFullWidth isLoading={loading} isDisabled={loading || !email.trim()}>
+                Send reset link
               </Button>
             </div>
           </form>
         )}
 
         <p className={styles.authFooter}>
-          <a href="/login" className={["[color:var(--p)]", "font-semibold"].filter(Boolean).join(" ")}>← Back to sign in</a>
+          <a href="/login" className="font-semibold text-(--p)">
+            Back to sign in
+          </a>
         </p>
       </div>
     </main>

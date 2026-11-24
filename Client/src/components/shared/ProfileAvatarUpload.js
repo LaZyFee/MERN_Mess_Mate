@@ -71,7 +71,9 @@ export default function ProfileAvatarUpload({
   try {
    fallbackUrl = URL.createObjectURL(file);
    setPreview(fallbackUrl);
-  } catch {}
+  } catch {
+   fallbackUrl = null;
+  }
 
   // Read Data URL for durable preview and notify parent
   const reader = new FileReader();

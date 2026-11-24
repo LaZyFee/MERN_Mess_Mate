@@ -1,7 +1,6 @@
 "use client";
 
 import { LuSun, LuMoon } from "react-icons/lu";
-import { useState } from "react";
 import { useUiStore, setThemeCookie } from "@/lib/store/uiStore";
 
 /**
@@ -11,7 +10,6 @@ import { useUiStore, setThemeCookie } from "@/lib/store/uiStore";
 export default function ThemeToggle({ className = "" } = {}) {
  const theme = useUiStore((s) => s.theme);
  const setTheme = useUiStore((s) => s.setTheme);
- const [open, setOpen] = useState(false);
 
  const toggle = () => {
   const next = theme === "dark" ? "light" : "dark";

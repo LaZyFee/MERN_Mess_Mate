@@ -9,10 +9,9 @@ import { useAuthStore } from "@/lib/store/authStore";
 import { authApi } from "@/lib/api/auth";
 
 // ── 2FA step ────────────────────────────────────────────────────────────────
-function TwoFAStep({ challengeToken, email, password, onBack }) {
+function TwoFAStep({ challengeToken, onBack }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { showToast } = useToast();
   const hydrate = useAuthStore((s) => s.hydrate);
 
   const [code, setCode] = useState("");
@@ -36,7 +35,7 @@ function TwoFAStep({ challengeToken, email, password, onBack }) {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <p className={["[font-size:0.875rem]", "[color:var(--tm)]", "[margin-bottom:var(--space-4)]"].filter(Boolean).join(" ")}>
+      <p className="text-sm [color:var(--tm)] mb-4">
         Enter the 6-digit code from your authenticator app.
       </p>
       <Input
@@ -51,11 +50,11 @@ function TwoFAStep({ challengeToken, email, password, onBack }) {
         maxLength={6}
         placeholder="000000"
       />
-      <div className={["[display:flex]", "[gap:var(--space-3)]", "[margin-top:var(--space-4)]"].filter(Boolean).join(" ")}>
-        <Button variant="outline" onClick={onBack} isDisabled={loading} className={["flex-1"].filter(Boolean).join(" ")}>
+      <div className="flex gap-3 mt-4">
+        <Button variant="outline" onClick={onBack} isDisabled={loading} className="flex-1">
           Back
         </Button>
-        <Button type="submit" isLoading={loading} isDisabled={loading} className={["flex-1"].filter(Boolean).join(" ")}>
+        <Button type="submit" isLoading={loading} isDisabled={loading} className="flex-1">
           Verify
         </Button>
       </div>
@@ -111,8 +110,6 @@ export default function LoginForm() {
     return (
       <TwoFAStep
         challengeToken={twoFA.challengeToken}
-        email={form.email}
-        password={form.password}
         onBack={() => setTwoFA(null)}
       />
     );
@@ -120,7 +117,7 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <div className={["[display:flex]", "[flex-direction:column]", "[gap:var(--space-4)]"].filter(Boolean).join(" ")}>
+      <div className="flex flex-col gap-4">
         <Input
           label="Email"
           type="email"
@@ -142,10 +139,10 @@ export default function LoginForm() {
           errorMessage={errors.password}
           autoComplete="current-password"
         />
-        <div className={["[text-align:right]", "[margin-top:-var(--space-2)]"].filter(Boolean).join(" ")}>
+        <div className="text-right -mt-2">
           <a
             href="/forgot-password"
-            className={["[font-size:0.8125rem]", "[color:var(--p)]", "font-medium"].filter(Boolean).join(" ")}
+            className="[font-size:0.8125rem] [color:var(--p)] font-medium"
           >
             Forgot password?
           </a>

@@ -17,6 +17,7 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 ### 1.1 Colors
 
 - **Tailwind classNames only for layout and visual styling.** Do not use `style={{ ... }}` in JSX; use `className` with Tailwind utilities and CSS-variable arbitrary values.
+- **Never use `className={[...].join(" ")}` array-join pattern.** Use a plain string `className="a b c"` for static classes, or a template literal `` className={`a b ${cond ? "c" : "d"}`} `` for conditional classes. Do not wrap class strings in arrays and join them.
 - Dynamic values that cannot be static classes must use a CSS variable via `style={{ "--value": ... }}` plus a Tailwind/CSS class; never set literal colors, dimensions, margins, positioning, or other visual properties directly as inline style objects.
 - Add the mandatory Tailwind rule to every component, page, and future task. Existing inline styles must be migrated during touch-up tasks; no new inline style usage is allowed.
 
