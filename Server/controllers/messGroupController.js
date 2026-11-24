@@ -142,8 +142,8 @@ export const getGroupById = async (req, res, next) => {
             .populate('pendingRequests', MEMBER_VISIBLE_FIELDS).lean();
         // Privacy: group existence + details are invisible to non-members
         const isMember = group && (
-            group.admin.equals(req.user.id) ||
-            group.members.some(m => m.user?.equals?.(req.user.id))
+            String(group.admin?._id) === req.user.id ||
+            group.members.some(m => String(m.user?._id) === req.user.id)
         );
         if (!group || !isMember) return res.status(404).json({ msg: 'Group not found' });
         const sanitizedAdmin = group.admin ? publicProfile(group.admin) : null;

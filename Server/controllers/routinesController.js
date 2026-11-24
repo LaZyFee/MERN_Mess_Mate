@@ -10,7 +10,6 @@ import { audit } from '../models/AuditEvent.js';
 import { notify } from '../services/inboxService.js';
 import {
     generateDuties,
-    visibleNoteAudience,
     claimHandoverTask,
     doneHandoverTask,
 } from '../services/routineRules.js';
@@ -273,6 +272,17 @@ export const getMenuPlan = async (req, res, next) => {
 // NOTES
 // ============================================================
 
+const noteAudience = (req) => ({
+    $or: [
+        { authorUserId: req.user.id },
+        { 'audience.type': { $exists: false } },
+        { 'audience.type': 'all' },
+        { 'audience.type': 'role', 'audience.roles': req.groupRole },
+        ...(req.membership ? [{ 'audience.type': 'members', 'audience.membershipIds': req.membership._id }] : []),
+    ],
+});
+const noteEditor = (req) => ['owner', 'manager'].includes(req.groupRole) ? {} : { authorUserId: req.user.id };
+
 export const createNote = async (req, res, next) => {
     try {
         const { groupId } = req.params;
@@ -290,16 +300,14 @@ export const createNote = async (req, res, next) => {
 export const listNotes = async (req, res, next) => {
     try {
         const { groupId } = req.params;
-        const notes = await Note.find({ groupId, state: { $ne: 'deleted' } }).sort({ pinned: -1, createdAt: -1 }).lean();
-        const memberships = await activeMemberships(groupId);
-        const visible = notes.filter(n => visibleNoteAudience(n, memberships).length > 0);
-        res.json({ notes: visible });
+        const notes = await Note.find({ groupId, ...noteAudience(req), state: { $ne: 'deleted' } }).sort({ pinned: -1, createdAt: -1 }).lean();
+        res.json({ notes });
     } catch (err) { next(err); }
 };
 
 export const getNote = async (req, res, next) => {
     try {
-        const note = await Note.findOne({ _id: req.params.noteId, groupId: req.params.groupId, state: { $ne: 'deleted' } }).lean();
+        const note = await Note.findOne({ _id: req.params.noteId, groupId: req.params.groupId, ...noteAudience(req), state: { $ne: 'deleted' } }).lean();
         if (!note) return res.status(404).json({ msg: 'Note not found' });
         res.json({ note });
     } catch (err) { next(err); }
@@ -308,7 +316,7 @@ export const getNote = async (req, res, next) => {
 export const updateNote = async (req, res, next) => {
     try {
         const note = await Note.findOneAndUpdate(
-            { _id: req.params.noteId, groupId: req.params.groupId },
+            { _id: req.params.noteId, groupId: req.params.groupId, ...noteEditor(req) },
             { $set: req.body, $inc: { revision: 1 } },
             { new: true }
         );
@@ -322,7 +330,7 @@ export const updateNote = async (req, res, next) => {
 export const deleteNote = async (req, res, next) => {
     try {
         const note = await Note.findOneAndUpdate(
-            { _id: req.params.noteId, groupId: req.params.groupId },
+            { _id: req.params.noteId, groupId: req.params.groupId, ...noteEditor(req) },
             { $set: { state: 'deleted' }, $inc: { revision: 1 } },
             { new: true }
         );
@@ -339,7 +347,7 @@ export const ackNote = async (req, res, next) => {
         const memberships = await activeMemberships(groupId);
         const own = memberships.find(m => String(m.user) === String(req.user.id));
         if (!own) return res.status(403).json({ msg: 'Not a member' });
-        await Note.updateOne({ _id: noteId, groupId }, { $addToSet: { readBy: { membershipId: own._id, at: new Date() } } });
+        await Note.updateOne({ _id: noteId, groupId, ...noteAudience(req), state: 'active' }, { $addToSet: { readBy: { membershipId: own._id, at: new Date() } } });
         res.json({ msg: 'Acknowledged' });
     } catch (err) { next(err); }
 };
@@ -347,14 +355,18 @@ export const ackNote = async (req, res, next) => {
 export const claimTask = async (req, res, next) => {
     try {
         const { groupId, noteId, taskId } = req.params;
-        const note = await Note.findOne({ _id: noteId, groupId });
+        const note = await Note.findOne({ _id: noteId, groupId, ...noteAudience(req), state: 'active' });
         if (!note) return res.status(404).json({ msg: 'Note not found' });
         const memberships = await activeMemberships(groupId);
         const own = memberships.find(m => String(m.user) === String(req.user.id));
         if (!own) return res.status(403).json({ msg: 'Not a member' });
         const result = claimHandoverTask(note, taskId, own._id);
-        if (!result.ok) return res.status(409).json({ msg: result.code });
-        await Note.updateOne({ _id: noteId }, { $inc: { revision: 1 } });
+        if (!result.ok) return res.status(409).json({ msg: result.code, code: result.code });
+        const updated = await Note.updateOne(
+            { _id: noteId, groupId, ...noteAudience(req), state: 'active', tasks: { $elemMatch: { _id: taskId, status: 'open' } } },
+            { $set: { 'tasks.$.status': 'claimed', 'tasks.$.claimedBy': own._id }, $inc: { revision: 1 } }
+        );
+        if (!updated.modifiedCount) return res.status(409).json({ msg: 'TASK_ALREADY_CLAIMED', code: 'TASK_ALREADY_CLAIMED' });
         emitGroup(req, 'note-updated', { groupId, noteId });
         res.json({ msg: 'Task claimed' });
     } catch (err) { next(err); }
@@ -363,14 +375,18 @@ export const claimTask = async (req, res, next) => {
 export const doneTask = async (req, res, next) => {
     try {
         const { groupId, noteId, taskId } = req.params;
-        const note = await Note.findOne({ _id: noteId, groupId });
+        const note = await Note.findOne({ _id: noteId, groupId, ...noteAudience(req), state: 'active' });
         if (!note) return res.status(404).json({ msg: 'Note not found' });
         const memberships = await activeMemberships(groupId);
         const own = memberships.find(m => String(m.user) === String(req.user.id));
         if (!own) return res.status(403).json({ msg: 'Not a member' });
         const result = doneHandoverTask(note, taskId, own._id);
-        if (!result.ok) return res.status(409).json({ msg: result.code });
-        await Note.updateOne({ _id: noteId }, { $inc: { revision: 1 } });
+        if (!result.ok) return res.status(409).json({ msg: result.code, code: result.code });
+        const updated = await Note.updateOne(
+            { _id: noteId, groupId, ...noteAudience(req), state: 'active', tasks: { $elemMatch: { _id: taskId, status: 'claimed' } } },
+            { $set: { 'tasks.$.status': 'done', 'tasks.$.doneBy': own._id, 'tasks.$.doneAt': result.task.doneAt }, $inc: { revision: 1 } }
+        );
+        if (!updated.modifiedCount) return res.status(409).json({ msg: 'TASK_ALREADY_DONE', code: 'TASK_ALREADY_DONE' });
         emitGroup(req, 'note-updated', { groupId, noteId });
         res.json({ msg: 'Task done' });
     } catch (err) { next(err); }
@@ -388,13 +404,11 @@ export const boardToday = async (req, res, next) => {
         const [duties, menus, notes] = await Promise.all([
             DutyAssignment.find({ groupId, localDate: today }).lean(),
             MenuPlan.find({ groupId }).sort({ weekStart: -1 }).limit(5).lean(),
-            Note.find({ groupId, state: 'active' }).sort({ pinned: -1, createdAt: -1 }).limit(50).lean(),
+            Note.find({ groupId, ...noteAudience(req), state: 'active' }).sort({ pinned: -1, createdAt: -1 }).limit(50).lean(),
         ]);
 
-        const memberships = await activeMemberships(groupId);
-        const visibleNotes = notes.filter(n => visibleNoteAudience(n, memberships).length > 0);
-        const pinnedNotes = visibleNotes.filter(n => n.pinned);
-        const activeHandovers = visibleNotes.filter(n => n.kind === 'handover');
+        const pinnedNotes = notes.filter(n => n.pinned);
+        const activeHandovers = notes.filter(n => n.kind === 'handover');
 
         const wday = new Date(today).getUTCDay();
         let todayMenu = null;

@@ -116,7 +116,8 @@ export const toExpense = async (req, res, next) => {
 
         let cat = null;
         if (categoryId) {
-            cat = await ExpenseCategory.findById(categoryId);
+            cat = await ExpenseCategory.findOne({ _id: categoryId, groupId });
+            if (!cat) return res.status(404).json({ msg: 'Category not found' });
         }
         if (!cat) {
             cat = await ExpenseCategory.findOne({ groupId, name: /^Bazar/i }).lean();
@@ -125,6 +126,9 @@ export const toExpense = async (req, res, next) => {
             cat = await ExpenseCategory.findOne({ groupId, isFoodPool: true }).lean();
         }
 
+        if (!cat || checkedItems.some(i => !Number.isSafeInteger(i.estimatedPricePoisha) || i.estimatedPricePoisha <= 0)) {
+            return res.status(422).json({ msg: 'Select a category and price each checked item before conversion' });
+        }
         const totalPoisha = checkedItems.reduce((s, i) => s + (i.estimatedPricePoisha || 0), 0);
 
         const expense = await Expense.create({
@@ -132,6 +136,7 @@ export const toExpense = async (req, res, next) => {
             createdBy: req.user.id,
             status: 'draft',
             description: expenseDescription,
+            date: new Date(),
             costPeriod: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7),
             month: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7),
             amount: totalPoisha,

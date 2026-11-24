@@ -1,3 +1,4 @@
+import { listSessions } from '../services/sessionService.js';
 import User from '../models/User.js';
 import MessGroup from '../models/MessGroup.js';
 import Membership from '../models/Membership.js';
@@ -14,7 +15,7 @@ import { validate } from '../validation/validate.js';
 import {
     signAccessToken, signRefreshToken, saveRefreshToken, clearRefreshToken,
     verifyRefreshToken, randomToken, setRefreshTokenCookie, clearRefreshTokenCookie,
-    getCookie, setAccessTokenCookie, clearAccessTokenCookie,
+    getCookie, setRefreshTokenCookieWide, setAccessTokenCookie, clearAccessTokenCookie,
 } from '../utils/tokens.js';
 import { setCSRFCookie } from '../middleware/csrf.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../utils/mailer.js';
@@ -28,8 +29,8 @@ const safeUser = (user) => ({
     isVerified: user.isVerified,
 });
 
-const sendAuthResponse = async (res, user, status = 200, req = null) => {
-    const accessToken = signAccessToken(user);
+export const sendAuthResponse = async (res, user, status = 200, req = null, amr, extra = {}) => {
+    const accessToken = signAccessToken({ id: user.id, amr });
     const refreshToken = signRefreshToken(user);
     await saveRefreshToken(User, user.id, refreshToken);
 
@@ -40,11 +41,11 @@ const sendAuthResponse = async (res, user, status = 200, req = null) => {
         setAccessTokenCookie(res, accessToken);
         setRefreshTokenCookieWide(res, refreshToken); // widened path for BFF
         setCSRFCookie(res);
-        res.status(status).json({ user: safeUser(user) });
+        res.status(status).json({ user: safeUser(user), ...extra });
     } else {
         setRefreshTokenCookie(res, refreshToken);
         res.status(status).json({
-            user: safeUser(user),
+            user: safeUser(user), ...extra,
             accessToken,
             refreshToken,
         });
@@ -149,11 +150,12 @@ export const logout = async (req, res, next) => {
             if (user) await clearRefreshToken(User, user.id);
         }
         clearRefreshTokenCookie(res);
+        clearRefreshTokenCookie(res, '/api');
         clearAccessTokenCookie(res);
         // Clear CSRF cookie
         const isProd = process.env.NODE_ENV === 'production';
         const sameSite = isProd ? 'Strict' : 'Lax';
-        res.setHeader('Set-Cookie', [
+        res.append('Set-Cookie', [
             'mm_csrf=',
             'HttpOnly',
             'Path=/',
@@ -183,7 +185,7 @@ export const updateProfile = [
 
             const user = await User.findByIdAndUpdate(req.user.id, updates, {
                 new: true,
-            }).select('-password -refreshToken -resetPasswordToken -verifyEmailToken');
+            }).select('-twoFactor.secretEnc -twoFactor.recoveryCodesHash -password -refreshToken -resetPasswordToken -verifyEmailToken');
 
             res.json({ msg: 'Profile updated', user });
         } catch (err) {
@@ -217,7 +219,7 @@ export const getGroupMembersDirectory = async (req, res, next) => {
 // Profile
 export const getProfile = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user.id).select('-password -refreshToken -resetPasswordToken -verifyEmailToken');
+        const user = await User.findById(req.user.id).select('-twoFactor.secretEnc -twoFactor.recoveryCodesHash -password -refreshToken -resetPasswordToken -verifyEmailToken');
         if (!user) return res.status(404).json({ msg: 'User not found' });
         res.json(user);
     } catch (err) {
@@ -334,7 +336,7 @@ export const uploadProfilePic = async (req, res, next) => {
             req.user.id,
             { profilePic: result.secure_url },
             { new: true }
-        ).select('-password -refreshToken');
+        ).select('-twoFactor.secretEnc -twoFactor.recoveryCodesHash -password -refreshToken -resetPasswordToken -verifyEmailToken');
 
         res.json({ msg: 'Profile picture updated', profilePic: result.secure_url, user });
     } catch (err) {
@@ -345,20 +347,18 @@ export const uploadProfilePic = async (req, res, next) => {
 // Google OAuth callback
 export const googleAuth = async (req, res) => {
     const user = req.user; // attached by passport
-    const accessToken = signAccessToken(user);
+    if (user.suspended) return res.status(403).json({ msg: 'Account suspended' });
+    const frontend = (process.env.FRONTEND_URL || 'http://localhost:5174').split(',')[0].trim();
+    if (user.twoFactor?.enabled) {
+        // Resume through the existing credential + OTP flow.
+        return res.redirect(frontend + '/login');
+    }
     const refreshToken = signRefreshToken(user);
     await saveRefreshToken(User, user.id, refreshToken);
-
-    const userQuery = encodeURIComponent(JSON.stringify({
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        profilePic: user.profilePic,
-    }));
-
-    res.redirect(
-        `${process.env.FRONTEND_URL}/login/success?token=${accessToken}&refreshToken=${refreshToken}&user=${userQuery}`
-    );
+    setAccessTokenCookie(res, signAccessToken(user));
+    setRefreshTokenCookieWide(res, refreshToken);
+    setCSRFCookie(res);
+    return res.redirect(frontend + '/login/success');
 };
 
 // ---------- Download my data ---------- (todo item 13)
@@ -369,17 +369,16 @@ export const downloadMyData = async (req, res, next) => {
 
         // Gather all data belonging to this user across collections
         const [user, memberships, meals, guestMeals, expenses, moneyTx, sessions, auditEvents, inboxNotes] = await Promise.all([
-            User.findById(userId).select('-password -refreshToken -resetPasswordToken -verifyEmailToken').lean(),
+            User.findById(userId).select('-twoFactor.secretEnc -twoFactor.recoveryCodesHash -password -refreshToken -resetPasswordToken -verifyEmailToken').lean(),
             Membership.find({ user: userId }).lean(),
             Meal.find({ userId }).lean(),
             GuestMeal.find({ hostUserId: userId }).lean(),
             Expense.find({ createdBy: userId }).lean(),
-            MoneyTransaction.find({ submitter: userId }).lean(),
-            // Sessions - if accessible; skip if model not imported
-            [],
+            MoneyTransaction.find({ submittedBy: userId }).lean(),
+            listSessions({ userId }),
             AuditEvent.find({ actorId: userId }).sort({ createdAt: -1 }).limit(200).lean(),
             Note.find({ authorUserId: userId }).sort({ createdAt: -1 }).limit(100).lean(),
-        ]).catch(() => [null, [], [], [], [], [], [], [], []]);
+        ]);
 
         const exportData = {
             exportedAt: new Date().toISOString(),

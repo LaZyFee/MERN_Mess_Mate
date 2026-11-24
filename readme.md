@@ -1,5 +1,7 @@
 # MealMate — Backend Documentation & Development Plan
 
+[API integration reference](Server/API_DOCUMENTATION.md) · [Audit checklist and recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) · [Frontend blueprint](Client/FRONTEND_BUILD_PROMPT.md)
+
 *MealMate is a MERN-stack web application that digitizes "mess" meal & cost tracking — with a real double-entry ledger, versioned month-end statements, and audited financial workflows.*
 
 > 📄 **Companion doc:** [`plan.md`](./plan.md) — deep per-file documentation of every model, controller, service, util, route, middleware and validation schema in the `Server/` codebase.
@@ -198,7 +200,7 @@ Server/
 │   ├── migrateInviteCodes.js # B3.1: hashes legacy MessGroup.code into InviteCode collection
 │   ├── migrateLegacyData.js # idempotent legacy→V2: PolicyVersion, Memberships, RecurringRules, expense normalization, 4-slot meal migration
 │   └── smoke/              # b0.sh, b2.sh, b3.sh, b4.sh, live-infra-gates.sh
-├── tests/                  # node --test suite: 19 suites / 111 passing (see §9)
+├── tests/                  # node --test suite: 112 unit tests passing (see §9)
 │   └── integration/        # supertest tests needing live server: b0, cookies, routines, support
 ├── config/
 │   ├── db.js               # Mongoose connection from MONGO_URI
@@ -323,236 +325,9 @@ All money amounts are **integer poisha** (100 poisha = ৳1). Full field-level d
 
 ---
 
-## 5. API Reference (implemented)
+## 5. API reference
 
-All routes prefixed with `/api`. Auth via the `x-auth-token` header (access JWT). V2 group routes resolve roles from the effective-dated `Membership` via `requireGroupRoleV2`. Financial mutations accept an `Idempotency-Key` header. Cursor-paginated lists return `{items, nextCursor, hasMore, count}`.
-
-### 5.1 Authentication & Sessions — `/api/users`, `/api/sessions`
-
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| POST | `/users/register` | — | Register → token pair (+ HttpOnly refresh cookie). Verification email if SMTP configured. |
-| POST | `/users/login` | — | Login → token pair. |
-| POST | `/users/refresh` | — | Rotation: cookie-or-body refresh token → new pair. Reuse revokes the family. |
-| POST | `/users/logout` | — | Invalidates stored token, clears cookie. |
-| GET/PUT | `/users/profile` | ✅ | View/update profile (incl. optional WhatsApp number). |
-| POST | `/users/change-password` | ✅ | `{ currentPassword, newPassword }` |
-| POST | `/users/forgot-password` / `/reset-password` | — | Reset flow (15-min token). |
-| GET | `/users/verify-email/:token` | — | Marks account verified. |
-| POST | `/users/profile-pic` | ✅ | multipart `image` → Cloudinary. |
-| GET | `/users/auth/google(/callback)` | — | Google OAuth. |
-| GET | `/sessions/users/sessions` | ✅ | Active device list. |
-| DELETE | `/sessions/users/sessions/:familyId` | ✅ | Revoke one device. |
-| DELETE | `/sessions/users/sessions` | ✅ | Revoke all other devices. |
-| GET | `/users/groups/:groupId/members` | ✅ member | Co-member directory (username/profilePic/whatsapp only). **404 unless you share the group.** |
-
-### 5.2 Mess Groups — `/api/messgroups`
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| POST | `/create` | user | Creates group + join code; auto-creates owner Membership, PolicyVersion v1, seeds 14 Bangladesh preset categories. |
-| POST | `/join-by-code` / `/join-request/:groupId` | user | Join requests — **the only way into a group** (no browsing/discovery). |
-| GET | `/my-groups`, `/:groupId` | user/member | Own groups; group detail is **404-masked for non-members**. |
-| POST | `/approve/:groupId/:userId`, `/add-member/:groupId` | admin | Membership approvals. |
-| DELETE | `/remove-member/:groupId/:userId` | admin/self | Kick / leave. |
-| GET | `/code/:groupId`, POST `/regenerate-code/:groupId` | admin | Join code management — `GET` also returns a copyable `inviteLink`. |
-| POST | `/invite/:groupId` | admin | Email invite. |
-| POST/GET/PUT/DELETE | `/categories/:groupId(…)`, `/categories/:groupId/seed` | admin/member | Category CRUD + preset re-seed. |
-| POST/GET/DELETE | `/extras/:groupId(…)` | admin/member | Legacy fixed extras. |
-| PUT/GET | `/payment-note/:groupId/:userId/:month` | admin/self | Legacy payment notes. |
-| GET | `/entries/:groupId`, `/calculate/:groupId`, `/export/:groupId`, `/pdf/:groupId` | member | Legacy totals + Excel/PDF exports. |
-
-### 5.3 Meals & Guests — `/api/meals`
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| POST | `/:groupId` | member | Upsert own slot entry `{ date?, slots: { lunch: { state, portionSubunits? }, … } }` — period-open enforced, revision bumped. |
-| PUT/DELETE | `/entry/:id` | owner/admin | Edit/delete own entry. |
-| GET | `/:groupId`, `/:groupId/:month` | member | Filtered lists (`?month=` XOR `?from=&to=`, `&userId=`). |
-| POST/GET | `/:groupId/guests` | member | Record/list guest meals (`individual` or `universal` pool). |
-| POST | `/:groupId/bulk/preview` → `/bulk/apply` | admin | Dry-run change set, then apply (up to 500 entries). |
-| POST | `/:groupId/absence/preview` → `/absence/apply` | admin | Mark a date window `confirmed_zero` (source: absence), ≤366 days. |
-
-### 5.4 Expenses — `/api/expenses`
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| POST | `/groups/:groupId/expenses` | member | Create draft (multi-line poisha amounts). Returns `duplicateWarnings[]` when suspicious. Idempotent. |
-| POST | `/…/:expenseId/submit` | member | draft → submitted. |
-| POST | `/…/:expenseId/approve` | treasurer | Builds allocations, freezes `Allocation`, posts Journal — in one transaction. Idempotent. |
-| POST | `/…/:expenseId/reject` / `/reverse` | treasurer | Reject, or reverse via reversal row + mirrored journal. Idempotent. |
-| GET | `/groups/:groupId/expenses` | member | Cursor-paginated list (`?status=&costPeriod=&payable=&cursor=&limit=`). |
-| POST/PUT/GET/DELETE | `/:groupId`, `/entry/:id` | member/payer | Legacy simple expense CRUD. |
-
-### 5.5 Money & Funds — `/api/money`
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET/POST | `/groups/:groupId/money` | member | List (cursor-paginated) / submit transaction. Idempotent. |
-| POST | `/…/:txId/confirm` | treasurer | Confirm → balanced Journal posted per kind, in a transaction. Idempotent. |
-| POST | `/…/:txId/reject` / `/reverse` | treasurer | Reject / linked reversal. |
-| GET | `/groups/:groupId/memberships/:membershipId/balance` | member | Ledger-derived member balance. |
-| GET/POST | `/groups/:groupId/funds` | member/treasurer | Fund accounts (ledger balances) / create. |
-| POST | `/groups/:groupId/funds/:fundId/custodian` | owner | Custody handover. |
-
-### 5.6 Memberships, Policies, Periods, Statements
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET | `/memberships/groups/:groupId/memberships(/active,/month/:month)` | member | Membership history/eligibility. |
-| POST/PATCH | `/memberships/groups/:groupId/memberships(…)` | manager | Create (member or placeholder) / effective-dated update / `…/:id/depart`. |
-| GET/POST | `/policies/groups/:groupId/policies` | member/owner | Policy version history / publish new immutable version. |
-| GET | `/periods/groups/:groupId/periods(/:month,/:month/preview,/:month/checklist)` | member/treasurer | Period state, no-persist statement preview, pre-close checklist. |
-| POST | `/periods/…/:month/begin-review` / `return-to-open` / `correct` | manager | State-machine transitions + correction audit marker. |
-| GET | `/statements/groups/:groupId/statements(/id/:statementId,/:month)` | member | Statement history & versions. |
-| POST | `/statements/groups/:groupId/statements/:month/finalize` | owner | Version N+1 with supersession; 409 on revision conflict; 422 listing unresolved `unknown` meal slots. Idempotent. |
-
-### 5.7 Recurring, Reconciliation, Disputes, Assets
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET/POST/PUT | `/recurring/groups/:groupId/recurring(…)` | member/treasurer | Recurring rule CRUD. |
-| POST | `/recurring/…/:ruleId/generate`, `/generate-all` | treasurer | Generate expense drafts for a cost period (idempotent). |
-| GET/POST | `/reconciliation/groups/:groupId/reconciliations(/equation)` | member/treasurer | Create/list reconciliations; accounting-equation health. `/:recId/resolve` resolves variance. |
-| GET/POST | `/disputes/groups/:groupId/disputes(…)` | member/manager | Open/list/respond/resolve disputes (link correction journal). |
-| GET/POST | `/assets/groups/:groupId(…)`, `/:assetId/refund` | member/treasurer | Deposit/asset tracking + refunds. |
-| POST/GET | `/attachments/groups/:groupId/upload`, `/:attachmentId` | member | Verified receipt upload / authenticated download. |
-
-### 5.8 Notifications, Stats, Legacy Summary
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET/POST | `/notifications/whatsapp/webhook` | **public** | Meta webhook verify (hub challenge) + HMAC-SHA256-verified delivery status callbacks. |
-| PUT | `/notifications/whatsapp/consent` | ✅ | Recipient opt-in/out toggle. |
-| GET | `/notifications/groups/:groupId/notifications(/:messageId)` | member | Outbox inspection. |
-| POST | `/notifications/…/:messageId/resend`, `/manual-share` | manager | Resend / wa.me manual-share links. |
-| GET | `/stats/groups/:groupId/dashboard` | member | **V2 ledger dashboard**: period state, expense breakdown by status, money totals, fund balances, settlement figures. |
-| GET | `/stats/:groupId` | member | Legacy chart aggregates (`?granularity=month|year&year=&month=&userId=`). |
-| GET | `/summary/:groupId/:month` | member | **Legacy** float summary (deprecated — prefer statement preview). |
-| POST | `/summary/finalize/…` | admin | Legacy finalize — now returns 410/409 directing to `/api/statements/:month/finalize`. |
-| GET | `/summary/whatsapp/:groupId/:month` | admin | Legacy wa.me link generation. |
-
-### 5.9 Hidden Admin Control Plane — `/api/admin` (never linked in any user surface)
-
-Guard: `ADMIN_EMAILS` env allowlist (+ optional `X-Admin-Key` header). Non-admins receive the **generic global 404** — the panel's existence is not confirmed. All access & mutations audit-logged.
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| GET | `/admin/overview` | Totals (users, groups, active memberships, statements) + traffic (signups 24h/7d, verified, audit volume). |
-| GET | `/admin/traffic?days=30` | Daily signup & activity buckets (aggregations). |
-| GET | `/admin/audit?action=&groupId=&limit=` | Latest audit events, filterable. |
-| GET | `/admin/users?q=&cursor=&limit=` | Global user directory (username/email/phone search, cursor pagination). |
-| GET | `/admin/users/:userId` | Full profile + every membership incl. group names/codes. |
-| PATCH | `/admin/users/:userId` | `{isVerified?, suspended?}` — suspension kills login/refresh/all requests. |
-| GET | `/admin/groups?q=&limit=` | **All** groups + active member counts + admins (only place group enumeration exists). |
-| GET | `/admin/groups/:groupId` | Deep inspection: group + all memberships populated. |
-| DELETE | `/admin/groups/:groupId` | Archive a group (audit-logged, reason in body). |
-
-### 5.10 Inbox — `/api/inbox` (B0)
-
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| GET | `/` | ✅ | List notifications (`?unread=1&cursor=&limit=`). |
-| GET | `/unread-count` | ✅ | Count of unread notifications. |
-| POST | `/read` | ✅ | Mark `{ids[]}` or `{all:true}` as read. |
-| GET/PUT | `/preferences` | ✅ | Get/update per-type notification preferences + quiet hours. |
-
-### 5.11 Support Desk — `/api/support` (B1, user side)
-
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| POST | `/actions/:token` | public | Redeem single-use action token (resolve/close/rate). Neutral responses. |
-| POST | `/appeal` | public | Suspended-user appeal (1/day/IP, CAPTCHA hook). Neutral 200. |
-| POST | `/tickets` | ✅ | Create ticket (idempotent; 3 open / 5 per day limits). |
-| GET | `/tickets` | ✅ | My tickets (cursor-paginated). |
-| GET | `/tickets/:ticketId` | ✅ | Thread (internal notes filtered) + `permissions.canComment` + reason. |
-| POST | `/tickets/:ticketId/messages` | ✅ | Comment (rate-limited 10/min, turn-locked). |
-| POST | `/tickets/:ticketId/resolve\|close\|reopen\|rate` | ✅ | State transitions (optimistic revision guard). |
-
-### 5.12 Support Admin — `/api/admin/support` (B1, hidden behind `requirePlatformAdmin` + `requireAdminAMR`)
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| GET | `/tickets` | Work queue (status/priority/assignee/category/overdue filters, cursor). |
-| GET | `/tickets/:ticketId` | Full thread incl. internal notes + user context. |
-| POST | `/tickets/:ticketId/reply` | Public reply (transitions to `answered`, sets `firstAdminReplyAt`). |
-| POST | `/tickets/:ticketId/internal-note` | Admin-only note (does not change status). |
-| POST | `/tickets/:ticketId/assign` | Assign to an admin. |
-| PATCH | `/tickets/:ticketId` | Set priority/category/tags (SLA recomputed on priority change). |
-| POST | `/tickets/:ticketId/resolve\|close\|reopen` | State transitions (reason required for admin reopen). |
-| POST | `/tickets/:ticketId/messages/:messageId/redact` | Redact message body → `[removed]` (audit-logged). |
-| GET | `/stats` | Open/awaiting/overdue counts, median first-response time, CSAT. |
-| GET/POST/PUT/DELETE | `/canned-replies` | Admin snippets CRUD. |
-
-### 5.13 Routine & Notice Board — `/api/routines` (B2)
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET/POST | `/groups/:groupId/rosters` | member / manager | List / create roster (draft). |
-| GET/PATCH | `/groups/:groupId/rosters/:rosterId` | member / manager | Get / edit roster (bumps revision). |
-| POST | `/groups/:groupId/rosters/:rosterId/publish` | manager | Publish + generate duty horizon. |
-| POST | `/groups/:groupId/rosters/:rosterId/extend-horizon` | manager | Extend generated days (≤90). |
-| GET | `/groups/:groupId/duties` | member | Calendar feed (`?from=&to=&membershipId=&status=&rosterId=`). |
-| POST | `/groups/:groupId/duties/:assignmentId/done` | assignee/manager | Mark done `{doneNote?}`. |
-| POST | `/groups/:groupId/duties/:assignmentId/reassign` | manager | Reassign to `{toMembershipId}`. |
-| POST | `/groups/:groupId/swaps` | assignee | Create swap request `{toMembershipId?}`. |
-| POST | `/groups/:groupId/swaps/:swapId/respond` | target | Accept/decline swap. |
-| GET/POST | `/groups/:groupId/menu` | member / manager | Weekly menu plan (template or concrete week). |
-| GET/POST/PATCH/DELETE | `/groups/:groupId/notes/…` | member / manager | Board notes + audience targeting. |
-| POST | `/groups/:groupId/notes/:noteId/ack` | member | Acknowledge/read receipt. |
-| POST | `/groups/:groupId/notes/:noteId/tasks/:taskId/claim\|done` | member | Claim or complete handover task. |
-| GET | `/groups/:groupId/board/today` | member | Today's duties + menu + pinned notes + active handovers. |
-| GET | `/groups/:groupId/menu/bazar-suggestions` | member | Aggregated shopping list from menu plan. |
-| GET | `/groups/:groupId/duties/fairness` | member | Duty done/missed counts per member per month. |
-| GET | `/groups/:groupId/bazar-spend-rotation` | member | Members sorted by cumulative bazar spend (fair_amount rotation). |
-| POST | `/groups/:groupId/emergency-broadcast` | owner/manager | Alert note that bypasses quiet hours. |
-
-### 5.14 Shopping List — `/api/shopping-list` (B2)
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET | `/groups/:groupId` | member | Get/create open list. |
-| POST | `/groups/:groupId/items` | member | Add item. |
-| PATCH/DELETE | `/groups/:groupId/items/:itemId` | member | Check/uncheck or remove item. |
-| POST | `/groups/:groupId/to-expense` | member | Convert checked items to expense draft (Bazar category). |
-| GET | `/groups/:groupId/history` | member | Past lists. |
-
-### 5.15 Kitchen Inventory — `/api/kitchen-inventory` (B2)
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET/POST | `/groups/:groupId` | member | List / create staple item (stock, reorder threshold, consumption/day). |
-| PATCH/DELETE | `/groups/:groupId/:itemId` | member | Update / archive item. |
-| POST | `/groups/:groupId/:itemId/refill` | member | Record refill (quantity, unit, cost, note). |
-
-### 5.16 Polls — `/api/polls` (B2)
-
-| Method | Endpoint | Role | Description |
-| --- | --- | --- | --- |
-| GET/POST | `/groups/:groupId` | member | List / create poll (2–6 options, expiresAt). |
-| POST | `/:pollId/vote` | member | Vote (one vote per user, can change). |
-| POST | `/:pollId/close` | member/manager+ | Close poll (creator or manager+). |
-| GET | `/:pollId/results` | member | Results with percentages. |
-
-### 5.17 TOTP 2FA — `/api/users/2fa` + `/api/users/login/2fa*` (B3.2)
-
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| POST | `/users/2fa/setup` | ✅ | Generate TOTP secret + QR URL. |
-| POST | `/users/2fa/verify` | ✅ | Verify code + enable 2FA (returns recovery codes). |
-| POST | `/users/2fa/disable` | ✅ | Disable 2FA (password + code required). |
-| POST | `/users/login/2fa-challenge` | public | Password validation → challenge token (if 2FA enabled). |
-| POST | `/users/login/2fa` | public | Verify challenge code → token pair (`amr: ['pwd','otp']`). |
-
-### 5.18 Invite Codes — `/api/invite` (B3.1)
-
-| Method | Endpoint | Auth | Description |
-| --- | --- | --- | --- |
-| POST | `/join-by-code` | ✅ | Join group by hashed code (rate-limited, failure lockout). |
-| POST | `/codes` | ✅ | Create/regenerate invite code (admin; plaintext shown once). |
-| GET | `/codes/:groupId` | ✅ | Get active code metadata (prefix/expiry/usesLeft — no plaintext). |
-
----
+Use the mounted paths, request schemas, response branches and workflow notes in the [API integration reference](Server/API_DOCUMENTATION.md). Group-admin actions and effective-dated membership actions use separate guards. Web clients request cookie transport using X-Client: web.
 
 ## 6. How the Money Works
 
@@ -614,7 +389,7 @@ After finalize, the **outbox worker** delivers per-member bills: email (SMTP) an
 
 ### 8.1 Realtime — Socket.IO
 
-- Handshake requires a valid access token (`socket.handshake.auth.token` or `?token=`)
+- Socket.IO verifies mm_at and authorizes group joins.
 - Client emits `join-group` / `leave-group` with a groupId (ObjectId-validated)
 - Controllers emit updates to `group:<id>` rooms; `io` is exposed to controllers via `app.set('io', io)`
 
@@ -655,8 +430,8 @@ Also: `$match`-first aggregation stages, `.lean()` on read-heavy lists, month-st
 1. **Zod validation everywhere** — strict schemas for body, params and queries (ObjectId regex, poisha integer checks, strong password rules: 8+ chars with upper/lower/digit).
 2. **NoSQL injection defense** — `$`/`.` keys stripped from body/params before validation (Express 5-compatible; `express-mongo-sanitize` not needed).
 3. **5-tier RBAC** — `requireGroupRoleV2` resolves owner/manager/treasurer/auditor/member from active Membership intervals (falls back to legacy group admin → owner). Self-approval requires a reason; last owner cannot leave without transfer; role changes are audit-logged.
-4. **Refresh-token rotation + families** — tokens stored as sha256 hashes; per-device `Session` rows; replaying a rotated token revokes the entire family.
-5. **HttpOnly cookies + CSRF** — refresh token delivered in HttpOnly/SameSite cookie (`Path=/api/users`); global CSRF middleware checks Origin for cookie-carried mutations (Bearer clients bypass).
+4. Login stores one refresh hash per User. Device-family APIs use separate Session rows.
+5. Cookie mutations require the readable mm_csrf value in x-csrf-token.
 6. **Idempotency protection** — `Idempotency-Key` header on financial mutations; key reuse with a different body → 409; replays return cached responses.
 7. **Rate limiting** — 50 req/15min auth; 300 req/15min general.
 8. **Strict CORS allowlist** — `FRONTEND_URL` origins only, credentials-aware, explicit methods.
@@ -680,7 +455,11 @@ Also: `$match`-first aggregation stages, `.lean()` on read-heavy lists, month-st
 
 ## 10. Testing
 
-`npm test` → `node --test tests/*.test.js` — **19 suites / 111 passing**:
+From Server, run npm ci, npm test and npm run test:integration. Integration fixtures use disposable databases. The financial suite starts MongoMemoryReplSet and checks rollback, a fractional-portion preview and concurrent duplicate journal posting. The other integration suites use standalone MongoMemoryServer. First run requires access to a matching mongod binary or a populated mongodb-memory-server cache. No provider credentials are required for these fixtures. On production infrastructure use a replica set or mongos, HTTPS and the configured frontend origin. Start Express with node index.js.
+
+
+
+`npm test` → `node --test tests/*.test.js` — **112 unit tests passing**:
 
 - `goldenCalculation.test.js` — §8 golden end-to-end calculation
 - `moneyPrecision.test.js` — integer-poisha parsing/formatting/rounding (×2)
@@ -760,9 +539,9 @@ Remaining (need live infrastructure): replica-set race drill, restore drill, loa
 
 ### Phase: Frontend Integration (next)
 
-- [ ] Axios client with access-token header + auto-refresh on 401 (cookie-aware retry queue)
+- [ ] Verify BFF cookie-only refresh on session expiry.
 - [ ] Socket.IO client: `join-group` per open group page
-- [ ] Auth pages consuming token-pair + cookie flow (+ WhatsApp consent toggle, session manager)
+- [ ] Verify the deployed browser login, OTP and logout flows.
 - [ ] Meal slot-state entry UI (unknown/zero/consumed with portion picker)
 - [ ] Expense draft builder (multi-line, split modes, payers) + approval inbox
 - [ ] Statement viewer (versions, supersession, per-member items) + close-workflow screens
@@ -773,13 +552,13 @@ Remaining (need live infrastructure): replica-set race drill, restore drill, loa
 ### Phase: Backend Cleanup (Priority 4 items)
 
 - [ ] Remove unused deps: `bcryptjs`, `pdfmake`, `express-validator`, `express-mongo-sanitize`
-- [ ] Deprecate legacy routes (`/api/messgroups/entries|calculate`, `/api/summary`) with `Deprecation` headers
+- [x] Deprecate legacy routes (`/api/messgroups/entries|calculate`, `/api/summary`) with `Deprecation` headers
 - [ ] Extend `scripts/migrateLegacyData.js` to rewrite legacy 2-slot float Meal rows into slot-state form
-- [ ] Move Google OAuth session off MemoryStore (Redis/Mongo-backed store)
+- [x] OAuth handshake sessions use MongoSessionStore.
 
 ### Phase: Production Hardening
 
-- [ ] Cloud object storage (S3/R2) for receipts: signed upload/download URLs + AV-scan hook (`Attachment.scanStatus: pending` already modeled)
+- [ ] Verify authenticated Cloudinary delivery and implement quarantine for pending scans.
 - [ ] MongoDB replica set in production to activate real `withTransaction()` atomicity
 - [ ] Configure real SMTP credentials; deploy behind HTTPS; `NODE_ENV=production`
 - [ ] Rotate all secrets before deploying
@@ -838,17 +617,17 @@ MAIL_FROM=MealMate <no-reply@mealmate.app>
 WHATSAPP_TOKEN=          # optional — WhatsApp Cloud API template/direct send
 WHATSAPP_PHONE_ID=       # optional — your WA business phone number id
 WHATSAPP_TEMPLATE_NAME=  # optional — pre-approved template (default: statement_summary)
-WHATSAPP_APP_SECRET=     # optional — webhook HMAC verification
+WHATSAPP_APP_SECRET=     # required to accept inbound delivery events
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=  # required for provider subscription handshake
 ADMIN_EMAILS=you@example.com,other@…   # platform-admin allowlist (comma-separated)
 ADMIN_PANEL_KEY=...      # optional second factor: X-Admin-Key header for /api/admin
-TOTP_ENCRYPTION_KEY=...  # 32-byte base64 key for TOTP secret encryption (B3.2)
-INVITE_DEFAULT_TTL_DAYS=7   # default invite code expiry (B3.1)
+TOTP_ENCRYPTION_KEY=...  # high-entropy secret, hashed to an AES-256 key
+INVITE_PEPPER=...        # secret for invitation code hashes
+MONGO_REPLICA_SET=       # optional name when deployment requires it
+CAPTCHA_PROVIDER=off     # appeal verifier is a stub
 SUPPORT_STRICT_TURNS=true   # lock user comments until admin replies after every message (B1)
-SUPPORT_SLA_NORMAL_HOURS=24 # normal ticket first-response SLA (B1)
-SUPPORT_SLA_URGENT_HOURS=4  # urgent ticket first-response SLA (B1)
-SUPPORT_AUTOCLOSE_HOURS=72  # auto-close resolved tickets after this many hours (B1)
-ENABLE_SCHEDULER=true       # true only on the worker instance (cron)
-COOKIE_DOMAIN=              # optional, production cookie domain
+ENABLE_SCHEDULER=true       # defaults on; explicitly set false on instances that should skip scheduling
+NODE_ENV=production         # production Secure cookie and transport settings
 ```
 
 
@@ -913,14 +692,17 @@ One `InboxNotification` collection (TTL 90 days) powers the in-app bell for **us
 
 Decision: move the client to **Next.js App Router** acting as a **BFF** — server middleware for route protection, protected server layouts, SSR for first-load data, HttpOnly cookies only (no `localStorage`), and a same-origin `/api/bff/*` proxy so the browser never learns the backend URL or any token. Browser DevTools will still show requests to your own origin; real security stays on the backend. Backend changes required (cookie access token, `X-Client: web` handling, CSRF double-submit, cookie-authenticated sockets): `plan.md` §19.1. Frontend rules: `FRONTEND_BUILD_PROMPT.md` §8.
 
-The backend is already cookie-ready: `mm_at` HttpOnly access cookie, `mm_csrf` double-submit CSRF, Socket.IO authenticates from cookie (query-string tokens rejected), and `X-Client: web` triggers cookie-only token responses. The frontend (Vite + React SPA in `Client/`) can be migrated to Next.js App Router when ready.
+The App Router migration is in progress. Verify authentication through the deployed BFF.
 
-## 21. Updated Roadmap
+## 21. Delivery status
 
-- [x] **B0** Inbox + JobLock/JobRun + scheduler audit fixes + notification preferences — implemented (111 unit tests pass)
-- [x] **B1** Support Desk (rules matrix tests, admin alerts, action tokens, appeals) — implemented
-- [x] **B2** Routine & Board (rosters, duties, swaps, menu, notes/hand-overs, reminders, shopping list, kitchen inventory, polls) — implemented
-- [x] **B3** Security hardening (InviteCode, 2FA, SecurityEvent, CSP, retention, runbook) — implemented
-- [x] **B4** Cookie-only auth on the backend — implemented (`mm_at` cookie, `mm_csrf` CSRF, cookie-authenticated Socket.IO)
-- [ ] **B5** Next.js BFF frontend (foundation, then Support, Board, Inbox UI) — pending
-- [ ] **B6** Extras: cook headcount, shared shopping list (done), fairness board (done), inventory tracker (done), polls (done), weekly digest (done) — backend done, frontend pending
+| Phase | Status | Evidence and remaining gate |
+|---|---|---|
+| B0 inbox and jobs | IMPLEMENTED | Inbox routes, preferences, locks and job-run models exist. Verify deployed delivery separately. |
+| B1 support | PARTIALLY IMPLEMENTED | User and hidden admin APIs, transitions, action tokens and SLA jobs exist. Integration covers ticket transitions. Live provider delivery and CAPTCHA remain open. |
+| B2 group operations | PARTIALLY IMPLEMENTED | Rosters, duties, notes, shopping, kitchen and polls are mounted. Permission and concurrency checks remain. |
+| B3 security | PARTIALLY IMPLEMENTED | Hashed invitations, OTP and AMR exist. Session-family integration and legacy invite retirement remain open. |
+| B4 browser authentication | PARTIALLY IMPLEMENTED | Express cookie login, CSRF and logout pass integration tests. Deployed OAuth and BFF refresh need verification. |
+| B5 frontend | PARTIALLY IMPLEMENTED | Client already contains Next.js, App Router pages and a BFF. The browser refresh path still tries to read an HttpOnly cookie named mm_rt. |
+
+IMPLEMENTED denotes source coverage. PLANNED means future work. DEPRECATED marks replaced interfaces. NEEDS VERIFICATION identifies operational claims without an end-to-end check.

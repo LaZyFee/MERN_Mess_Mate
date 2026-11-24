@@ -31,7 +31,7 @@ export const validate = (schema, source = 'body') => (req, res, next) => {
     // Replace with parsed/coerced/cleaned values
     // Express 5: req.query is getter-only → for query, stash parsed result on req.validated
     if (source === 'body') req.body = result.data;
-    else if (source === 'params') req.params = result.data;
+    else if (source === 'params') Object.assign(req.params, result.data);
     else if (source === 'query') req.validated = { ...(req.validated || {}), query: result.data };
     next();
 };

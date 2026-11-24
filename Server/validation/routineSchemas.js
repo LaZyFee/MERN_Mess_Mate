@@ -15,7 +15,7 @@ export const rosterCreateSchema = z.object({
     rotation: z.object({
         mode: z.enum(['round_robin', 'weekly_template', 'fair', 'manual']),
         memberOrder: z.array(objectId).optional(),
-        weeklyTemplate: z.record(z.array(objectId)).optional(),
+        weeklyTemplate: z.record(z.string(), z.array(objectId)).optional(),
         daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
     }),
     skipWhenAbsent: z.boolean().optional(),
@@ -29,7 +29,7 @@ export const rosterUpdateSchema = z.object({
     rotation: z.object({
         mode: z.enum(['round_robin', 'weekly_template', 'fair', 'manual']).optional(),
         memberOrder: z.array(objectId).optional(),
-        weeklyTemplate: z.record(z.array(objectId)).optional(),
+        weeklyTemplate: z.record(z.string(), z.array(objectId)).optional(),
         daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
     }).optional(),
     skipWhenAbsent: z.boolean().optional(),

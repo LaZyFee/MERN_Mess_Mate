@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 // CSRF protection: double-submit cookie + header on top of existing Origin check (Doc §15 / §19.1).
 // Cookie-authenticated mutations require x-csrf-token === mm_csrf cookie value.
 // Bearer-token / direct API clients bypass.
@@ -14,17 +15,6 @@ const getCookie = (req, name) => {
 export const csrfProtection = (req, res, next) => {
     // Safe HTTP methods don't modify state
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-        return next();
-    }
-
-    // Direct API clients sending Bearer token bypass browser CSRF
-    const authHeader = req.headers.authorization || '';
-    if (authHeader.startsWith('Bearer ')) {
-        return next();
-    }
-
-    // x-requested-with also marks a non-browser client
-    if (req.headers['x-requested-with']) {
         return next();
     }
 
@@ -55,17 +45,16 @@ export const csrfProtection = (req, res, next) => {
 
 // Helper for controllers to set the mm_csrf cookie on login/register responses (X-Client: web)
 export const setCSRFCookie = (res) => {
-    const token = require('crypto').randomBytes(16).toString('hex');
+    const token = randomBytes(16).toString('hex');
     const isProd = process.env.NODE_ENV === 'production';
     const sameSite = isProd ? 'Strict' : 'Lax';
     const flags = [
         `${CSRF_COOKIE}=${token}`,
-        'HttpOnly',
         'Path=/',
         `SameSite=${sameSite}`,
     ];
     if (isProd) flags.push('Secure');
-    res.setHeader('Set-Cookie', flags.join('; '));
+    res.append('Set-Cookie', flags.join('; '));
     return token;
 };
 

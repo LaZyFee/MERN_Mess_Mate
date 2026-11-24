@@ -28,7 +28,7 @@ export const idempotent = (operation) => async (req, res, next) => {
                 return res.status(409).json({ msg: 'Idempotency key reused with a different request body' });
             }
             if (existing.resultBody) {
-                return res.status(200).json({ ...existing.resultBody, __idempotentReplay: true });
+                return res.status(existing.resultType >= 400 ? existing.resultType : 200).json({ ...existing.resultBody, __idempotentReplay: true });
             }
             return res.status(409).json({ msg: 'Request with this key is still processing' });
         }

@@ -35,7 +35,7 @@ const buildWeights = async ({ groupId, line, category, memberships, serviceFrom,
                 const w = typeof meal.totalMeals === 'number'
                     ? meal.totalMeals
                     : ['breakfast', 'lunch', 'snacks', 'dinner'].reduce((sum, slot) => sum + (meal[slot]?.state === 'consumed' ? (meal[slot].portionSubunits || 0) / 1000 : 0), 0);
-                perUser.set(String(meal.userId), (perUser.get(String(meal.userId)) || 0) + w);
+                perUser.set(String(meal.userId), (perUser.get(String(meal.userId)) || 0) + Math.round(w * 1000));
             }
             // Meal consumption belongs to users; map to memberships (fallback 0).
             const weights = inPool.map(m => (m.user ? (perUser.get(String(m.user)) || 0) : 0));
@@ -115,7 +115,7 @@ const buildWeights = async ({ groupId, line, category, memberships, serviceFrom,
  */
 export const allocateLine = async ({
     groupId, expense, line = null, lineTotal, category, memberships,
-    serviceFrom, serviceTo, userId, reversalOf = null,
+    serviceFrom, serviceTo, userId, reversalOf = null, persist = true, session = null,
 }) => {
     const { memberships: pool, weights, mode, exactTotal } = await buildWeights({
         groupId, line, category, memberships, serviceFrom, serviceTo,
@@ -129,8 +129,11 @@ export const allocateLine = async ({
     }
 
     const charges = allocateByWeights(lineTotal, weights);
+    if (sumPoisha(charges) !== lineTotal) {
+        throw Object.assign(new Error('Allocation charges must sum to the expense line total'), { status: 422 });
+    }
 
-    return Allocation.create({
+    const allocation = new Allocation({
         groupId,
         expenseId: expense._id,
         lineId: line ? line._id : null,
@@ -140,10 +143,11 @@ export const allocateLine = async ({
         reversalOf,
         createdBy: userId,
     });
+    return persist ? allocation.save({ session }) : allocation;
 };
 
 /** Allocate every line of an approved expense (or the legacy aggregate amount). */
-export const allocateExpense = async ({ groupId, expense, memberships, userId }) => {
+export const allocateExpense = async ({ groupId, expense, memberships, userId, persist = true, session = null }) => {
     const serviceFrom = expense.serviceStart || new Date(expense.date);
     const serviceTo = expense.serviceEnd || new Date(new Date(expense.date).getTime() + 86400000);
 
@@ -153,7 +157,7 @@ export const allocateExpense = async ({ groupId, expense, memberships, userId })
             const category = await import('../models/ExpenseCategory.js').then(m => m.default.findById(line.categoryId).lean());
             allocations.push(await allocateLine({
                 groupId, expense, line, lineTotal: line.amount, category,
-                memberships, serviceFrom, serviceTo, userId,
+                memberships, serviceFrom, serviceTo, userId, persist, session,
             }));
         }
     } else {
@@ -162,7 +166,7 @@ export const allocateExpense = async ({ groupId, expense, memberships, userId })
             : null;
         allocations.push(await allocateLine({
             groupId, expense, line: null, lineTotal: expense.amount, category,
-            memberships, serviceFrom, serviceTo, userId,
+            memberships, serviceFrom, serviceTo, userId, persist, session,
         }));
     }
 

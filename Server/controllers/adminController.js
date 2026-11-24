@@ -144,7 +144,7 @@ export const adminListUsers = async (req, res, next) => {
 export const adminGetUser = async (req, res, next) => {
     try {
         const user = await User.findById(req.params.userId)
-            .select('-password -refreshToken -resetPasswordToken -verifyEmailToken').lean();
+            .select('-twoFactor.secretEnc -twoFactor.recoveryCodesHash -password -refreshToken -resetPasswordToken -verifyEmailToken').lean();
         if (!user) return res.status(404).json({ msg: 'Not found' });
         await alog(req, 'admin.users.view', { targetId: user._id });
         const memberships = await Membership.find({ user: user._id })
@@ -161,7 +161,7 @@ export const adminUpdateUser = async (req, res, next) => {
         if (typeof isVerified === 'boolean') update.isVerified = isVerified;
         if (typeof suspended === 'boolean') update.suspended = suspended;
         const user = await User.findByIdAndUpdate(req.params.userId, update, { new: true })
-            .select('-password -refreshToken').lean();
+            .select('-twoFactor.secretEnc -twoFactor.recoveryCodesHash -password -refreshToken -resetPasswordToken -verifyEmailToken').lean();
         if (!user) return res.status(404).json({ msg: 'Not found' });
         await alog(req, 'admin.users.view', { targetId: user._id });
         await alog(req, 'admin.user_updated', { targetId: req.params.userId, after: update });

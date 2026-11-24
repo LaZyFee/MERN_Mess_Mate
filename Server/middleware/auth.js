@@ -29,7 +29,8 @@ const auth = async (req, res, next) => {
         }
         // Platform suspension check (cheap indexed lookup on every request)
         const suspended = await User.findById(decoded.user.id).select('suspended').lean();
-        if (suspended?.suspended) return res.status(403).json({ msg: 'Account suspended' });
+        if (!suspended) return res.status(401).json({ msg: 'Account unavailable' });
+        if (suspended.suspended) return res.status(403).json({ msg: 'Account suspended' });
         req.user = decoded.user;
         next();
     } catch (err) {

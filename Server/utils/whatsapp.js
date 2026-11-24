@@ -159,6 +159,7 @@ export const verifyWebhookSignature = (rawPayload, signatureHeader, appSecret) =
     const parts = signatureHeader.split('=');
     if (parts.length !== 2 || parts[0] !== 'sha256') return false;
     const expectedHash = parts[1];
+    if (!/^[a-f0-9]{64}$/i.test(expectedHash)) return false;
     const generatedHash = crypto.createHmac('sha256', appSecret).update(rawPayload).digest('hex');
     return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(generatedHash, 'hex'));
 };

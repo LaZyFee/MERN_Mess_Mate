@@ -83,6 +83,9 @@ export const requireGroupRoleV2 = (minRole = 'member') => async (req, res, next)
         }
 
         if (!role) return res.status(403).json({ msg: 'Not a member of this group' });
+        if (role === 'auditor' && req.baseUrl === '/api/routines' && !['GET', 'HEAD'].includes(req.method)) {
+            return res.status(403).json({ msg: 'Auditor has read-only routine access' });
+        }
         if (RANK[role] < RANK[minRole]) {
             return res.status(403).json({ msg: `Forbidden: requires ${minRole} role` });
         }

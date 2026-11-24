@@ -5,10 +5,16 @@ import { normalizeWaNumber, verifyWebhookSignature, processWebhookStatuses } fro
 
 // Notifications — delivery status visibility, webhooks, consent & manual resend (Doc §13, §19).
 
+const deliveryFilter = (req) => {
+    const filter = { groupId: req.params.groupId };
+    if (!['owner', 'manager'].includes(req.groupRole)) filter.userId = req.user.id;
+    return filter;
+};
+
 /** GET /api/groups/:groupId/notifications?statementId=&state= */
 export const listOutbox = async (req, res, next) => {
     try {
-        const filter = { groupId: req.params.groupId };
+        const filter = deliveryFilter(req);
         const q = req.validated?.query || {};
         if (q.statementId) filter.statementId = q.statementId;
         if (q.state) filter.state = q.state;
@@ -21,7 +27,7 @@ export const listOutbox = async (req, res, next) => {
 /** GET /api/groups/:groupId/notifications/:messageId */
 export const getOutboxMessage = async (req, res, next) => {
     try {
-        const message = await NotificationOutbox.findOne({ _id: req.params.messageId, groupId: req.params.groupId }).lean();
+        const message = await NotificationOutbox.findOne({ ...deliveryFilter(req), _id: req.params.messageId }).lean();
         if (!message) return res.status(404).json({ msg: 'Notification not found' });
         res.json({ message });
     } catch (err) { next(err); }
@@ -72,8 +78,8 @@ export const whatsappWebhookVerify = (req, res) => {
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    const expectedToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'mealmate_verify_token';
-    if (mode === 'subscribe' && token === expectedToken) {
+    const expectedToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+    if (expectedToken && mode === 'subscribe' && token === expectedToken) {
         return res.status(200).send(challenge);
     }
     return res.status(403).json({ msg: 'Webhook verification token mismatch' });
@@ -87,10 +93,9 @@ export const whatsappWebhookReceive = async (req, res, next) => {
         // Verify signature if WHATSAPP_APP_SECRET is set
         const signature = req.headers['x-hub-signature-256'];
         const appSecret = process.env.WHATSAPP_APP_SECRET;
-        if (appSecret && signature) {
-            const rawBody = JSON.stringify(req.body);
-            const isValid = verifyWebhookSignature(rawBody, signature, appSecret);
-            if (!isValid) return res.status(401).json({ msg: 'Invalid webhook signature' });
+        if (!appSecret) return res.status(503).json({ msg: 'Webhook is not configured' });
+        if (!req.rawBody || !verifyWebhookSignature(req.rawBody, signature, appSecret)) {
+            return res.status(401).json({ msg: 'Invalid webhook signature' });
         }
 
         const entries = req.body?.entry || [];

@@ -1,10 +1,10 @@
 # MealMate Frontend — Build Prompt (paste into IDE AI)
 
-> **READ §8 FIRST.** §8 (Amendments) overrides §1.5 (persist), §2 tasks T0.3–T0.7, §4 "Auth model", and §5 `src/` layout wherever they conflict. New phases P9–P11 are in §8.7.
+> Follow §8.9 for the three application layers. Maintain the P0–P12 TODO across sessions and use the API reference in §4.
 
 ## 0. ROLE & GOAL
 
-You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The backend is finished and lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Next.js App Router + React). Backend docs: root `readme.md` (API reference) and `plan.md` (per-file deep dive) — they are the source of truth.
+You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The audited backend lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Next.js App Router + React). Use Server/API_DOCUMENTATION.md for integration and the root assessment for open release gates.
 
 **Priorities, in order:** (1) follow the rules below, (2) **mobile responsiveness — top priority for every screen and component**, (3) token efficiency, (4) working code, (5) modern UI polish.
 
@@ -58,7 +58,7 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 
 ### 1.5 State management — zustand only
 
-- Install `zustand`. All global/shared state lives in `src/store/` as zustand stores: `authStore` (user + access token, `persist` middleware), `groupStore` (current group + my role), `uiStore` (theme, sheets/drawers). Domain stores follow one consistent pattern: `{ data, loading, error, fetch, mutate, invalidate }`, cached by key (`groupId` + `month`) to avoid refetching.
+- Hydrate the in-memory Zustand authStore with user and roles. Clear user and group data on sign-out or group change.
 - **No React Context for app state, no Redux.** Local, component-only state stays in `useState`.
 - Always use selectors (`useStore(s => s.x)`; `useShallow` for multiple fields) to prevent re-renders. Don't store derived data — compute it via selectors/memo.
 - Non-React code (axios interceptors, socket client) reads state with `useAuthStore.getState()`.
@@ -118,11 +118,11 @@ Create and maintain **`Client/TODO.md`** — this is your memory across sessions
 Last Session: (none) → T0.1
 
 ## P0 Recon & Foundation
-- [ ] T0.1 Read app/globals.css → list all CSS variables (names + purpose) in Notes. Read package.json → note styling lib and router (Next.js App Router). Install missing deps: axios, socket.io-client, zustand, react-icons, chart.js, react-chartjs-2. Choose ONE react-icons family and record it in Notes.
+- [ ] T0.1 Read src/app/globals.css → list all CSS variables (names + purpose) in Notes. Read package.json → note styling lib and router (Next.js App Router). Install missing deps: axios, socket.io-client, zustand, react-icons, chart.js, react-chartjs-2. Choose ONE react-icons family and record it in Notes.
 - [ ] T0.2 Create Client/COMPONENTS.md: for each file in components/*, one line: name · path · props · when to use. (Read only the top of each file.) Flag components containing inline SVG.
-- [ ] T0.3 Folder structure: app/ + src/{api,store,hooks,routes,pages,features,utils}. Create .env (BACKEND_URL + NEXT_PUBLIC_APP_URL) + .env.example. Dev port 5174 set in package.json dev script.
+- [ ] T0.3 Verify existing src/app and src/lib structure, server-only BACKEND_URL and dev port 5174.
 - [ ] T0.4 lib/api/serverApi.js + lib/api/browserApi.js (§8.4) + app/api/bff/[...path]/route.js allowlist proxy (§8.3). baseURL /api/bff (browser) or BACKEND_URL (server).
-- [ ] T0.5 store/authStore (zustand, NO persist per §8.2: user, accessToken; login/logout/loadProfile actions) + AuthHydrator + tiny fetch-state helper for data stores.
+- [ ] T0.5 Hydrate user and roles from the protected layout. Keep tokens out of Zustand.
 - [ ] T0.6 routes: app/ App Router with protected layout + public layout groups (lazy-loaded pages + Skeleton fallback), 404 page, wrap ToastProvider + RateLimit listener in layout.
 - [ ] T0.7 store/groupStore (current group, myRole from 5-tier roles) + store/uiStore (theme, sheets) + hooks/useGroupRole feeding PermissionGuard.
 - [ ] T0.8 Modernize shared components ONCE: design tokens in app/globals.css (light+dark); replace inline SVG with react-icons; Modal → bottom sheet on mobile; Table → stacked cards <md; 44px targets; focus-visible rings; Button/Input/Card/Badge/Tabs/Skeleton polish; add StatusBadge variants for the new statuses (§1.7). Update COMPONENTS.md.
@@ -132,7 +132,7 @@ Last Session: (none) → T0.1
 ## P1 Auth & Sessions
 - [ ] T1.1 Register page (username, email, phone?, whatsapp?, password + PasswordStrengthMeter, confirm)
 - [ ] T1.2 Login page (+ Google button → GET /api/users/auth/google)
-- [ ] T1.3 Google callback page (inspect userController.googleAuth redirect params, store tokens)
+- [ ] T1.3 On /login/success, load the profile from cookies. Verify cookie scope and the registered OAuth callback through the deployment proxy.
 - [ ] T1.4 Forgot password + Reset password (token from URL) pages
 - [ ] T1.5 Verify email page (/verify-email/:token)
 - [ ] T1.6 Sessions page (profile sub-tab): GET /api/sessions/users/sessions device list; revoke one (`DELETE /:familyId`) and revoke-all with ConfirmationModal.
@@ -171,8 +171,8 @@ Last Session: (none) → T0.1
 ## P6 Statements & Month-End Close
 - [ ] T6.1 Statements tab: list current statements GET /api/statements/groups/:groupId/statements; statement detail: totals (meals, meal/other/total expenses, mealRate), per-member items table (mealUnits, mealCost, otherCost, contributions, closingCredit, owes/receives/settled badge), policy snapshot summary
 - [ ] T6.2 Version history: GET /:month returns versions with supersedes chain; badge "superseded"; view any version
-- [ ] T6.3 Close workflow (manager/owner): period detail GET /api/periods/…/:month; Preview statement (draft, no persist); close checklist (GET …/checklist); Begin review / Return to open buttons; Finalize modal with expectedRevision (handle 409 conflict message "data changed, refresh and retry" and 422 unknown-meals list rendering member/slot/date chips)
-- [ ] T6.4 Corrections: finalize with reason creates version N+1 (auto after viewing a finalized month)
+- [ ] T6.3 Close workflow (manager/owner): period detail GET /api/periods/…/:month; Preview statement (draft, no persist); close checklist (GET …/checklist); Begin review / Return to open buttons; Finalize modal with expectedRevision (handle 409 conflict message "data changed, refresh and retry" and 422 text identifying the first unresolved member, slot and date)
+- [ ] T6.4 Corrections: capture a reason and require explicit owner confirmation before finalizing a new version.
 
 ## P7 Notifications & Disputes
 - [ ] T7.1 Notifications panel (manager+): outbox list GET /api/notifications/groups/:groupId/notifications with state filters + StatusBadge (pending/sent/delivered/read/failed/skipped/not_configured), resend action, manual-share wa.me links
@@ -203,133 +203,19 @@ One line per component: `Name · path · props (required*/optional) · use-for`.
 
 ---
 
-## 4. BACKEND CONTRACT (compact — don't re-read server code unless a detail is missing)
+## 4. Backend contract
 
-**Base:** browser calls `/api/bff` (proxy to `${BACKEND_URL}/api`); server calls `${BACKEND_URL}/api` directly · Header: `x-auth-token: <accessToken>` · Backend CORS allows `http://localhost:5174` → port 5174 set in package.json dev script. Include `credentials: true` on axios (HttpOnly cookies: `mm_at` access token Path=/, `mm_rt` refresh Path=/api/users, `mm_csrf` CSRF double-submit).
+Integrate from [Server/API_DOCUMENTATION.md](../Server/API_DOCUMENTATION.md). Strip the leading /api when the transport supplies it. Keep legacy taka amounts separate from v2 integer poisha. Display unknown meal slots separately from confirmed zeros.
 
-### Auth model
-
-- Login/register return `{ user, accessToken, refreshToken }` and also set an HttpOnly cookie. Access = 1h, refresh = 7d (**rotating**: each `POST /users/refresh` returns a new pair; replaying an old refresh token revokes the whole session **family** → 401 → force logout).
-- **TOTP 2FA:** if user has 2FA enabled, login returns `{twoFactorRequired: true, challengeToken}`. Call `POST /users/login/2fa-challenge {email,password}` → then `POST /users/login/2fa {challengeToken, code}` to get tokens with `amr: ['pwd','otp']`. 2FA setup: `POST /users/2fa/setup` → verify `POST /users/2fa/verify {code}` → disable `POST /users/2fa/disable {password, code}`. Admin routes require `amr: otp` (404-masked if not enrolled).
-- On 401: call `POST /users/refresh` once (with `credentials: 'include'`), retry the original request. Queue parallel requests during refresh. On failure: logout + redirect to login.
-- Sessions are per-device: list via `GET /sessions/users/sessions`, revoke via `DELETE /sessions/users/sessions/:familyId` or all via `DELETE /sessions/users/sessions`.
-- Rate limits: 50/15min auth, 300/15min general → friendly 429 message (RateLimitCatcher).
-- **Roles (5-tier, V2):** `owner > manager > treasurer > auditor > member`, resolved from effective-dated Memberships (legacy groups: group admin → owner). Gate UI with `PermissionGuard`; the server is the real authority. Members may hold different roles in different groups.
-- **Idempotency:** financial mutations accept an optional `Idempotency-Key` header. Send a generated UUID on create/submit/approve/reverse/confirm/finalize to make retries safe. Key reuse with a different body → 409.
-
-**Privacy model (must be reflected in UI):**
-
-1. **No global discovery** — no user or group search/browse UI anywhere for regular users. Group detail returns 404 to outsiders; render as "Group not found".
-2. **User info is group-scoped** — only the co-members directory exposes profiles (username/profilePic/whatsapp). No email/phone display across members.
-3. **Invite-only joining (hashed codes):** join codes are hashed at rest (sha256 + pepper). `GET /invite/codes/:groupId` returns only metadata `{prefix, expiresAt, usesLeft}` — no plaintext. Plaintext is shown **once** at creation via `POST /invite/codes`. Join via `POST /invite/join-by-code {code, groupId}` (rate-limited, failure lockout). Admin can regenerate (kills old links).
-4. **Leave/kick cuts instantly** — after departure the member loses access; if they somehow revisit, group data 404s. Their own historic data remains via interval-clamped reads only if the server permits (it clamps automatically).
-5. **Hidden admin panel** — `/admin` shell exists only for platform admins (env `ADMIN_EMAILS`); any 404 from `/api/admin/*` → user is not admin → never render the route/link.
-
-### Money format — CRITICAL
-
-All monetary fields are **integer poisha** (100 poisha = ৳1). Send integers; display `formatPoisha(n)` = `৳ (n/100)` with 2 decimals. Legacy endpoints (summary/calculate/stats/extras) still use floats — do not mix helpers.
-
-### Endpoints by domain
-
-**/users:** POST `/register` `/login` `/refresh` `/logout` `/change-password {currentPassword,newPassword}` `/forgot-password {email}` `/reset-password {token,password}` `/profile-pic` (multipart field `image`) · GET `/profile` `/verify-email/:token` `/auth/google(/callback)` · PUT `/profile {username?,phone?,whatsapp?}` · POST `/2fa/setup` `/2fa/verify {code}` `/2fa/disable {password, code}` · POST `/login/2fa-challenge {email,password}` `/login/2fa {challengeToken, code}`.
-**Privacy rule:** other users' profiles are visible ONLY inside shared groups — `GET /users/groups/:groupId/members` returns `{members:[{_id, username, profilePic, whatsapp}]}` or **404** if you don't belong. Never build global user search/browse UI.
-Password rule: 8+ chars, upper + lower + digit.
-
-**/sessions:** GET `/users/sessions` · DELETE `/users/sessions/:familyId` · DELETE `/users/sessions`.
-
-**/messgroups:** POST `/create {name, mealSlots?, mealWeights?, defaultMealSubunits?, defaultMealsEnabled?}` · `/join-request/:groupId` · `/approve/:groupId/:userId`(admin) · `/add-member/:groupId`(admin) · `/invite/:groupId {email}`(admin) · `/extras/:groupId`(admin) · `/categories/:groupId`(admin; splitMode 8 values) · `/categories/:groupId/seed`(admin, re-seed BD presets)
-GET `/my-groups` · `/:groupId` (**404-masked for non-members — handle as "group not found", never reveal existence**) · `/code/:groupId`(admin → legacy `{code, inviteLink}`, superseded by `/invite/codes/:groupId`) · `/extras/:groupId` · `/categories/:groupId` · `/calculate/:groupId`(legacy) · `/export/:groupId`(xlsx blob) · `/pdf/:groupId`(pdf blob)
-PUT/DELETE categories (`DELETE` archives), payment-notes (legacy), remove-member (**kick or self-leave**; after leaving, history reads are auto-clamped to the member's interval by the server — reflect this in UI with a "viewing history until <date>" notice for ex-members).
-
-**Invite-link UX:** admin settings shows the code in a mono chip with copy-to-clipboard button AND the full `inviteLink` (`{FRONTEND_URL}/join?code=…`) with a separate Copy + native share (navigator.share when available). `GET /code/:groupId` → `{ code:'MM-XXXXXX', inviteLink:'https://…/join?code=MM-XXXXXX' }`. `GET /invite/codes/:groupId` → `{ prefix:'MM-ABCD', expiresAt, usesLeft, active }` (no plaintext).
-
-**Hidden admin app-shell (platform admins only):** lazy route `/admin/*` guarded by membership in `ADMIN_EMAILS` (returned as `user.isAdmin` from `/profile` or a probe `GET /api/admin/overview` — 404 means hide the route entirely). Panels: Overview/traffic cards + line chart (signups & activity per day, colors from CSS vars), Users table (search `q`, cursor pagination, suspend/verify toggles with ConfirmationModal), Groups table (name, admin, activeMembers, archive action), Audit feed (filter by action). The route must NOT appear in any nav for non-admins; treat any 404 from `/api/admin/*` as "not an admin".
-**/memberships (V2 source of truth):** GET `/groups/:groupId/memberships` (+ `/active`, `/month/:month`) · POST `/groups/:groupId/memberships {displayName, startDate, userId? (null ⇒ placeholder), role?, room?, weight?}`(manager) · PATCH `/:membershipId {role?, room?, weight?, endDate?, linkUserId?}`(manager) · POST `/:membershipId/depart {at?, reason?}`(manager).
-
-**/meals (slot-state):** POST `/:groupId {date?, slots: { lunch?: {state:'unknown'|'confirmed_zero'|'consumed', portionSubunits?}, … }}` (upsert own day; consumed requires portionSubunits ∈ 250/500/750/1000) · PUT/DELETE `/entry/:id`(owner[/admin]) · GET `/:groupId?month=|from=&to=&userId=` or `/:groupId/:month`
-Guests: POST/GET `/:groupId/guests {date?, slot, portionSubunits, poolMode:'individual'|'universal', guestName?}`
-Bulk (admin): POST `/:groupId/bulk/preview` → `/bulk/apply` `{entries:[{userId,date,slots}]}` (preview returns the change set — render a diff)
-Absence (admin): POST `/:groupId/absence/preview` → `/absence/apply` `{userId?, from, to, slots[]}` (≤366 days).
-
-**/expenses:** Workflow base `/groups/:groupId/expenses` — GET (cursor: `?status=&costPeriod=&payable=&cursor=&limit=`) · POST draft `{supplierName?, date, costPeriod?, isPayable?, receiptReference?, lines:[{categoryId, amount(poisha), description?, splitMode?, beneficiaries?, fixedAmounts?, weights?, usageQuantities?}]}` → create returns `duplicateWarnings[]` · POST `/:expenseId/submit|approve|reject|reverse` (approve/reject/reverse = treasurer, `{reason}`; approve/reverse idempotent). Legacy simple CRUD at `POST /:groupId`, `/entry/:id`.
-
-**/money:** GET/POST `/groups/:groupId/money` (POST idempotent; cursor list with `?status=&kind=`) · POST `/:txId/confirm|reject|reverse`(treasurer) · GET `/groups/:groupId/memberships/:membershipId/balance` · GET/POST `/groups/:groupId/funds` · POST `/funds/:fundId/custodian {newCustodianId}`(owner).
-
-**/memberships balances, /policies:** GET `/groups/:groupId/policies` · POST(owned) `{effectiveFrom:'YYYY-MM', mealWeights?, entryCutoffHour?, …}`.
-
-**/periods:** GET `/groups/:groupId/periods` · `/:month` · `/:month/preview` (draft statement, no persist) · `/:month/checklist`(treasurer) · POST `/:month/begin-review` / `return-to-open` / `correct`(manager).
-
-**/statements:** GET `/groups/:groupId/statements` · `/id/:statementId` · `/:month` (version history) · POST `/:month/finalize {expectedRevision?, reason?}`(**owner**, idempotent). Errors: 409 revision conflict; 422 `{unresolved:[{userId,slot,date}]}` unknown meal slots.
-
-**/recurring:** GET/POST `/groups/:groupId/recurring` · PUT `/:ruleId` · POST `/:ruleId/generate {costPeriod}` / `/generate-all`(treasurer).
-
-**/reconciliation:** GET `/groups/:groupId/reconciliations`(+`/equation`) · POST(create `{accountId, actualBalance(poisha), asOf?}`) · POST `/:recId/resolve {resolution:'adjusted'|'accepted_shortage'|'found_cash', explanation?}`.
-
-**/disputes:** GET/POST `/groups/:groupId/disputes {targetType:'expense'|'money_transaction'|'statement_item', targetId, reason, statementId?, membershipId?}` · POST `/:disputeId/respond {text}` · POST `/:disputeId/resolve {rejected?, note?, correctionJournalId?}`(manager).
-
-**/notifications:** GET `/groups/:groupId/notifications(?statementId=&state=)` · `/:messageId` · POST `/:messageId/resend` · POST `/manual-share`(manager) · PUT `/whatsapp/consent {whatsappConsent}`(self) · Public webhook routes (no UI needed).
-
-**/attachments:** POST `/groups/:groupId/upload` (multipart field `file`, ≤10MB jpeg/png/webp/pdf) · GET `/groups/:groupId/:attachmentId` (authenticated binary — use axios `responseType:'blob'` + object URL).
-
-**/assets:** GET/POST `/groups/:groupId` · POST `/:assetId/refund`(treasurer).
-
-**/stats:** GET `/groups/:groupId/dashboard` (**V2** — build the Overview tab on this) · GET `/:groupId?granularity=month|year&year=&month=&userId=` (legacy charts) → `{ mealsSeries, expenseSeries, categoryBreakdown, totals }`.
-
-**/summary (LEGACY, floats):** GET `/:groupId/:month` · POST `/finalize/…` (now returns 410/409 — **direct users to the Statements tab**) · GET `/whatsapp/:groupId/:month`.
-**NEW — /inbox:** GET `/` (cursor list `?unread=1&cursor=&limit=`) · GET `/unread-count` · POST `/read {ids[]|all:true}` · GET/PUT `/preferences` {types: {…}, quietHours:{from,to}}.
-
-**NEW — /support (user side):** Public POST `/actions/:token` (neutral responses) · Public POST `/appeal {email,message,captchaToken?}` · Auth POST `/tickets {category,subject,body,groupId?,attachContext?}` (idempotent) · GET `/tickets` · GET `/tickets/:ticketId` → `{ticket, messages, permissions:{canComment, reason, code}, slaStage}` · POST `/tickets/:ticketId/messages {body, attachmentIds?}` · POST `/tickets/:ticketId/resolve|close|reopen|rate {score?, comment?, note?, reason?}`.
-
-**NEW — /admin/support (hidden, requirePlatformAdmin + 2FA):** GET/POST `/tickets` · GET/PATCH `/tickets/:ticketId` · POST `/tickets/:ticketId/reply|internal-note|assign|resolve|close|reopen` · POST `/tickets/:ticketId/messages/:messageId/redact {reason}` · GET `/stats` · GET/POST/PUT/DELETE `/canned-replies`.
-
-**NEW — /routines (B2):** Rosters GET/POST `/groups/:groupId/rosters` · GET/PATCH/POST(publish)/POST(extend-horizon) `/groups/:groupId/rosters/:rosterId` · Duties GET `/groups/:groupId/duties` · POST done/reassign `/groups/:groupId/duties/:assignmentId/…` · Swaps POST `/groups/:groupId/swaps` · POST respond `/groups/:groupId/swaps/:swapId/respond` · Menu GET/POST `/groups/:groupId/menu` · Notes GET/POST/PATCH/DELETE `/groups/:groupId/notes/…` · POST ack/claim/done tasks · GET `/groups/:groupId/board/today` · `/menu/bazar-suggestions` · `/duties/fairness` · `/bazar-spend-rotation` · POST `/emergency-broadcast`.
-
-**NEW — /shopping-list:** GET `/groups/:groupId` · POST items · PATCH/DELETE items/:itemId · POST `/to-expense` · GET `/history`.
-
-**NEW — /kitchen-inventory:** GET/POST `/groups/:groupId` · PATCH/DELETE `/groups/:groupId/:itemId` · POST `/:itemId/refill`.
-
-**NEW — /polls:** GET/POST `/groups/:groupId` · POST `/:pollId/vote {optionIndex}` · POST `/:pollId/close` · GET `/:pollId/results`.
-
-**NEW — /invite:** POST `/join-by-code {code,groupId}` (rate-limited) · POST `/codes {groupId,maxUses?,ttlDays?}` (admin) · GET `/codes/:groupId` (metadata only).
-
-**Socket.IO:** connect with `auth: { token: accessToken }` (reconnect with the new token after refresh). Emit `join-group`/`leave-group` (groupId). Listen: `meal-updated`, `expense-updated`, `inbox-new` (room `user:<id>`), `duty-updated`, `menu-updated`, `note-created`, `note-updated`, `shoppingList-updated`, `kitchenInventory-updated` (room `group:<id>`). Use the existing `SocketInitializer`.
-
-| PATCH | `/admin/users/:userId` | `{isVerified?, suspended?}` — suspension kills login/refresh/all requests. |
-| GET | `/admin/groups?q=&limit=` | **All** groups + active member counts + admins. |
-| GET | `/admin/groups/:groupId` | Deep inspection: group + memberships populated. |
-| DELETE | `/admin/groups/:groupId` | Archive (audit-logged). |
-| GET | `/admin/jobs` | Last run + lock state per background job. |
-
-### Key shapes (UI rendering)
-
-- **Cursor lists:** `{ items, nextCursor, hasMore, count }` → "Load more" button while `hasMore`.
-- **Statement item:** `{ membershipId, displayName, mealUnits, mealCost, otherCost, totalCharge, contributions, closingCredit, status:'owes'|'receives'|'settled' }` — `closingCredit > 0` → group owes member.
-- **Meal doc:** `{ userId, date, breakfast/lunch/snacks/dinner: {state, portionSubunits?, source}, totalMealSubunits, totalMeals }`.
-- **Membership:** `{ displayName, isPlaceholder, role, startDate, endDate, room, weight, leftAt }`.
-- **Expense:** `{ status, lines[], payers[], supplierName, receiptReference, costPeriod, isPayable, paidTotal }`.
-- **Support ticket:** `{ ticketNo:'MM-T-000123', status:'open'|'answered'|'awaiting_admin'|'resolved'|'closed', category, subject, priority, permissions:{canComment, reason} }`.
-- **Inbox notification:** `{ id, type, title, body, link:{kind,id}, readAt }`.
-- **Roster/Duty/Note/Menu/Swap/Poll:** see `plan.md` §14; statuses use StatusBadge with icon + color.
-- **Zod validation errors:** 400 `{ msg:'Validation failed', errors:[{field:'lines.0.amount', message}] }` → map onto fields by path.
-
-### Errors
-
-Server returns generic messages; show them via Toast. Field errors per above. Forgot-password always 200 — neutral message. Finalize 409 → "Month data changed — refresh and retry". Any 422 listing unresolved meals → render chips. Support: `403 TICKET_AWAITING_ADMIN`, `403 TICKET_CLOSED`, `409 TICKET_STATE_CHANGED`. Invite: `429 JOIN_CODE_RATE_LIMITED` / `JOIN_CODE_LOCKED`. Admin: any 404 from `/api/admin/*` → not an admin.
 ## 5. ARCHITECTURE RULES
 
 ```
-src/
-  api/        axiosClient.js + one file per domain (auth.js, sessions.js, groups.js, memberships.js,
-              meals.js, guests.js, expenses.js, money.js, funds.js, policies.js, periods.js, statements.js,
-              recurring.js, reconciliation.js, disputes.js, notifications.js, attachments.js, assets.js, stats.js,
-              admin.js)
-  store/      zustand stores: authStore, groupStore, uiStore + domain stores (meals, expenses, money,
-              statements, periods, memberships, notifications, categories, stats)
-  hooks/      thin selectors/wrappers over stores: useGroupRole, usePoisha, useMeals, useExpenses …
-  routes/     AppRoutes, ProtectedRoute, PublicRoute
-  pages/      thin route-level pages (compose features)
-  features/   <domain>/components/*  (domain-specific UI built from shared components)
-  utils/      formatPoisha/parseTaka, month & Dhaka-day helpers, idempotency-key generator, constants
+src/app/          Pages, protected layouts, route handlers and loading/error boundaries
+src/lib/actions/  Server Actions and serializable mutation results
+src/lib/api/      Server transport, same-origin browser transport and domain functions
+src/lib/store/    Ephemeral Zustand state scoped to user, group and month
+src/components/   Existing shared inputs, dialogs, tables and permission guards
+src/features/     Interactive domain components and hooks
 ```
 
 - Pages are thin; logic lives in hooks; HTTP lives only in `api/`.
@@ -378,7 +264,7 @@ Vite SPA cannot provide server middleware, protected server layouts or SSR. Move
 ### 8.2 Auth, cookies, storage
 
 - **No `localStorage` / `sessionStorage` / IndexedDB for auth or user data.** Remove zustand `persist` from `authStore`. The store holds `{ user, roles }` only, hydrated from server-rendered props; **tokens are never in JS**.
-- Cookies (set by the backend through the BFF, `HttpOnly; Secure; SameSite=Strict`): `mm_at` (access), `mm_rt` (refresh), `mm_csrf` (readable, double-submit). Web requests send `X-Client: web` so the backend omits tokens from JSON bodies.
+- Cookies (set by the backend through the BFF, `HttpOnly; Secure; SameSite=Strict`): `mm_at` (access), `refreshToken` (refresh), `mm_csrf` (readable, double-submit). Web requests send `X-Client: web` so the backend omits tokens from JSON bodies.
 - Theme preference: a plain non-sensitive cookie `mm_theme` (so SSR renders the right theme without flash) — the only non-HttpOnly cookie besides `mm_csrf`.
 
 ### 8.3 BFF layer
@@ -389,7 +275,7 @@ Vite SPA cannot provide server middleware, protected server layouts or SSR. Move
 
 | File | Used from | Behaviour |
 |---|---|---|
-| `lib/api/serverApi.js` | Server Components, layouts, route handlers | baseURL `process.env.BACKEND_URL`; builds the `Cookie` header from `cookies()` (`next/headers`); on 401 calls refresh once and re-sets cookies; throws typed errors (`NotFound`, `Forbidden`, `Unauthorized`) so `notFound()` / `redirect()` can be used |
+| `lib/api/serverApi.js` | Server Components, layouts, route handlers | baseURL `process.env.BACKEND_URL`; builds the `Cookie` header from `cookies()` (`next/headers`); on 401 delegates refresh to a Route Handler or Server Action that can relay Set-Cookie; throws typed errors (`NotFound`, `Forbidden`, `Unauthorized`) so `notFound()` / `redirect()` can be used |
 | `lib/api/browserApi.js` | Client components, zustand actions | baseURL `/api/bff`; `withCredentials: true`; attaches `x-csrf-token` from the `mm_csrf` cookie; **single-flight** 401 → `POST /api/bff/users/refresh` → retry queue; on refresh failure → `router.replace('/login?next=…')` and clear stores; 429 → RateLimit handler; always adds an `Idempotency-Key` helper for financial mutations |
 
 One domain file per area under `lib/api/` (auth, groups, meals, …, **support, routines, inbox**) exporting functions that take the axios instance as a parameter or use a small `apiFor(context)` helper so the same function runs on server and client.
@@ -405,7 +291,7 @@ app/
   (admin)/admin/   layout.js ← PLATFORM-ADMIN LAYOUT: probe GET /api/admin/overview (+ 2FA verified);
                      on 404/403 call notFound() so the section does not exist for non-admins
   api/bff/[...path]/route.js
-middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a protected matcher → redirect to /login;
+middleware.js   ← edge: cheap gate only — if mm_at is absent, pass through the refresh handler under /api;
                   redirect logged-in users away from /login; set CSP + Referrer-Policy headers; never trust it for authorisation
 ```
 
@@ -423,7 +309,7 @@ middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a 
 
 ### 8.7 Task list changes
 
-**Replace** in the seed TODO: T0.3 (create `app/` structure, `.env` with `BACKEND_URL` + `NEXT_PUBLIC_APP_URL` only, `.env.example`), T0.4 (§8.3–8.4), T0.5 (`authStore` **without persist**, `AuthHydrator`), T0.6 (§8.5), T0.7 (`groupStore`/`useGroupRole` seeded from server props). T1.x pages become server/client splits; T1.3 Google callback: backend sets cookies → redirect to `/` (no tokens in URL). Add **T0.11** `middleware.js` + headers, **T0.12** `<Protected>` / `requireRole`, **T0.13** `next.config` (no prod source maps, `poweredByHeader:false`), **T0.14** ESLint rule/grep: no `localStorage|sessionStorage|document.cookie` outside `mm_theme`/`mm_csrf` helpers, no `NEXT_PUBLIC_` secrets.
+Extend P0 once with T0.11 edge routing and headers, T0.12 shared role guards, T0.13 production configuration and T0.14 a token-storage and public-secret check.
 
 **Add phases:**
 
@@ -458,7 +344,7 @@ middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a 
 ## P12 Security UX (plan.md §18)
 - [ ] T12.1 2FA setup (QR via canvas/img data-URI from backend, verify code, recovery codes shown once) + login step-up screen; admin enrolment gate
 - [ ] T12.2 Invite code dialog: one-time reveal with copy/share, shows expiry + uses left; regenerate confirms and warns old links die
-- [ ] T12.3 Sessions page: highlight "new device" events from SecurityEvent
+- [ ] T12.3 Extend T1.6 with a device-family coverage notice. Hide new-device history until a user-scoped endpoint exists.
 ```
 
 ### 8.8 Definition of Done additions
@@ -476,7 +362,7 @@ middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a 
 Every feature MUST be split into exactly three layers. **This is not optional and overrides any earlier section that implies putting fetch logic in client components.**
 
 #### Layer 1 — Server Action file: `src/lib/actions/<domain>.js`
-- No directive — runs only on the server (Node.js runtime).
+- Keep SSR query helpers server-only in the action layer. A function invoked exclusively by a Server Component needs no "use server" directive. Any action exported to a client needs that directive and must validate its session and input.
 - Wraps `serverApi` calls; returns plain serialisable JS objects (no class instances, no Dates unless stringified).
 - Throws typed errors from serverApi so callers can call `notFound()` / `redirect('/login')`.
 - One file per domain: `auth.js`, `groups.js`, `memberships.js`, `meals.js`, `expenses.js`, `money.js`, `statements.js`, `periods.js`, `stats.js`, `notifications.js`, `disputes.js`, `reconciliation.js`, `support.js`, `inbox.js`, `routines.js`, `shopping.js`, `inventory.js`, `polls.js`, `admin.js`.
@@ -515,7 +401,7 @@ Every feature MUST be split into exactly three layers. **This is not optional an
 #### Layer 3 — CSR Component: `app/…/<Name>Client.jsx` (Client Component)
 - **MUST have `"use client"` as the very first line.**
 - Receives `initialXxx` props; seeds into local `useState(initialXxx)` — NOT in `useEffect` to avoid flash.
-- All mutations (POST/PUT/DELETE/PATCH) go through `browserApi` domain files (`src/lib/api/<domain>.js`) — never `serverApi` from client.
+- Send interactive mutations through browserApi domain functions to the same-origin BFF. The BFF validates session and scope and forwards to Express. Keep the backend transport server-only.
 - Uses zustand stores for shared/cross-component state; seeds zustand from `initialData` in a `useEffect` only when needed for cross-component sharing.
 - Does NOT re-fetch on mount when `initialData` is present; re-fetches on user action (refresh button, mutation callback) via `browserApi`.
 - Example:
@@ -568,3 +454,30 @@ grep -rl '"use client"' Client/src/app --include="page.jsx"
 # No layout.jsx may contain "use client"
 grep -rl '"use client"' Client/src/app --include="layout.jsx"
 ```
+
+
+## Feature integration inventory
+
+Use existing routes and components before adding screens. Group pages share the protected group layout and obtain current membership on the server. Use the corresponding operation names and full paths in the API reference.
+
+| Page or group tab | Feature components and first-load dependencies | Mutation permissions and completion checks |
+|---|---|---|
+| Public auth and profile/sessions | Credential form, OTP challenge, enrollment, session list. Load profile and sessions. | Test challenge expiry, refresh and sign-out. Device revocation applies to Session rows. |
+| Home and group overview | Group switcher, agenda and totals from my-groups, dashboard, board and inbox | Handle a user with zero groups and clear prior-group data on switching. |
+| Members and invitations | Directory, approval queue, invite metadata, membership history | Separate legacy admin approval from v2 manager actions. Show invite plaintext once. |
+| Meals | Slot grid, absence preview, guest form, next-day headcount | Members enter meals. Legacy admins apply bulk or absence changes after preview. Keep unknown slots visible. |
+| Expenses and categories | Category selector, line editor, queue and receipt viewer | Show payer, split and amount before treasurer approval. Surface duplicate warnings. |
+| Money and funds | Transaction form, balances, custodian history and fund selector | Treasurer confirms, owner transfers custody. Use membership IDs for individual balances. |
+| Statements, reports and period close | Version history, charges, review checklist and export | Manager starts review, owner finalizes. Refresh preview on revision conflicts and preserve prior versions. |
+| Policies and recurring rules | Effective policy, split editor, rules list and generation result | Owner publishes policy. Treasurer generates drafts. Link generated drafts to expense review. |
+| Reconciliation and assets | Fund selector, expected/count comparison, variance, refund history | Treasurer records counts and resolutions. Display signed variance and explanations. |
+| Disputes | Target selector, evidence, conversation and resolution | Member opens/responds, manager resolves. Re-fetch thread after mutation. |
+| Routine and board | Roster editor, duties, swap response, menu, scoped note and handover tasks | Manager publishes. Show read-only auditor UI and task conflicts. |
+| Shopping, inventory and polls | Checked basket, draft link, stock/refill form, options and results | Reload current stock or poll after a conflict. Show empty open basket explicitly. |
+| Inbox and delivery | Feed, unread badge, preferences and delivery history | Personal inbox and group outbox have distinct scopes. Managers resend. Socket events invalidate scoped data. |
+| Support | Ticket list, thread and permission-aware composer | Use permissions.canComment and reason. Render internal notes only on the hidden admin surface. |
+| Platform admin | Overview, accounts, audit, jobs and support queue | Probe platform access and OTP in a separate server layout. Group ownership grants no platform access. |
+
+Use Skeleton, Select, DateTimePicker, ConfirmationModal and the existing table/form controls where their documented props fit. Each task covers SSR first paint, a successful empty result, validation errors, denied access, pending mutation and authoritative success. Verify keyboard navigation and a narrow viewport. Test unrelated-member access and group switching. Run lint and production build at phase boundaries.
+
+The refreshToken cookie is scoped to /api. Page middleware cannot infer logout from its absence on a page request. Route an expired session through a same-origin handler under /api that can relay each rotated cookie. Use a request-scoped client for SSR. Keep refresh coordination isolated per user. Server Components read cookies. Route Handlers and Server Actions can write them. Pass only safe initial props to the browser. Cookie-authenticated state changes require CSRF even through the BFF. Preserve Origin on forwarded requests and validate same-origin requests before any server-side CSRF header injection.

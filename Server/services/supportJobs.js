@@ -52,7 +52,7 @@ export const supportAutoCloseFn = async (now = new Date()) => {
     let processed = 0;
     let failed = 0;
     const resolved = await SupportTicket.find({ status: 'resolved', resolvedAt: { $ne: null } })
-        .select('_id userId resolvedAt').lean();
+        .select('_id userId status resolvedAt revision').lean();
 
     for (const t of resolved) {
         try {
@@ -61,7 +61,7 @@ export const supportAutoCloseFn = async (now = new Date()) => {
                 const decision = canTransition(t, 'autoClose', 'system', now);
                 if (decision.allowed) {
                     const upd = await SupportTicket.updateOne(
-                        { _id: t._id, status: 'resolved', revision: { $type: 'number' } },
+                        { _id: t._id, status: 'resolved', revision: t.revision },
                         { $set: { status: decision.nextStatus, ...(decision.patch || {}) }, $inc: { revision: 1 } }
                     );
                     if (upd.matchedCount) {

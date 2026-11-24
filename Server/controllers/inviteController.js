@@ -56,7 +56,7 @@ export const joinByCode = async (req, res, next) => {
         }
 
         const updated = await InviteCode.findOneAndUpdate(
-            { _id: doc._id, usedCount: { $lt: doc.maxUses } },
+            { _id: doc._id, revokedAt: null, expiresAt: { $gt: NOW() }, usedCount: { $lt: doc.maxUses } },
             { $inc: { usedCount: 1 } },
             { new: true }
         );

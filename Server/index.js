@@ -1,3 +1,6 @@
+import User from './models/User.js';
+import Membership from './models/Membership.js';
+import MessGroup from './models/MessGroup.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -46,7 +49,6 @@ import jwt from 'jsonwebtoken';
 import session from 'express-session';
 
 dotenv.config();
-connectDB();
 
 const app = express();
 app.set('trust proxy', 1); // needed for express-rate-limit behind proxies (Render/Heroku/Vercel)
@@ -124,6 +126,10 @@ app.use(cors({
 }));
 
 // ---------- Body parsing + sanitization ----------
+app.use('/api/notifications/whatsapp/webhook', express.json({
+    limit: '10kb',
+    verify: (req, res, buffer) => { req.rawBody = buffer; },
+}));
 app.use(express.json({ limit: '10kb' })); // reject oversized payloads
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 // NoSQL injection sanitization is done in Server/validation/validate.js
@@ -151,7 +157,7 @@ app.use(passport.session());
 
 // ---------- Routes ----------
 app.get('/', (req, res) => res.send('Meal Mate Server is running'));
-app.use('/api/users', authLimiter, userRouter);
+app.use('/api/users', authLimiter, totpRoutes, userRouter);
 // Platform admin control plane — hidden (guard replies 404 to non-admins), unlinked
 app.use('/api/admin', adminRouter);
 app.use('/api/messgroups', generalLimiter, messGroupRouter);
@@ -178,7 +184,6 @@ app.use('/api/routines', generalLimiter, routinesRoutes);
 app.use('/api/shopping-list', generalLimiter, shoppingListRoutes);
 app.use('/api/kitchen-inventory', generalLimiter, kitchenInventoryRoutes);
 app.use('/api/polls', generalLimiter, pollRoutes);
-app.use('/api/users', authLimiter, totpRoutes);
 app.use('/api/invite', generalLimiter, inviteRoutes);
 
 // ---------- Socket.IO (JWT-authenticated realtime updates) ----------
@@ -192,14 +197,16 @@ const io = new SocketServer(httpServer, {
 
 // Handshake: read access token from mm_at cookie (withCredentials), not query string.
 // Query-string tokens are rejected (security quick win — token never in URL).
-io.use((socket, next) => {
+io.use(async (socket, next) => {
     try {
         const cookieHeader = socket.handshake.headers.cookie || '';
         const match = cookieHeader.match(/(?:^|;\s*)mm_at=([^;]*)/);
         const token = match ? decodeURIComponent(match[1]) : null;
         if (!token) return next(new Error('Authentication required'));
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (!await User.exists({ _id: decoded.user.id, suspended: { $ne: true } })) return next(new Error('Invalid account'));
         socket.userId = decoded.user.id;
+        socket.expiresAt = decoded.exp * 1000;
         socket.join(`user:${socket.userId}`); // per-user inbox room (B0.1)
         next();
     } catch {
@@ -209,8 +216,20 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
     // Clients join a room per mess group; controllers emit `io.to(groupId).emit(...)`
-    socket.on('join-group', (groupId) => {
-        if (/^[0-9a-fA-F]{24}$/.test(String(groupId))) socket.join(`group:${groupId}`);
+    const expiry = setTimeout(() => socket.disconnect(true), Math.max(0, socket.expiresAt - Date.now()));
+    socket.on('disconnect', () => clearTimeout(expiry));
+    socket.on('join-group', async (groupId) => {
+        if (typeof groupId !== 'string' || !/^[a-f\d]{24}$/i.test(groupId)) return;
+        try {
+            const now = new Date();
+            const active = await Membership.exists({ groupId, user: socket.userId, startDate: { $lte: now },
+                $or: [{ endDate: null }, { endDate: { $gt: now } }] });
+            if (active || await MessGroup.exists({ _id: groupId, admin: socket.userId })) {
+                await socket.join('group:' + groupId);
+            }
+        } catch {
+            socket.disconnect(true);
+        }
     });
     socket.on('leave-group', (groupId) => socket.leave(`group:${groupId}`));
 });
@@ -238,6 +257,7 @@ export { app, httpServer };
 // importing index.js from tests must not bind a port or start workers.
 const isMain = process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('index.js');
 if (isMain) {
+    await connectDB();
     const PORT = process.env.PORT || 5000;
     httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 

@@ -46,6 +46,7 @@ export const buildStatementDraft = async ({ groupId, month }) => {
             groupId, expense,
             memberships,
             userId: expense.approvedBy,
+            persist: false,
         });
         for (const alloc of allocations) {
             const isFood = alloc.poolKind === 'meal_units';

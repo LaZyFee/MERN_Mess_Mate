@@ -24,12 +24,9 @@ const hmacSha1 = (key, data) =>
 /** Generate a TOTP code for a given secret at time `now`. */
 export const generateTOTP = (secret, now = Date.now()) => {
     // Base32-decode the secret
-    let key;
-    try {
-        key = Buffer.from(secret, 'base32');
-    } catch {
-        key = Buffer.from(secret, 'utf8');
-    }
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    const bits = [...secret].map(c => alphabet.indexOf(c).toString(2).padStart(5, '0')).join('');
+    const key = Buffer.from(bits.match(/.{8}/g).map(byte => parseInt(byte, 2)));
 
     let counter = Math.floor(now / 1000 / TOTP_INTERVAL);
     const counterBuffer = Buffer.alloc(8);

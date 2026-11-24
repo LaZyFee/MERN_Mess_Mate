@@ -174,7 +174,7 @@ export const approveExpense = async (req, res, next) => {
 
             // allocate lines exactly
             const allocations = await allocateExpense({
-                groupId, expense, memberships: active, userId: req.user.id,
+                groupId, expense, memberships: active, userId: req.user.id, session,
             });
 
             // post journal: debit cost clearing / credit payer(s) or supplier payable

@@ -23,6 +23,13 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/verify-email/:token', verifyEmail);
 
+// Google OAuth
+router.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+router.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}/login` }),
+    googleAuth
+);
+
 // Profile (authenticated)
 router.use(auth);
 router.get('/profile', getProfile);
@@ -34,12 +41,5 @@ router.post('/profile-pic', upload.single('image'), uploadProfilePic);
 
 // Download my data — privacy compliance
 router.get('/download-my-data', downloadMyData);
-
-// Google OAuth
-router.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-router.get('/auth/google/callback',
-    passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}/login` }),
-    googleAuth
-);
 
 export default router;

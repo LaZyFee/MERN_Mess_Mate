@@ -155,7 +155,7 @@ export const adminPatchTicket = async (req, res, next) => {
 /** POST /api/admin/support/tickets/:id/:action (resolve|close|reopen). */
 export const adminAction = async (req, res, next) => {
     try {
-        const { action } = req.params;
+        const action = req.route.path.split('/').at(-1);
         const ticket = await SupportTicket.findById(req.params.ticketId);
         if (!ticket) return res.status(404).json({ msg: 'Ticket not found' });
 

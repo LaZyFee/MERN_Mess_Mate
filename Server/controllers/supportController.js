@@ -201,7 +201,7 @@ export const addMessage = async (req, res, next) => {
 /** POST /api/support/tickets/:id/:action (resolve|close|reopen|rate). */
 export const ticketAction = async (req, res, next) => {
     try {
-        const { action } = req.params;
+        const action = req.route.path.split('/').at(-1);
         const ticket = await SupportTicket.findOne({ _id: req.params.ticketId, userId: req.user.id });
         if (!ticket) return notFound(res);
 

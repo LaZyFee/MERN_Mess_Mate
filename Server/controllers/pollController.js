@@ -1,5 +1,4 @@
 import Poll from '../models/Poll.js';
-import Membership from '../models/Membership.js';
 import { audit } from '../models/AuditEvent.js';
 import { z } from 'zod';
 
@@ -47,11 +46,9 @@ export const createPoll = async (req, res, next) => {
 // POST /api/polls/:pollId/vote — vote on a poll
 export const votePoll = async (req, res, next) => {
     try {
-        const { pollId } = req.params;
         const { optionIndex } = voteSchema.parse(req.body);
 
-        const poll = await Poll.findById(pollId);
-        if (!poll) return res.status(404).json({ msg: 'Poll not found' });
+        const poll = req.poll;
         if (poll.status === 'closed') return res.status(409).json({ msg: 'Poll is closed' });
         if (new Date() > poll.expiresAt) {
             poll.status = 'closed';
@@ -65,8 +62,8 @@ export const votePoll = async (req, res, next) => {
             opt.votedBy = opt.votedBy.filter(id => String(id) !== String(req.user.id));
         }
 
-        poll.options[optionIndex].voteCount += 1;
         poll.options[optionIndex].votedBy.push(req.user.id);
+        for (const option of poll.options) option.voteCount = option.votedBy.length;
         await poll.save();
 
         await audit({ groupId: poll.groupId, actorId: req.user.id, action: 'poll.voted', targetType: 'poll', targetId: poll._id, after: { optionIndex } });
@@ -77,13 +74,9 @@ export const votePoll = async (req, res, next) => {
 // POST /api/polls/:pollId/close — close a poll (creator or manager+)
 export const closePoll = async (req, res, next) => {
     try {
-        const { pollId } = req.params;
-        const poll = await Poll.findById(pollId);
-        if (!poll) return res.status(404).json({ msg: 'Poll not found' });
+        const poll = req.poll;
 
-        const membership = await Membership.findOne({ groupId: poll.groupId, user: req.user.id }).lean();
-        if (!membership) return res.status(403).json({ msg: 'Not a member' });
-        if (String(poll.createdBy) !== String(req.user.id) && !['owner', 'manager', 'treasurer'].includes(membership.role)) {
+        if (String(poll.createdBy) !== String(req.user.id) && !['owner', 'manager', 'treasurer'].includes(req.groupRole)) {
             return res.status(403).json({ msg: 'Only the creator or a manager can close this poll' });
         }
 
@@ -97,9 +90,7 @@ export const closePoll = async (req, res, next) => {
 // GET /api/polls/:pollId/results — poll results
 export const pollResults = async (req, res, next) => {
     try {
-        const { pollId } = req.params;
-        const poll = await Poll.findById(pollId).lean();
-        if (!poll) return res.status(404).json({ msg: 'Poll not found' });
+        const poll = req.poll.toObject();
 
         const totalVotes = poll.options.reduce((s, o) => s + o.voteCount, 0);
         const results = poll.options.map((o, i) => ({

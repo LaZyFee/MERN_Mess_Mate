@@ -1,5 +1,7 @@
 # MealMate — Project Plan & Full Backend Architecture Documentation
 
+[API integration reference](Server/API_DOCUMENTATION.md) · [Audit checklist and recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) · [Frontend blueprint](Client/FRONTEND_BUILD_PROMPT.md)
+
 **Project Root:** `MealMate/` — Backend lives in `Server/`
 **Stack:** Express 5 · Mongoose 8 (MongoDB) · Socket.IO 4 · Zod 4 · JWT · Passport (Google OAuth) · ES Modules (`"type": "module"`)
 **Entry Point:** `Server/index.js` (port 5000, `npm run dev` via nodemon)
@@ -29,7 +31,7 @@ MealMate is a **mess/mess-group management and accounting system** for shared li
 | CORS | Strict allowlist from `FRONTEND_URL` env (comma-separated), credentials enabled |
 | Body limits | `express.json({limit:'10kb'})` + urlencoded — rejects oversized payloads |
 | Parameter pollution | `hpp()` |
-| CSRF | `middleware/csrf.js` — double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; Bearer clients bypass |
+| CSRF | `middleware/csrf.js` — double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; requests without authentication cookies skip this check |
 | Sessions | `express-session` with **MongoDB-backed store** (`config/mongoSessionStore.js`) — only for the Google OAuth handshake (10 min cookie, TTL index) |
 | Auth | `passport.initialize()/session()` with Google OAuth20 strategy (`config/passportJs.js`) |
 | Access-token auth | `middleware/auth.js` — reads `mm_at` HttpOnly cookie, `x-auth-token` header, or `Authorization: Bearer`; enforces `User.suspended` on every request |
@@ -57,7 +59,7 @@ The mess. Fields: `name`, `code` (unique join code like `MM-7K2QPX`), `admin`, V
 Effective-dated "who was in the group when" history — the V2 replacement for embedded members. Fields: `groupId`, `user` (null for placeholders), `displayName`, `isPlaceholder`, interval `[startDate, endDate)`, V2 `role` (owner/manager/treasurer/auditor/member), `room`, `weight` (share weight e.g. bigger room = 2), `leftAt` (departure keeps debt/credit), `replacedBy` (placeholder→real account link). Works: RBAC resolves the role from the interval containing "now"; overlap prevention via `membershipService.assertNoOverlap`.
 
 **`Session`** (`models/Session.js`)
-One row per device. `familyId` (one per login), `deviceId`, `userAgent`, `ip`, `currentTokenHash` (sha256 of newest refresh token), `previousTokenHashes[]` (rotation history), `revokedAt/reason`, `reusedAt`, TTL-indexed `expiresAt`. Works: refresh rotation stays in-family; replaying an old token revokes the **whole family** (reuse detection).
+One row per device. `familyId` (one per login), `deviceId`, `userAgent`, `ip`, `currentTokenHash` (sha256 of newest refresh token), `previousTokenHashes[]` (rotation history), `revokedAt/reason`, `reusedAt`, TTL-indexed `expiresAt`. The family service implements rotation and reuse detection. The mounted login and refresh handlers use a single User hash instead.
 
 ### 3.2 Money & Ledger
 
@@ -145,7 +147,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **`IdempotencyRecord`** (`models/IdempotencyRecord.js`) — replay protection for financial mutations. Key = (groupId, actorId, operation, key); stores `requestHash` (sha256 of body+params), cached `resultBody`, TTL-indexed `expiresAt` (24h). Same key + different body → **409**; same key + same body → cached replay.
 
-**`NotificationOutbox`** (`models/NotificationOutbox.js`) — outbox pattern: written with the business commit, processed afterwards by the worker. `channel` (email/whatsapp/in_app), purpose, dedupeKey, recipient snapshot (email/WA), template payload, lifecycle `pending → processing → sent | delivered | read | failed | skipped | not_configured`, attempts/maxAttempts, exponential `nextAttemptAt`, `providerMessageId` (linked to WA webhooks), `consentBasis`.
+**`NotificationOutbox`** (`models/NotificationOutbox.js`) — outbox pattern: enqueued after statement finalization, processed by the worker. `channel` (email/whatsapp/in_app), purpose, dedupeKey, recipient snapshot (email/WA), template payload, lifecycle `pending → processing → sent | delivered | read | failed | skipped | not_configured`, attempts/maxAttempts, exponential `nextAttemptAt`, `providerMessageId` (linked to WA webhooks), `consentBasis`.
 
 **`Attachment`** (`models/Attachment.js`) — private receipt/document metadata: original/stored names, storagePath, mimeType whitelist (jpeg/png/webp/pdf), size ≤ 10MB, `sha256`, `scanStatus`, target (expense_receipt/payment_evidence/other) + targetId. Download is authenticated and group-scoped.
 
@@ -289,7 +291,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 ---
 
-## 7. ROUTES (all under `/api`, `auth` middleware enforced per-router)
+## 7. Router map (full mounted contracts in Server/API_DOCUMENTATION.md)
 
 | Router | Key endpoints |
 |---|---|
@@ -331,7 +333,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | **auth** | `middleware/auth.js` | Reads `mm_at` HttpOnly cookie, `x-auth-token` header, or `Authorization: Bearer`; verifies JWT against `JWT_SECRET`; validates ObjectId-shaped `user.id`; enforces `User.suspended` on every request (blocks login/refresh/all API access). Attaches `req.user`. |
 | **roles (legacy)** | `middleware/roles.js` | `requireGroupRole('admin'|'member')` checks embedded MessGroup members/admin; `allowSelfOrAdmin` sets `req.canEditOthers`. |
 | **roles V2** | `middleware/roles.js` | `requireGroupRoleV2(minRole)` resolves effective role from active Membership interval (`owner>manager>treasurer>auditor>member`, RANK comparison), falls back to group.admin→owner; sets `req.group`, `req.groupRole`, `req.membership`. Plus `flagSelfApproval` (self-approval needs a reason → 422), `assertOwnerTransfer`, `auditRoleChange`. |
-| **csrf** | `middleware/csrf.js` | Double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; Bearer/`X-Requested-With` clients bypass. Origin/Referer check against CORS allowlist. Exposes `setCSRFCookie(res)` for login/register responses. |
+| **csrf** | `middleware/csrf.js` | Double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; requests without authentication cookies skip this check. Origin/Referer check against CORS allowlist. Exposes `setCSRFCookie(res)` for login/register responses. |
 | **amrGate** | `middleware/amrGate.js` | Requires `amr` claim to include `otp` (2FA verified). Returns generic 404 if not satisfied — used on admin routes so non-2FA users cannot confirm they exist. |
 | **rateLimiters** | `middleware/rateLimiters.js` | `joinCodeLimiter` — per-IP (10/15min) and per-user (20/hour) join-by-code limits with exponential lockout after 5 failures. Exposes buckets for recording failures/resets. |
 | **idempotency** | `middleware/idempotency.js` | `idempotent(operation)` — honors `Idempotency-Key` header; sha256 request hash; replays cached responses (`__idempotentReplay: true`); key-reuse with a different body → 409; duplicate concurrent create → 409 retry. |
@@ -376,7 +378,7 @@ Schema groups:
 - **`scripts/migrateInviteCodes.js`** — B3.1: hashes existing `MessGroup.code` values into `InviteCode` collection. Idempotent. Run: `node scripts/migrateInviteCodes.js`.
 - **`scripts/checkIndexes.js`** — asserts every expected index (including TTL indexes) exists across all collections. Run: `node scripts/checkIndexes.js`.
 - **`scripts/smoke/*.sh`** — smoke test scripts for B0 (`b0.sh`), B2 (`b2.sh`), B3 (`b3.sh`), B4 (`b4.sh`), and live-infrastructure gates (`live-infra-gates.sh`).
-- **`tests/`** — 19 suites / 111 passing: `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules`. Plus `tests/integration/` (supertest, needs live server): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`.
+- **`tests/`** — 112 unit tests passing: `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules`. Plus `tests/integration/` (Supertest and disposable MongoDB): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`.
 
 ---
 
@@ -462,7 +464,7 @@ Schema groups:
 
 > **Numbering note:** `Gate §17.x` references elsewhere in this file point to the external acceptance spec, not to the sections below.
 
-# PART B — Extension Plan (Routine/Notes, Support Desk, Inbox, Cron, Security, Frontend Architecture)
+# PART B — Historical design and acceptance targets (Routine/Notes, Support Desk, Inbox, Cron, Security, Frontend Architecture)
 
 ## 14. Mess Routine & Notice Board module ("Roster")
 
@@ -622,7 +624,7 @@ Admin side — `/api/admin/support` (inherits the hidden-admin guard, so non-adm
 
 ## 16. Unified Notification Inbox (new) + Admin alerts
 
-Today the outbox has an `in_app` channel but nothing the user can read. Add one small collection and use it everywhere (duties, notes, disputes, statements, support).
+The original extension called for a user-facing inbox. InboxNotification and inboxRoutes now implement the feed (duties, notes, disputes, statements, support).
 
 **`InboxNotification`** — `userId`, `scope: user|admin`, `groupId?`, `type` (`duty.reminder`, `duty.swap_requested`, `note.handover`, `support.admin_replied`, `support.ticket_created`, `dispute.responded`, `statement.finalized` …), `title`, `body`, `link: { kind, id }` (deep link target), `readAt`, `dedupeKey` (sparse unique), `expiresAt` (TTL 90 days).
 
@@ -707,7 +709,7 @@ The existing hard rules (CSS variables only, react-icons only, zustand, shared c
 ### 19.1 Backend changes needed for cookie-only auth
 
 1. `middleware/auth.js`: accept the access token from an HttpOnly cookie `mm_at` (Path `/`, `SameSite=Strict` in prod, `Secure`), falling back to `x-auth-token` for non-browser clients.
-2. Login / refresh / register: when the request carries `X-Client: web`, set `mm_at` + `mm_rt` cookies and **omit tokens from the JSON body**.
+2. Login / refresh / register: when the request carries `X-Client: web`, set `mm_at` + `refreshToken` cookies and **omit tokens from the JSON body**.
 3. Refresh-cookie path widens from `/api/users` to the BFF refresh route; keep `HttpOnly; Secure; SameSite=Strict`.
 4. CSRF: keep Origin check, add a double-submit `mm_csrf` cookie + `x-csrf-token` header for cookie-authenticated mutations (the BFF forwards both).
 5. Socket.IO: authenticate from the cookie on handshake (`withCredentials`) — remove the query-string token.
@@ -739,17 +741,19 @@ The existing hard rules (CSS variables only, react-icons only, zustand, shared c
 
 ## 21. Phased delivery plan
 
-| Phase | Scope | Depends on | Exit criteria |
-|---|---|---|---|
-| **B0 — Foundations** ✅ DONE | `InboxNotification` + `/api/inbox` + socket `user:<id>` room; `JobLock`/`JobRun`; scheduler audit fixes; `notificationPrefs`; `Counter` | — | 111 unit tests pass; inbox feed works end-to-end |
-| **B1 — Support Desk** ✅ DONE | Models, user + admin APIs, comment-lock rules, SLA/auto-close jobs, admin alerts, action tokens, appeal route | B0 | Rule-matrix tests green (`supportRules.test.js`); admin gets in-app + email on new ticket |
-| **B2 — Routine & Board** ✅ DONE | Roster/Assignment/Swap/Menu/Note models, generation service, reminders, `board/today`, handover tasks, shopping list, kitchen inventory, polls | B0 | Generation idempotent (`rosterGeneration.test.js`); departed-member reassignment (`departedReassignment.test.js`); handover tasks (`noteVisibility.test.js`) |
-| **B3 — Security hardening** ✅ DONE | InviteCode hashing + join limiter, TOTP 2FA (admin mandatory via `amrGate`), SecurityEvent sweep, CSP/Referrer/Permissions/HSTS headers, retention job, `checkIndexes.js` | B0 | `inviteCode.test.js`, `totp.test.js`, `anomalySweep.test.js`, `privacyPayload.test.js` all pass |
-| **B4 — Cookie-only auth backend** ✅ DONE | `mm_at` HttpOnly access cookie + `mm_csrf` double-submit; Socket.IO cookie auth (query-string rejected); `setAccessTokenCookie`/`setRefreshTokenCookieWide`; `X-Client: web` cookie-only responses | B3 | `cookies.test.js` integration tests pass |
-| **B5 — Frontend (Next.js BFF)** ⬜ PENDING | Foundation rewrite, then Support, Board/Routine, Inbox UI | B1, B2, B4 | Frontend TODO phases P0′, P9–P11 |
-| **B6 — Extras** ⬜ PENDING | Cook headcount, shared shopping list (done via shoppingList), fairness board (done via `dutyFairnessBoard`), inventory tracker (done via `kitchenInventory`), polls (done via `pollController`), weekly digest (done via `schedulerService.weeklyDigestFn`) | B2 | — |
+| Phase | Status | Evidence and remaining gate |
+|---|---|---|
+| B0 inbox and jobs | IMPLEMENTED | Inbox routes, preferences, locks and job-run models exist. Verify deployed delivery separately. |
+| B1 support | PARTIALLY IMPLEMENTED | User and hidden admin APIs, transitions, action tokens and SLA jobs exist. Integration covers ticket transitions. Live provider delivery and CAPTCHA remain open. |
+| B2 group operations | PARTIALLY IMPLEMENTED | Rosters, duties, notes, shopping, kitchen and polls are mounted. Permission and concurrency checks remain. |
+| B3 security | PARTIALLY IMPLEMENTED | Hashed invitations, OTP and AMR exist. Session-family integration and legacy invite retirement remain open. |
+| B4 browser authentication | PARTIALLY IMPLEMENTED | Express cookie login, CSRF and logout pass integration tests. Deployed OAuth and BFF refresh need verification. |
+| B5 frontend | PARTIALLY IMPLEMENTED | Client already contains Next.js, App Router pages and a BFF. The browser refresh path still tries to read an HttpOnly cookie named mm_rt. |
 
-### 21.1 Tests (same `node --test` harness — 19 suites / 111 passing)
+IMPLEMENTED denotes source coverage. PLANNED means future work. DEPRECATED marks replaced interfaces. NEEDS VERIFICATION identifies operational claims without an end-to-end check.
+
+
+### 21.1 Tests (same `node --test` harness — 112 unit tests passing)
 
 - `supportRules.test.js` — full status × actor × action matrix incl. closed, strict-turn on/off, reopen-window.
 - `rosterGeneration.test.js` — round-robin continuity, skip-absent, departed member, DST-free Dhaka day edges, idempotent regeneration.

@@ -67,21 +67,21 @@ export const setRefreshTokenCookie = (res, token) => {
         `SameSite=${sameSite}`,
     ];
     if (isProd) flags.push('Secure');
-    res.setHeader('Set-Cookie', flags.join('; '));
+    res.append('Set-Cookie', flags.join('; '));
 };
 
-export const clearRefreshTokenCookie = (res) => {
+export const clearRefreshTokenCookie = (res, path = '/api/users') => {
     const isProd = process.env.NODE_ENV === 'production';
     const flags = [
         'refreshToken=',
         'HttpOnly',
-        'Path=/api/users',
+        'Path=' + path,
         'Max-Age=0',
         'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
         `SameSite=${isProd ? 'Strict' : 'Lax'}`,
     ];
     if (isProd) flags.push('Secure');
-    res.setHeader('Set-Cookie', flags.join('; '));
+    res.append('Set-Cookie', flags.join('; '));
 };
 
 // ---- Access token cookie (mm_at) ----
@@ -97,7 +97,7 @@ export const setAccessTokenCookie = (res, token) => {
         `SameSite=${sameSite}`,
     ];
     if (isProd) flags.push('Secure');
-    res.setHeader('Set-Cookie', flags.join('; '));
+    res.append('Set-Cookie', flags.join('; '));
 };
 
 export const clearAccessTokenCookie = (res) => {
@@ -112,7 +112,7 @@ export const clearAccessTokenCookie = (res) => {
         `SameSite=${sameSite}`,
     ];
     if (isProd) flags.push('Secure');
-    res.setHeader('Set-Cookie', flags.join('; '));
+    res.append('Set-Cookie', flags.join('; '));
 };
 
 // Widen refresh cookie path for BFF refresh route (Section 5 item 3).
@@ -130,5 +130,5 @@ export const setRefreshTokenCookieWide = (res, token, pathOverride = '/api') => 
         `SameSite=${sameSite}`,
     ];
     if (isProd) flags.push('Secure');
-    res.setHeader('Set-Cookie', flags.join('; '));
+    res.append('Set-Cookie', flags.join('; '));
 };

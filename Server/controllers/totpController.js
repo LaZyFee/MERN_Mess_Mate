@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+import { sendAuthResponse } from './userController.js';
 // TOTP 2FA controller (B3.2) — /api/users/2fa and login step-up.
 
 import User from '../models/User.js';
@@ -18,7 +20,7 @@ const CHALLENGE_TTL = 5 * 60 * 1000;
 const challenges = new Map();
 
 export const makeChallenge = (userId) => {
-    const id = require('crypto').randomBytes(16).toString('hex');
+    const id = randomBytes(16).toString('hex');
     challenges.set(id, { userId, expiresAt: Date.now() + CHALLENGE_TTL, used: false });
     return id;
 };
@@ -36,17 +38,17 @@ setInterval(() => {
     for (const [id, c] of challenges.entries()) {
         if (c.expiresAt < now) challenges.delete(id);
     }
-}, 600000);
+}, 600000).unref();
 
 export const setupSchema = z.object({});
 export const verifySchema = z.object({ code: z.string().length(6) });
 export const disableSchema = z.object({
     password: z.string().min(1),
-    code: z.string().length(6),
+    code: z.string().regex(/^(?:\d{6}|[A-F0-9]{8})$/),
 });
 export const login2faSchema = z.object({
     challengeToken: z.string().min(1),
-    code: z.string().length(6),
+    code: z.string().regex(/^(?:\d{6}|[A-F0-9]{8})$/),
 });
 
 export const setup = async (req, res, next) => {
@@ -166,18 +168,7 @@ export const loginChallenge = async (req, res, next) => {
         if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
 
         if (!user.twoFactor?.enabled) {
-            const { signAccessToken, signRefreshToken, saveRefreshToken, setRefreshTokenCookie } =
-                await import('../utils/tokens.js');
-            const accessToken = signAccessToken({ ...user, amr: ['pwd'] });
-            const refreshToken = signRefreshToken(user);
-            await saveRefreshToken(User, user.id, refreshToken);
-            setRefreshTokenCookie(res, refreshToken);
-            return res.json({
-                user: { id: user.id, username: user.username, email: user.email },
-                accessToken,
-                refreshToken,
-                twoFactorRequired: false,
-            });
+            return await sendAuthResponse(res, user, 200, req, ['pwd'], { twoFactorRequired: false });
         }
 
         const challengeId = makeChallenge(user.id);
@@ -198,6 +189,7 @@ export const login2fa = async (req, res, next) => {
         }
 
         const user = await User.findById(challenge.userId);
+        if (user?.suspended) return res.status(403).json({ msg: 'Account suspended' });
         if (!user || !user.twoFactor?.enabled) {
             return res.status(403).json({ msg: '2FA not enabled for this user', code: 'TWO_FA_NOT_ENABLED' });
         }
@@ -221,19 +213,6 @@ export const login2fa = async (req, res, next) => {
             return res.status(400).json({ msg: 'Invalid verification code', code: 'TWO_FA_INVALID_CODE' });
         }
 
-        const { signAccessToken, signRefreshToken, saveRefreshToken, setRefreshTokenCookie } =
-            await import('../utils/tokens.js');
-        const accessToken = signAccessToken({ ...user, amr: ['pwd', 'otp'] });
-        const refreshToken = signRefreshToken(user);
-        await saveRefreshToken(User, user.id, refreshToken);
-        setRefreshTokenCookie(res, refreshToken);
-
-        return res.json({
-            user: { id: user.id, username: user.username, email: user.email },
-            accessToken,
-            refreshToken,
-            twoFactorRequired: false,
-            msg: '2FA verified — session established',
-        });
+        return await sendAuthResponse(res, user, 200, req, ['pwd', 'otp'], { twoFactorRequired: false, msg: '2FA verified — session established' });
     } catch (err) { next(err); }
 };

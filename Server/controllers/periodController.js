@@ -1,4 +1,5 @@
-﻿import { getOrCreatePeriod, beginReview, returnToOpen, ensureOpen } from '../services/periodService.js';
+import Period from '../models/Period.js';
+import { getOrCreatePeriod, beginReview, returnToOpen, ensureOpen } from '../services/periodService.js';
 import { buildStatementDraft } from '../services/statementService.js';
 import { getAccountingEquation } from '../services/ledgerService.js';
 import { audit } from '../models/AuditEvent.js';
@@ -8,7 +9,6 @@ import { audit } from '../models/AuditEvent.js';
 /** GET /api/groups/:groupId/periods — all periods */
 export const listPeriods = async (req, res, next) => {
     try {
-        const { Period } = await import('../models/Period.js');
         res.json({ periods: await Period.find({ groupId: req.params.groupId }).sort({ month: -1 }).lean() });
     } catch (err) { next(err); }
 };
@@ -16,7 +16,6 @@ export const listPeriods = async (req, res, next) => {
 /** GET /api/groups/:groupId/periods/:month */
 export const getPeriod = async (req, res, next) => {
     try {
-        const { Period } = await import('../models/Period.js');
         const period = await Period.findOne({ groupId: req.params.groupId, month: req.params.month }).lean();
         res.json({ period });
     } catch (err) { next(err); }
@@ -40,7 +39,10 @@ export const previewStatement = async (req, res, next) => {
             mealRate: draft.mealRate,
             items,
         });
-    } catch (err) { next(err); }
+    } catch (err) {
+        if (err.status === 422 || err.status === 409) return res.status(err.status).json({ msg: err.message });
+        next(err);
+    }
 };
 
 /** POST /api/groups/:groupId/periods/:month/begin-review */

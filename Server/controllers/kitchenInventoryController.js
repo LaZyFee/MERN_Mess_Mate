@@ -81,13 +81,19 @@ export const recordRefill = async (req, res, next) => {
     try {
         const { groupId, itemId } = req.params;
         const { quantity, unit, costPoisha, note } = refillSchema.parse(req.body);
-        const item = await KitchenItem.findOne({ _id: itemId, groupId });
+        const current = await KitchenItem.findOne({ _id: itemId, groupId }).select('unit').lean();
+        if (!current) return res.status(404).json({ msg: 'Item not found' });
+        const refilledAt = new Date();
+        const item = await KitchenItem.findOneAndUpdate(
+            { _id: itemId, groupId },
+            {
+                $inc: { currentStock: quantity },
+                $set: { lastRefill: refilledAt },
+                $push: { refills: { refilledAt, quantity, unit: unit || current.unit, costPoisha, refilledBy: req.user.id, note } },
+            },
+            { new: true, runValidators: true }
+        );
         if (!item) return res.status(404).json({ msg: 'Item not found' });
-
-        item.currentStock += quantity;
-        item.lastRefill = new Date();
-        item.refills.push({ refilledAt: new Date(), quantity, unit: unit || item.unit, costPoisha, refilledBy: req.user.id, note });
-        await item.save();
 
         await audit({ groupId, actorId: req.user.id, action: 'kitchenItem.refilled', targetType: 'kitchenItem', targetId: item._id, after: { quantity, unit, costPoisha } });
         res.json({ item });

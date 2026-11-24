@@ -1,3 +1,4 @@
+import Poll from '../models/Poll.js';
 import express from 'express';
 import auth from '../middleware/auth.js';
 import { requireGroupRoleV2 } from '../middleware/roles.js';
@@ -24,11 +25,19 @@ const pollIdParam = z.object({ pollId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'In
 
 const router = express.Router();
 router.use(auth);
+router.param('pollId', async (req, res, next, id) => {
+    if (!pollIdParam.safeParse({ pollId: id }).success) return res.status(400).json({ msg: 'Invalid poll id' });
+    const poll = await Poll.findById(id);
+    if (!poll) return res.status(404).json({ msg: 'Poll not found' });
+    req.poll = poll;
+    req.params.groupId = poll.groupId;
+    next();
+});
 
 router.get('/groups/:groupId', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), listPolls);
 router.post('/groups/:groupId', validate(groupIdParam, 'params'), validate(pollCreateSchema), requireGroupRoleV2('member'), createPoll);
-router.post('/:pollId/vote', validate(pollIdParam, 'params'), validate(voteSchema), requireGroupRoleV2('member'), votePoll);
-router.post('/:pollId/close', validate(pollIdParam, 'params'), requireGroupRoleV2('member'), closePoll);
-router.get('/:pollId/results', validate(pollIdParam, 'params'), requireGroupRoleV2('member'), pollResults);
+router.post('/:pollId/vote', validate(voteSchema), requireGroupRoleV2('member'), votePoll);
+router.post('/:pollId/close', requireGroupRoleV2('member'), closePoll);
+router.get('/:pollId/results', requireGroupRoleV2('member'), pollResults);
 
 export default router;

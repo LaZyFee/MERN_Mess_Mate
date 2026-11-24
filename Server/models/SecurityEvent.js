@@ -24,7 +24,7 @@ const securityEventSchema = new mongoose.Schema(
         ip: { type: String, default: '' },
         ua: { type: String, default: '' },
         meta: { type: mongoose.Schema.Types.Mixed, default: {} },
-        createdAt: { type: Date, default: Date.now, index: true },
+        createdAt: { type: Date, default: Date.now },
     },
     { timestamps: { createdAt: true, updatedAt: false } }
 );

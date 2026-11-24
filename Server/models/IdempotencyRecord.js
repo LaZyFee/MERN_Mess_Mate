@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 
 const idempotencyRecordSchema = new mongoose.Schema(
     {
-        groupId: { type: mongoose.Schema.Types.ObjectId, ref: 'MessGroup', required: true, index: true },
+        groupId: { type: mongoose.Schema.Types.ObjectId, ref: 'MessGroup', default: null, index: true },
         actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         operation: { type: String, required: true }, // e.g. 'money.confirm'
         key: { type: String, required: true },

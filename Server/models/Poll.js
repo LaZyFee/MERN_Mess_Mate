@@ -16,7 +16,7 @@ const pollSchema = new mongoose.Schema({
     status: { type: String, enum: ['open', 'closed'], default: 'open', index: true },
     expiresAt: { type: Date, required: true },
     relatedMenuItem: { type: String, trim: true, max: 120, default: '' }, // e.g. "Friday dinner"
-}, { timestamps: true });
+}, { timestamps: true, optimisticConcurrency: true });
 
 pollSchema.index({ groupId: 1, status: 1 });
 pollSchema.index({ expiresAt: 1 });
