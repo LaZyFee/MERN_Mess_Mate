@@ -136,11 +136,8 @@ export default function RateLimitCatcher({
      priority
     />
     <div
-     className="absolute inset-0"
-     style={{
-      background:
-       "linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 85%, transparent))",
-     }}
+     
+     className="absolute inset-0 [background:linear-gradient(color-mix(in_srgb,_var(--bg)_65%,_transparent),_color-mix(in_srgb,_var(--bg)_85%,_transparent))]"
     />
    </div>
 
@@ -152,16 +149,29 @@ export default function RateLimitCatcher({
 
    {/* Floating dots pattern */}
    {[
-    { cls: "cs-dot-1", style: { top: "15%", left: "7%" } },
-    { cls: "cs-dot-2", style: { top: "75%", left: "6%" } },
-    { cls: "cs-dot-3", style: { top: "10%", right: "8%" } },
-    { cls: "cs-dot-4", style: { top: "60%", right: "7%" } },
-    { cls: "cs-dot-5", style: { top: "40%", left: "3%" } },
-   ].map(({ cls, style }, i) => (
+    { cls: "cs-dot-1", top: "15%", left: "7%" },
+    { cls: "cs-dot-2", top: "75%", left: "6%" },
+    { cls: "cs-dot-3", top: "10%", right: "8%" },
+    { cls: "cs-dot-4", top: "60%", right: "7%" },
+    { cls: "cs-dot-5", top: "40%", left: "3%" },
+   ].map(({ cls, top, left, right }, i) => (
     <div
      key={i}
-     className={`${cls} absolute w-1.5 h-1.5 rounded-full bg-(--gold)/50 pointer-events-none`}
-     style={style}
+     className={[
+      cls,
+      "absolute",
+      "w-1.5",
+      "h-1.5",
+      "rounded-full",
+      "bg-(--gold)/50",
+      "pointer-events-none",
+      top && `[top:var(--dot-top)]`,
+      right && `[right:var(--dot-right)]`,
+      left && `[left:var(--dot-left)]`,
+     ]
+      .filter(Boolean)
+      .join(" ")}
+     style={{ "--dot-top": top, "--dot-right": right, "--dot-left": left }}
     />
    ))}
 
@@ -191,16 +201,16 @@ export default function RateLimitCatcher({
 
     {/* 429 giant watermark number */}
     <h1
-     className="cs-fade-up cs-delay-2 font-black leading-none text-(--bgs) text-center mb-1 select-none"
-     style={{ fontSize: "clamp(4.5rem, 16vw, 9rem)", opacity: 0.15 }}
+     
+     className="cs-fade-up cs-delay-2 font-black leading-none text-(--bgs) text-center mb-1 select-none [font-size:clamp(4.5rem,_16vw,_9rem)] [0.15]"
     >
      429
     </h1>
 
     {/* Heading */}
     <p
-     className="cs-lora cs-fade-up cs-delay-2 text-(--warning) italic text-center font-bold leading-snug -mt-3 mb-3"
-     style={{ fontSize: "clamp(1.2rem, 3vw, 1.75rem)" }}
+     
+     className="cs-lora cs-fade-up cs-delay-2 text-(--warning) italic text-center font-bold leading-snug -mt-3 mb-3 [font-size:clamp(1.2rem,_3vw,_1.75rem)]"
     >
      Too Many Requests
     </p>
@@ -228,7 +238,7 @@ export default function RateLimitCatcher({
        <span className="flex items-center gap-1.5 text-(--gold) font-medium">
         {secondsLeft > 0 ? (
          <>
-          <MdAccessTime className="animate-spin text-(--warning) shrink-0" style={{ animationDuration: "3s" }} size={15} />
+          <MdAccessTime  className="animate-spin text-(--warning) shrink-0 [animation-duration:3s]" size={15} />
           <span>Cooldown in progress</span>
          </>
         ) : (
@@ -246,12 +256,12 @@ export default function RateLimitCatcher({
       {/* Progress bar track */}
       <div className="w-full h-2 rounded-full bg-(--bgs)/10 overflow-hidden relative">
        <div
-        className={`h-full transition-all duration-1000 ease-linear rounded-full ${
+        
+        className={[`h-full transition-all duration-1000 ease-linear rounded-full ${
          secondsLeft === 0
           ? "bg-(--success) shadow-[var(--shadow-md)]"
           : "bg-(--gold) shadow-[var(--shadow-md)]"
-        }`}
-        style={{ width: `${progressPercent}%` }}
+        }`, "[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": `${progressPercent}%` }}
        />
       </div>
 
@@ -278,8 +288,8 @@ export default function RateLimitCatcher({
       >
        <MdRefresh
         size={17}
-        className={secondsLeft > 0 ? "animate-spin text-(--warning)" : ""}
-        style={{ animationDuration: "2s" }}
+        
+        className={[secondsLeft > 0 ? "animate-spin text-(--warning)" : "", "[animation-duration:2s]"].filter(Boolean).join(" ")}
        />
        <span>{secondsLeft > 0 ? `Wait (${secondsLeft}s)` : "Try Again Now"}</span>
       </button>

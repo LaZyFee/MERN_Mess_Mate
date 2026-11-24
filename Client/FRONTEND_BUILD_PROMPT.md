@@ -16,6 +16,10 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 
 ### 1.1 Colors
 
+- **Tailwind classNames only for layout and visual styling.** Do not use `style={{ ... }}` in JSX; use `className` with Tailwind utilities and CSS-variable arbitrary values.
+- Dynamic values that cannot be static classes must use a CSS variable via `style={{ "--value": ... }}` plus a Tailwind/CSS class; never set literal colors, dimensions, margins, positioning, or other visual properties directly as inline style objects.
+- Add the mandatory Tailwind rule to every component, page, and future task. Existing inline styles must be migrated during touch-up tasks; no new inline style usage is allowed.
+
 - **Only** use CSS variables defined in `app/globals.css`.
 - **Forbidden anywhere in `src/` and `app/` except `app/globals.css` variable definitions:** hex (`#fff`), `rgb()/rgba()/hsl()`, named colors (`red`, `white`…), Tailwind palette classes (`bg-blue-500`), inline `style={{ color/background/border… }}` with literal colors, and any literal color on icons (icons inherit text color via `currentColor`; set that color with a variable-based class).
 - Allowed: `var(--name)` references (e.g. `className="bg-[var(--surface)]"` or `.my-class { color: var(--text) }`).
@@ -465,3 +469,101 @@ middleware.js   ← edge: cheap gate only — if no `mm_at`/`mm_rt` cookie on a 
 
 
 
+
+### 8.9 SSR/CSR/Actions — MANDATORY 3-LAYER SPLIT (overrides any implied CSR-only approach)
+
+Every feature MUST be split into exactly three layers. **This is not optional and overrides any earlier section that implies putting fetch logic in client components.**
+
+#### Layer 1 — Server Action file: `src/lib/actions/<domain>.js`
+- No directive — runs only on the server (Node.js runtime).
+- Wraps `serverApi` calls; returns plain serialisable JS objects (no class instances, no Dates unless stringified).
+- Throws typed errors from serverApi so callers can call `notFound()` / `redirect('/login')`.
+- One file per domain: `auth.js`, `groups.js`, `memberships.js`, `meals.js`, `expenses.js`, `money.js`, `statements.js`, `periods.js`, `stats.js`, `notifications.js`, `disputes.js`, `reconciliation.js`, `support.js`, `inbox.js`, `routines.js`, `shopping.js`, `inventory.js`, `polls.js`, `admin.js`.
+- Example:
+  ```js
+  // src/lib/actions/groups.js
+  import { serverApi } from "@/lib/api/serverApi";
+  export async function getMyGroups() {
+    const data = await serverApi.get("/messgroups/my-groups");
+    return data?.groups || data || [];
+  }
+  export async function getGroup(groupId) {
+    const data = await serverApi.get(`/messgroups/${groupId}`);
+    return data?.group || data;
+  }
+  ```
+
+#### Layer 2 — SSR Page: `app/…/page.jsx` (Server Component)
+- **NO `"use client"` directive ever.** This is a React Server Component.
+- Calls Layer-1 action functions to fetch the first screen's data server-side (data never appears in browser network tab as a separate fetch).
+- Error handling: `NotFound`/404 → `notFound()`. `Unauthorized`/401 → `redirect('/login?next=…')`. `Forbidden`/403 → `notFound()` (privacy masking — never reveal group existence to outsiders).
+- Passes fetched data as `initialXxx` props to the Layer-3 client component.
+- Exports `metadata` / `generateMetadata`.
+- Example:
+  ```jsx
+  // app/(app)/page.jsx  — Server Component (NO "use client")
+  import { getMyGroups } from "@/lib/actions/groups";
+  import HomeClient from "./HomeClient";
+  export const metadata = { title: "Home — MealMate" };
+  export default async function HomePage() {
+    const initialGroups = await getMyGroups();
+    return <HomeClient initialGroups={initialGroups} />;
+  }
+  ```
+
+#### Layer 3 — CSR Component: `app/…/<Name>Client.jsx` (Client Component)
+- **MUST have `"use client"` as the very first line.**
+- Receives `initialXxx` props; seeds into local `useState(initialXxx)` — NOT in `useEffect` to avoid flash.
+- All mutations (POST/PUT/DELETE/PATCH) go through `browserApi` domain files (`src/lib/api/<domain>.js`) — never `serverApi` from client.
+- Uses zustand stores for shared/cross-component state; seeds zustand from `initialData` in a `useEffect` only when needed for cross-component sharing.
+- Does NOT re-fetch on mount when `initialData` is present; re-fetches on user action (refresh button, mutation callback) via `browserApi`.
+- Example:
+  ```jsx
+  // app/(app)/HomeClient.jsx  — Client Component
+  "use client";
+  import { useState, useCallback } from "react";
+  import { groupsApi } from "@/lib/api/groups";
+  export default function HomeClient({ initialGroups }) {
+    const [groups, setGroups] = useState(initialGroups ?? []);
+    const refresh = useCallback(async () => {
+      const data = await groupsApi.myGroups();
+      setGroups(data?.groups || data || []);
+    }, []);
+    // mutations: call groupsApi.xxx(), then refresh() or setGroups(...)
+  }
+  ```
+
+#### Layout SSR pattern for group/profile/admin routes
+- `layout.jsx` = Server Component. Fetches scoped data (group metadata, user role) via Layer-1 actions.
+- Renders a `<XxxShell initialXxx={…}>` **client** component that owns React context, navigation state, and `{children}`.
+- The shell hydrates from props: `const [group, setGroup] = useState(initialGroup)`.
+- Example:
+  ```jsx
+  // app/(app)/groups/[groupId]/layout.jsx — Server Component
+  import { getGroup } from "@/lib/actions/groups";
+  import GroupShell from "./GroupShell";
+  export default async function GroupLayout({ children, params }) {
+    const { groupId } = await params;
+    const group = await getGroup(groupId);   // throws NotFound → 404
+    return <GroupShell initialGroup={group}>{children}</GroupShell>;
+  }
+  ```
+
+#### Naming conventions (enforced)
+| File | Layer | Directive |
+|---|---|---|
+| `src/lib/actions/<domain>.js` | Server Actions | none |
+| `src/lib/api/<domain>.js` | Browser API client | `"use client"` or none |
+| `app/…/page.jsx` | SSR Page | **none — Server Component** |
+| `app/…/layout.jsx` | SSR Layout | **none — Server Component** |
+| `app/…/<Name>Client.jsx` | CSR interactive | `"use client"` |
+| `app/…/<Name>Form.jsx` | CSR form | `"use client"` |
+| `src/features/<domain>/components/<Name>.jsx` | CSR feature | `"use client"` |
+
+#### Verification (run after every phase — must return nothing)
+```bash
+# No page.jsx may contain "use client"
+grep -rl '"use client"' Client/src/app --include="page.jsx"
+# No layout.jsx may contain "use client"
+grep -rl '"use client"' Client/src/app --include="layout.jsx"
+```

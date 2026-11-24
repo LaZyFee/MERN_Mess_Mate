@@ -1,4 +1,4 @@
-"use client";
+' "use client";
 import Link from "next/link";
 import { sanitizeHtml } from "@/utils/sanitize";
 
@@ -33,8 +33,7 @@ export default function SectionHeader({
     <div className="hidden lg:flex flex-col items-center gap-3 shrink-0">
      <div className="w-px flex-1 min-h-12 bg-(--p)/30" />
      <span
-      className="text-[10px] font-bold uppercase tracking-[0.25em] whitespace-nowrap text-(--tm) transition-colors duration-300"
-      style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+      className="text-[10px] font-bold uppercase tracking-[0.25em] whitespace-nowrap text-(--tm) transition-colors duration-300 [writing-mode:vertical-rl][-rotate-180]"
      >
       {rotatedLabel}
      </span>
@@ -54,8 +53,8 @@ export default function SectionHeader({
 
        {/* Headline */}
        <h2
-        className="font-bold leading-none tracking-tight text-(--tp)"
-        style={{ fontSize: "clamp(2rem, 4vw, 4rem)" }}
+        className="font-bold leading-none tracking-tight text-(--tp) [font-size:var(--headline-size)]"
+        style={{ "--headline-size": "clamp(2rem, 4vw, 4rem)" }}
        >
         {headingLines.map((line, i) =>
          isAccent(i) ? (
@@ -79,11 +78,7 @@ export default function SectionHeader({
       {ctaLabel && ctaHref && (
        <Link
         href={ctaHref}
-        className="group shrink-0 inline-flex items-center gap-4 bg-(--tp) text-(--bg) px-7 py-4 font-bold text-sm uppercase tracking-widest transition-all duration-300 hover:bg-(--p) hover:-translate-y-0.5"
-        style={{
-         clipPath:
-          "polygon(0 0, calc(100% - 14px) 0, 100% 100%, 14px 100%)",
-        }}
+        className="group shrink-0 inline-flex items-center gap-4 bg-(--tp) text-(--bg) px-7 py-4 font-bold text-sm uppercase tracking-widest transition-all duration-300 hover:bg-(--p) hover:-translate-y-0.5 [clip-path:polygon(0_0,_calc(100%_-_14px)_0,_100%_100%,_14px_100%)]"
        >
         <span>{ctaLabel}</span>
         <span className="text-lg text-(--p) group-hover:text-(--bg) transition-colors duration-300">
@@ -106,3 +101,4 @@ export default function SectionHeader({
   </div>
  );
 }
+'

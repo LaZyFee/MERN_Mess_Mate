@@ -132,15 +132,7 @@ const Modal = ({
      )}
 
      <div
-      className={`${bodyClassName} ${scrollBehavior === "inside" ? "overflow-y-auto" : ""}`}
-      style={
-       scrollBehavior === "inside"
-        ? {
-         scrollbarWidth: "none",
-         msOverflowStyle: "none",
-        }
-        : undefined
-      }
+      className={`${bodyClassName} ${scrollBehavior === "inside" ? "overflow-y-auto hide-scrollbar" : ""}`}
      >
       {children}
      </div>
@@ -153,6 +145,10 @@ const Modal = ({
 
    {/* Hide scrollbar styles */}
    <style jsx>{`
+    .hide-scrollbar {
+     scrollbar-width: none; /* Firefox */
+     -ms-overflow-style: none; /* IE/Edge */
+    }
     .hide-scrollbar::-webkit-scrollbar {
      display: none;
     }

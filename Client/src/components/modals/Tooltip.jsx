@@ -124,14 +124,11 @@ const Tooltip = ({
    {isVisible && (
     <div
      ref={tooltipRef}
-     className={`
+     
+     className={[`
       absolute z-50 bg-(--bgs) text-(--ts) px-3 py-1.5 rounded-lg text-sm shadow-lg border border-(--bd)
       ${className}
-     `}
-     style={{
-      top: `${position.top}px`,
-      left: `${position.left}px`,
-     }}
+     `, "[top:var(--inline-top)]", "[left:var(--inline-left)]"].filter(Boolean).join(" ")} style={{ "--inline-top": `${position.top}px`, "--inline-left": `${position.left}px` }}
      {...props}
     >
      {content}

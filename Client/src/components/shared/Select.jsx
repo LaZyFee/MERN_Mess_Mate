@@ -459,9 +459,9 @@ const Select = forwardRef(
   // Searchable select content matching the phone country selector
   const searchableSelectContent = (
    <div
-    className="relative w-full"
+    
     ref={selectContainerRef}
-    style={{ position: "relative" }}
+    className="relative w-full [position:relative]"
    >
     {renderHiddenSelect()}
 
@@ -518,15 +518,8 @@ const Select = forwardRef(
       <div
        ref={dropdownRef}
        id={`${selectId}-menu`}
-       className="phone-country-menu"
-       style={{
-        position: "fixed",
-        top: dropdownPosition.top,
-        left: dropdownPosition.left,
-        width: dropdownPosition.width,
-        maxWidth: "calc(100vw - 2rem)",
-        zIndex: 100000,
-       }}
+       
+       className="phone-country-menu [position:fixed] [top:var(--inline-top)] [left:var(--inline-left)] [width:var(--inline-width)] [max-width:calc(100vw_-_2rem)] [100000]" style={{ "--inline-top": dropdownPosition.top, "--inline-left": dropdownPosition.left, "--inline-width": dropdownPosition.width }}
        role="listbox"
        onClick={(e) => e.stopPropagation()}
       >
@@ -668,8 +661,8 @@ const Select = forwardRef(
       )}
       {align === "left" && (
        <div className="flex items-center justify-between gap-4">
-        <div style={{ width: labelWidth }}>{labelElement}</div>
-        <div style={{ width: inputWidth }}>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": labelWidth }}>{labelElement}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": inputWidth }}>
          {shouldUseSearchable
           ? searchableSelectContent
           : regularSelectContent}
@@ -678,12 +671,12 @@ const Select = forwardRef(
       )}
       {align === "right" && (
        <div className="flex items-center justify-between gap-4">
-        <div style={{ width: inputWidth }}>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": inputWidth }}>
          {shouldUseSearchable
           ? searchableSelectContent
           : regularSelectContent}
         </div>
-        <div style={{ width: labelWidth }}>{labelElement}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": labelWidth }}>{labelElement}</div>
        </div>
       )}
      </>

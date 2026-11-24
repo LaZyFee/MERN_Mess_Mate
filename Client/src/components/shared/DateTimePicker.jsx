@@ -660,20 +660,7 @@ export default function DateTimePicker({
  const dropdownContent = open && (
   <div
    ref={dropdownRef}
-   style={{
-    position: "absolute",
-    top: `${dropdownPos.top}px`,
-    left: `${dropdownPos.left}px`,
-    width: `${dropdownPos.width}px`,
-    maxWidth: "340px",
-    zIndex: 2147483647, // Max z-index
-    background: "var(--bgs)",
-    border: "1.5px solid var(--bd2)",
-    borderRadius: "var(--r-lg)",
-    boxShadow: "var(--shadow-xl)",
-    overflow: "hidden",
-    animation: "dtpFadeIn 0.15s ease-out",
-   }}
+   className={["[position:absolute]", "[top:var(--inline-top)]", "[left:var(--inline-left)]", "[width:var(--inline-width)]", "[max-width:340px]", "[2147483647]", "[background:var(--bgs)]", "[border:1.5px_solid_var(--bd2)]", "[border-radius:var(--r-lg)]", "[box-shadow:var(--shadow-xl)]", "[overflow:hidden]", "[animation:dtpFadeIn_0.15s_ease-out]"].filter(Boolean).join(" ")} style={{ "--inline-top": `${dropdownPos.top}px`, "--inline-left": `${dropdownPos.left}px`, "--inline-width": `${dropdownPos.width}px` }}
   >
    <style
     dangerouslySetInnerHTML={{
@@ -817,6 +804,11 @@ export default function DateTimePicker({
           cursor: not-allowed;
           pointer-events: none;
         }
+        .dtp-ampm-btn:disabled {
+          opacity: 0.25;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
         .dtp-format-toggle {
           display: flex;
           border-radius: var(--r-sm);
@@ -932,11 +924,7 @@ export default function DateTimePicker({
    {/* Tabs */}
    {showTime && !timeOnly && (
     <div
-     style={{
-      display: "flex",
-      borderBottom: "1.5px solid var(--bd)",
-      background: "var(--bg)",
-     }}
+     className={["[display:flex]", "[border-bottom:1.5px_solid_var(--bd)]", "[background:var(--bg)]"].filter(Boolean).join(" ")}
     >
      <button
       type="button"
@@ -957,17 +945,12 @@ export default function DateTimePicker({
 
    {/* Date Panel */}
    {tab === "date" && (
-    <div style={{ padding: "16px", height: "340px", overflow: "hidden" }}>
+    <div className={["[padding:16px]", "[height:340px]", "[overflow:hidden]"].filter(Boolean).join(" ")}>
      {dateView === "calendar" && (
       <>
        {/* Month/Year Nav */}
        <div
-        style={{
-         display: "flex",
-         alignItems: "center",
-         justifyContent: "space-between",
-         marginBottom: "14px",
-        }}
+        className={["[display:flex]", "[align-items:center]", "[justify-content:space-between]", "[margin-bottom:14px]"].filter(Boolean).join(" ")}
        >
         <button
          type="button"
@@ -975,31 +958,23 @@ export default function DateTimePicker({
          disabled={isPrevMonthDisabled()}
          onClick={prevMonth}
         >
-         <IoChevronBack style={{ fontSize: "0.95rem" }} />
+         <IoChevronBack className={["[font-size:0.95rem]"].filter(Boolean).join(" ")} />
         </button>
 
         <div className="dtp-select-wrapper">
          <button
           type="button"
           onClick={() => setDateView("month")}
-          className="dtp-select"
-          style={{
-           borderRadius: "8px",
-           fontSize: "0.75rem",
-           padding: "8px 24px 8px 12px",
-          }}
+          
+          className="dtp-select [border-radius:8px] [font-size:0.75rem] [padding:8px_24px_8px_12px]"
          >
           {MONTHS[viewMonth].slice(0, 3)}
          </button>
          <button
           type="button"
           onClick={() => setDateView("year")}
-          className="dtp-select"
-          style={{
-           borderRadius: "8px",
-           fontSize: "0.75rem",
-           padding: "8px 24px 8px 12px",
-          }}
+          
+          className="dtp-select [border-radius:8px] [font-size:0.75rem] [padding:8px_24px_8px_12px]"
          >
           {viewYear}
          </button>
@@ -1011,30 +986,18 @@ export default function DateTimePicker({
          disabled={isNextMonthDisabled()}
          onClick={nextMonth}
         >
-         <IoChevronForward style={{ fontSize: "0.95rem" }} />
+         <IoChevronForward className={["[font-size:0.95rem]"].filter(Boolean).join(" ")} />
         </button>
        </div>
 
        {/* Day labels */}
        <div
-        style={{
-         display: "grid",
-         gridTemplateColumns: "repeat(7, 1fr)",
-         marginBottom: "6px",
-        }}
+        className={["[display:grid]", "[grid-template-columns:repeat(7,_1fr)]", "[margin-bottom:6px]"].filter(Boolean).join(" ")}
        >
         {DAYS.map((d) => (
          <div
           key={d}
-          style={{
-           textAlign: "center",
-           fontSize: "0.7rem",
-           fontWeight: 800,
-           textTransform: "uppercase",
-           letterSpacing: "0.05em",
-           color: "var(--tl)",
-           paddingBottom: "4px",
-          }}
+          className={["[text-align:center]", "[font-size:0.7rem]", "[800]", "[text-transform:uppercase]", "[letter-spacing:0.05em]", "[color:var(--tl)]", "[padding-bottom:4px]"].filter(Boolean).join(" ")}
          >
           {d}
          </div>
@@ -1043,16 +1006,12 @@ export default function DateTimePicker({
 
        {/* Day cells */}
        <div
-        style={{
-         display: "grid",
-         gridTemplateColumns: "repeat(7, 1fr)",
-         gap: "2px",
-        }}
+        className={["[display:grid]", "[grid-template-columns:repeat(7,_1fr)]", "[gap:2px]"].filter(Boolean).join(" ")}
        >
         {cells.map((cell, i) => (
          <div
           key={i}
-          style={{ display: "flex", justifyContent: "center" }}
+          className={["[display:flex]", "[justify-content:center]"].filter(Boolean).join(" ")}
          >
           <button
            type="button"
@@ -1068,13 +1027,7 @@ export default function DateTimePicker({
 
        {showTime && (
         <p
-         style={{
-          textAlign: "center",
-          fontSize: "0.72rem",
-          color: "var(--tl)",
-          marginTop: "12px",
-          fontWeight: 600,
-         }}
+         className={["[text-align:center]", "[font-size:0.72rem]", "[color:var(--tl)]", "[margin-top:12px]", "[600]"].filter(Boolean).join(" ")}
         >
          Select a date, then set the time →
         </p>
@@ -1085,34 +1038,25 @@ export default function DateTimePicker({
      {dateView === "month" && (
       <>
        <div
-        style={{
-         display: "flex",
-         alignItems: "center",
-         justifyContent: "space-between",
-         marginBottom: "14px",
-        }}
+        className={["[display:flex]", "[align-items:center]", "[justify-content:space-between]", "[margin-bottom:14px]"].filter(Boolean).join(" ")}
        >
         <button
          type="button"
          className="dtp-nav-btn"
          onClick={() => setDateView("calendar")}
         >
-         <IoChevronBack style={{ fontSize: "0.95rem" }} />
+         <IoChevronBack className={["[font-size:0.95rem]"].filter(Boolean).join(" ")} />
         </button>
         <span
-         style={{
-          fontWeight: 800,
-          fontSize: "0.95rem",
-          color: "var(--tp)",
-         }}
+         className={["[800]", "[font-size:0.95rem]", "[color:var(--tp)]"].filter(Boolean).join(" ")}
         >
          Select Month
         </span>
-        <div style={{ width: "32px" }}></div>
+        <div className={["[width:32px]"].filter(Boolean).join(" ")}></div>
        </div>
        <div
-        className="dtp-grid-container"
-        style={{ height: "250px", gridTemplateRows: "repeat(4, 1fr)" }}
+        
+        className="dtp-grid-container [height:250px] [grid-template-rows:repeat(4,_1fr)]"
        >
         {MONTHS.map((m, i) => (
          <button
@@ -1137,30 +1081,21 @@ export default function DateTimePicker({
      {dateView === "year" && (
       <>
        <div
-        style={{
-         display: "flex",
-         alignItems: "center",
-         justifyContent: "space-between",
-         marginBottom: "14px",
-        }}
+        className={["[display:flex]", "[align-items:center]", "[justify-content:space-between]", "[margin-bottom:14px]"].filter(Boolean).join(" ")}
        >
         <button
          type="button"
          className="dtp-nav-btn"
          onClick={() => setDateView("calendar")}
         >
-         <IoChevronBack style={{ fontSize: "0.95rem" }} />
+         <IoChevronBack className={["[font-size:0.95rem]"].filter(Boolean).join(" ")} />
         </button>
         <span
-         style={{
-          fontWeight: 800,
-          fontSize: "0.95rem",
-          color: "var(--tp)",
-         }}
+         className={["[800]", "[font-size:0.95rem]", "[color:var(--tp)]"].filter(Boolean).join(" ")}
         >
          Select Year
         </span>
-        <div style={{ width: "32px" }}></div>
+        <div className={["[width:32px]"].filter(Boolean).join(" ")}></div>
        </div>
        <div
         className="dtp-grid-container dtp-year-scroll"
@@ -1190,38 +1125,21 @@ export default function DateTimePicker({
 
    {/* Time Panel */}
    {(tab === "time" || timeOnly) && (showTime || timeOnly) && (
-    <div style={{ padding: "16px", height: "340px", overflow: "hidden" }}>
+    <div className={["[padding:16px]", "[height:340px]", "[overflow:hidden]"].filter(Boolean).join(" ")}>
      {/* Header: big clock + format toggle */}
      <div
-      style={{
-       display: "flex",
-       alignItems: "center",
-       justifyContent: "space-between",
-       marginBottom: "14px",
-      }}
+      className={["[display:flex]", "[align-items:center]", "[justify-content:space-between]", "[margin-bottom:14px]"].filter(Boolean).join(" ")}
      >
       {/* Big time display */}
       <span
-       style={{
-        fontSize: "2.4rem",
-        fontWeight: 900,
-        color: "var(--p)",
-        letterSpacing: "-0.02em",
-        lineHeight: 1,
-        fontVariantNumeric: "tabular-nums",
-       }}
+       className={["[font-size:2.4rem]", "[900]", "[color:var(--p)]", "[letter-spacing:-0.02em]", "[1]", "[font-variant-numeric:tabular-nums]"].filter(Boolean).join(" ")}
       >
        {is24h ? pad(hour) : pad(to12h(hour))}
-       <span style={{ opacity: 0.35, margin: "0 2px" }}>:</span>
+       <span className={["[0.35]", "[margin:0_2px]"].filter(Boolean).join(" ")}>:</span>
        {pad(minute)}
        {!is24h && (
         <span
-         style={{
-          fontSize: "1rem",
-          fontWeight: 800,
-          marginLeft: "6px",
-          color: "var(--ts)",
-         }}
+         className={["[font-size:1rem]", "[800]", "[margin-left:6px]", "[color:var(--ts)]"].filter(Boolean).join(" ")}
         >
          {hour >= 12 ? "PM" : "AM"}
         </span>
@@ -1249,24 +1167,12 @@ export default function DateTimePicker({
 
      {/* Columns: Hour | Minute | (AM/PM if 12h) */}
      <div
-      style={{
-       display: "grid",
-       gridTemplateColumns: is24h ? "1fr 1fr" : "1fr 1fr 46px",
-       gap: "10px",
-      }}
+      className={["[display:grid]", (is24h) ? "[grid-template-columns:1fr_1fr]" : "[grid-template-columns:1fr_1fr_46px]", "[gap:10px]"].filter(Boolean).join(" ")}
      >
       {/* Hour */}
       <div>
        <p
-        style={{
-         textAlign: "center",
-         fontSize: "0.68rem",
-         fontWeight: 700,
-         textTransform: "uppercase",
-         letterSpacing: "0.06em",
-         color: "var(--tl)",
-         marginBottom: "6px",
-        }}
+        className={["[text-align:center]", "[font-size:0.68rem]", "[700]", "[text-transform:uppercase]", "[letter-spacing:0.06em]", "[color:var(--tl)]", "[margin-bottom:6px]"].filter(Boolean).join(" ")}
        >
         Hour
        </p>
@@ -1290,7 +1196,6 @@ export default function DateTimePicker({
             setMinute(nextM);
             emit(selectedDate, nextH, nextM);
            }}
-           style={disabledHour ? { opacity: 0.25, cursor: "not-allowed", pointerEvents: "none" } : {}}
           >
            {pad(h)}
           </div>
@@ -1302,15 +1207,7 @@ export default function DateTimePicker({
       {/* Minute */}
       <div>
        <p
-        style={{
-         textAlign: "center",
-         fontSize: "0.68rem",
-         fontWeight: 700,
-         textTransform: "uppercase",
-         letterSpacing: "0.06em",
-         color: "var(--tl)",
-         marginBottom: "6px",
-        }}
+        className={["[text-align:center]", "[font-size:0.68rem]", "[700]", "[text-transform:uppercase]", "[letter-spacing:0.06em]", "[color:var(--tl)]", "[margin-bottom:6px]"].filter(Boolean).join(" ")}
        >
         Min
        </p>
@@ -1326,7 +1223,6 @@ export default function DateTimePicker({
             setMinute(m);
             emit(selectedDate, hour, m);
            }}
-           style={disabledMin ? { opacity: 0.25, cursor: "not-allowed", pointerEvents: "none" } : {}}
           >
            {pad(m)}
           </div>
@@ -1339,26 +1235,12 @@ export default function DateTimePicker({
       {!is24h && (
        <div>
         <p
-         style={{
-          textAlign: "center",
-          fontSize: "0.68rem",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          color: "var(--tl)",
-          marginBottom: "6px",
-         }}
+         className={["[text-align:center]", "[font-size:0.68rem]", "[700]", "[text-transform:uppercase]", "[letter-spacing:0.06em]", "[color:var(--tl)]", "[margin-bottom:6px]"].filter(Boolean).join(" ")}
         >
          &nbsp;
         </p>
         <div
-         style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-          height: "180px",
-          justifyContent: "center",
-         }}
+         className={["[display:flex]", "[flex-direction:column]", "[gap:8px]", "[height:180px]", "[justify-content:center]"].filter(Boolean).join(" ")}
         >
          {["AM", "PM"].map((period) => {
           const disabledPeriod = isPeriodDisabled(period);
@@ -1368,7 +1250,6 @@ export default function DateTimePicker({
             key={period}
             disabled={disabledPeriod}
             className={`dtp-ampm-btn ${(period === "AM" ? hour < 12 : hour >= 12) ? "active" : ""}`}
-            style={disabledPeriod ? { opacity: 0.25, cursor: "not-allowed", pointerEvents: "none" } : {}}
             onClick={() => {
              if (disabledPeriod) return;
              setAmpm(period);
@@ -1412,20 +1293,7 @@ export default function DateTimePicker({
      <button
       type="button"
       onClick={confirmTime}
-      style={{
-       marginTop: "14px",
-       width: "100%",
-       padding: "10px",
-       background: "var(--p)",
-       color: "var(--bgs)",
-       border: "none",
-       borderRadius: "8px",
-       fontSize: "0.88rem",
-       fontWeight: 800,
-       letterSpacing: "0.04em",
-       cursor: "pointer",
-       transition: "opacity 0.15s",
-      }}
+      className={["[margin-top:14px]", "[width:100%]", "[padding:10px]", "[background:var(--p)]", "[color:var(--bgs)]", "[border:none]", "[border-radius:8px]", "[font-size:0.88rem]", "[800]", "[letter-spacing:0.04em]", "[cursor:pointer]", "[transition:opacity_0.15s]"].filter(Boolean).join(" ")}
      >
       Confirm
      </button>
@@ -1436,14 +1304,8 @@ export default function DateTimePicker({
 
  return (
   <div
-   className="dtp-root"
+   className={["dtp-root [position:relative] [display:inline-block] [width:100%]", open ? "[z-index:999]" : "[z-index:1]"].filter(Boolean).join(" ")}
    ref={wrapperRef}
-   style={{
-    position: "relative",
-    display: "inline-block",
-    width: "100%",
-    zIndex: open ? 999 : 1,
-   }}
   >
    {label && (
     <label
@@ -1462,7 +1324,7 @@ export default function DateTimePicker({
     >
      {label}
      {isRequired && (
-      <span style={{ color: "var(--red-500)", marginLeft: "4px" }}>
+      <span className={["[color:var(--red-500)]", "[margin-left:4px]"].filter(Boolean).join(" ")}>
        *
       </span>
      )}
@@ -1470,11 +1332,11 @@ export default function DateTimePicker({
    )}
 
    {/* Trigger */}
-   <div ref={triggerRef} style={{ width: "100%" }}>
+   <div ref={triggerRef} className={["[width:100%]"].filter(Boolean).join(" ")}>
     {customTrigger ? (
      <div
       onClick={() => !disabled && setOpen((o) => !o)}
-      style={{ cursor: disabled ? "not-allowed" : "pointer" }}
+      className={[(disabled) ? "[cursor:not-allowed]" : "[cursor:pointer]"].filter(Boolean).join(" ")}
      >
       {customTrigger}
      </div>
@@ -1484,73 +1346,32 @@ export default function DateTimePicker({
       id={pickerId}
       disabled={disabled}
       onClick={() => !disabled && setOpen((o) => !o)}
-      style={{
-       width: "100%",
-       display: "flex",
-       alignItems: "center",
-       gap: "10px",
-       height:
-        size === "sm"
-         ? "2rem"
-         : size === "md"
-          ? "2.5rem"
-          : size === "lg"
-           ? "3rem"
-           : "3.5rem",
-       padding:
-        size === "sm"
-         ? "0 0.75rem"
-         : size === "md" || size === "lg"
-          ? "0 1rem"
-          : "0 1.25rem",
-       borderRadius: size === "sm" ? "0.75rem" : "1rem",
-       border: `1.5px solid ${isInvalid ? "var(--red-500)" : open ? "var(--p)" : "var(--bd2)"}`,
-       background: open ? "var(--pale)" : "var(--bgs)",
-       color: displayValue() ? "var(--tp)" : "var(--tl)",
-       fontSize:
-        size === "sm"
-         ? "0.75rem"
-         : size === "md" || size === "lg"
-          ? "0.875rem"
-          : "1rem",
-       fontWeight: 500,
-       cursor: disabled ? "not-allowed" : "pointer",
-       transition:
-        "border-color 0.18s, background 0.18s, box-shadow 0.18s",
-       boxShadow: open ? "0 0 0 4px var(--pale)" : "none",
-       opacity: disabled ? 0.5 : 1,
-       outline: "none",
-       textAlign: "left",
-      }}
+      className={[
+       "flex w-full items-center gap-2.5 text-left outline-none font-medium transition-[border-color_0.18s,background_0.18s,box-shadow_0.18s]",
+       size === "sm"
+        ? "h-8 px-3 rounded-xl text-xs"
+        : size === "md"
+         ? "h-10 px-4 rounded-2xl text-sm"
+         : size === "lg"
+          ? "h-12 px-4 rounded-2xl text-sm"
+          : "h-14 px-5 rounded-2xl text-base",
+       disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+       isInvalid ? "[border-width:1.5px] border-(--danger)" : open ? "[border-width:1.5px] border-(--p)" : "[border-width:1.5px] border-(--bd2)",
+       open ? "bg-(--pale)" : "bg-(--bgs)",
+       open ? "[box-shadow:0_0_0_4px_var(--pale)]" : "",
+       displayValue() ? "text-(--tp)" : "text-(--tl)",
+      ].filter(Boolean).join(" ")}
      >
       {timeOnly ? (
        <IoTimeOutline
-        style={{
-         color: "var(--p)",
-         fontSize:
-          size === "sm"
-           ? "0.95rem"
-           : size === "md" || size === "lg"
-            ? "1.1rem"
-            : "1.25rem",
-         flexShrink: 0,
-        }}
+        className={["[color:var(--p)]", (size === "sm") ? "[font-size:0.95rem]" : (size === "md" || size === "lg") ? "[font-size:1.1rem]" : "[font-size:1.25rem]", "[0]"].filter(Boolean).join(" ")}
        />
       ) : (
        <IoCalendarOutline
-        style={{
-         color: "var(--p)",
-         fontSize:
-          size === "sm"
-           ? "0.95rem"
-           : size === "md" || size === "lg"
-            ? "1.1rem"
-            : "1.25rem",
-         flexShrink: 0,
-        }}
+        className={["[color:var(--p)]", (size === "sm") ? "[font-size:0.95rem]" : (size === "md" || size === "lg") ? "[font-size:1.1rem]" : "[font-size:1.25rem]", "[0]"].filter(Boolean).join(" ")}
        />
       )}
-      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span className={["[1]", "[overflow:hidden]", "[text-overflow:ellipsis]", "[white-space:nowrap]"].filter(Boolean).join(" ")}>
        {displayValue() ?? placeholder}
       </span>
       {selectedDate && !disabled && (
@@ -1566,9 +1387,9 @@ export default function DateTimePicker({
          setSelectedDate(null);
          onChange?.("");
         }}
-        style={{ color: "var(--tl)", lineHeight: 1, cursor: "pointer" }}
+        className={["[color:var(--tl)]", "[1]", "[cursor:pointer]"].filter(Boolean).join(" ")}
        >
-        <IoClose style={{ fontSize: "1rem" }} />
+        <IoClose className={["[font-size:1rem]"].filter(Boolean).join(" ")} />
        </span>
       )}
      </button>

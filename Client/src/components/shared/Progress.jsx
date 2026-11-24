@@ -29,174 +29,70 @@ const Progress = ({
   className = "",
   ...props
 }) => {
-  // Calculate percentage
-  const percent = Math.min(
-    100,
-    Math.max(0, ((value - min) / (max - min)) * 100),
-  );
-
-  // Size classes for linear progress
-  const sizeClasses = {
-    sm: "h-1",
-    md: "h-2.5",
-    lg: "h-4",
-  };
-
-  // Circle size classes
-  const circleSizeClasses = {
-    sm: "w-16 h-16",
-    md: "w-24 h-24",
-    lg: "w-32 h-32",
-  };
-
-  // Get color class based on CSS variable
+  const percent = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+  const sizeClasses = { sm: "h-1", md: "h-2.5", lg: "h-4" };
+  const circleSizeClasses = { sm: "w-16 h-16", md: "w-24 h-24", lg: "w-32 h-32" };
   const getColorClass = () => {
     switch (colorScheme) {
-      case "primary":
-        return "bg-(--p)";
-      case "secondary":
-        return "bg-(--p2)";
-      case "danger":
-        return "bg-(--danger)";
-      case "success":
-        return "bg-(--success)";
-      case "warning":
-        return "bg-(--warning)";
-      default:
-        return "bg-(--p)";
+      case "primary": return "bg-(--p)";
+      case "secondary": return "bg-(--p2)";
+      case "danger": return "bg-(--danger)";
+      case "success": return "bg-(--success)";
+      case "warning": return "bg-(--warning)";
+      default: return "bg-(--p)";
     }
   };
-
   const getTextColorClass = () => {
     switch (colorScheme) {
-      case "primary":
-        return "text-(--p)";
-      case "secondary":
-        return "text-(--p2)";
-      case "danger":
-        return "text-(--danger)";
-      case "success":
-        return "text-(--success)";
-      case "warning":
-        return "text-(--warning)";
-      default:
-        return "text-(--p)";
+      case "primary": return "text-(--p)";
+      case "secondary": return "text-(--p2)";
+      case "danger": return "text-(--danger)";
+      case "success": return "text-(--success)";
+      case "warning": return "text-(--warning)";
+      default: return "text-(--p)";
     }
   };
-
-  // Linear progress bar
-  if (variant === "line") {
-    return (
-      <div className={`w-full ${className}`} {...props}>
-        {(label || showPercentage) && (
-          <div className="flex justify-between items-center mb-2">
-            {label && (
-              <span className="text-sm font-medium text-(--ts)">{label}</span>
-            )}
-            {showPercentage && (
-              <span className="text-sm font-medium text-(--ts)">
-  // Circular progress — CSS conic-gradient, no inline SVG (§1.4)
   const deg = Math.round((percent / 100) * 360);
-
   const getCircleTextColor = () => {
     switch (colorScheme) {
-      case "primary":
-        return "text-(--p)";
-      case "secondary":
-        return "text-(--p2)";
-      case "danger":
-        return "text-(--danger)";
-      case "success":
-        return "text-(--success)";
-      case "warning":
-        return "text-(--warning)";
-      default:
-        return "text-(--p)";
+      case "primary": return "text-(--p)";
+      case "secondary": return "text-(--p2)";
+      case "danger": return "text-(--danger)";
+      case "success": return "text-(--success)";
+      case "warning": return "text-(--warning)";
+      default: return "text-(--p)";
     }
   };
-
   const getCircleBgColor = () => {
     switch (colorScheme) {
-      case "primary":
-        return "bg-(--p)";
-      case "secondary":
-        return "bg-(--p2)";
-      case "danger":
-        return "bg-(--danger)";
-      case "success":
-        return "bg-(--success)";
-      case "warning":
-        return "bg-(--warning)";
-      default:
-        return "bg-(--p)";
+      case "primary": return "bg-(--p)";
+      case "secondary": return "bg-(--p2)";
+      case "danger": return "bg-(--danger)";
+      case "success": return "bg-(--success)";
+      case "warning": return "bg-(--warning)";
+      default: return "bg-(--p)";
     }
   };
-
-  return (
-    <div
-      className={`inline-flex flex-col items-center justify-center ${className}`}
-      role="progressbar"
-      aria-valuenow={isIndeterminate ? undefined : value}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      {...props}
-    >
-      <div className={`relative ${circleSizeClasses[size]}`}>
-        {/* Background track */}
-        <div
-          className="w-full h-full rounded-full border-8 border-(--bd2) flex items-center justify-center"
-          style={{ "--progress-deg": `${deg}deg` }}
-        >
-          {/* Progress ring — conic-gradient */}
-          <div
-            className="absolute inset-0 rounded-full"
-            style={{
-              background: `conic-gradient(from -90deg, var(--progress-ring-color) 0deg, var(--progress-ring-color) ${deg}deg, transparent ${deg}deg)`,
-              "--progress-ring-color": getCircleBgColor().replace("bg-", "text-"),
-            }}
-          >
-            {/* Inner mask to create ring effect */}
-            <div className="absolute inset-[8px] rounded-full bg-[var(--bg)]" />
-          </div>
-        </div>
-
-        {/* Center text */}
-        {showPercentage && !isIndeterminate && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-sm font-medium ${getCircleTextColor()}`}>
-              {percent.toFixed(0)}%
-            </span>
+  if (variant === "line") {
+    return (
+      <div className={"w-full " + className} {...props}>
+        {(label || showPercentage) && (
+          <div className="flex justify-between items-center mb-2">
+            {label && <span className="text-sm font-medium text-(--ts)">{label}</span>}
+            {showPercentage && <span className="text-sm font-medium text-(--ts)">{percent.toFixed(0)}%</span>}
           </div>
         )}
-      </div>
-
-      {/* Label */}
-      {label && (
-        <span className={`mt-2 text-sm font-medium ${getCircleTextColor()}`}>
-          {label}
-        </span>
-      )}
-    </div>
-  );
-};
-
-export default Progress;
-                {percent.toFixed(0)}%
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className={`w-full bg-(--bd2) rounded-full ${sizeClasses[size]}`}>
+        <div className={"w-full bg-(--bd2) rounded-full " + sizeClasses[size]}>
           <div
-            className={`
-              ${getColorClass()} rounded-full
-              ${sizeClasses[size]}
-              ${hasStripe ? "bg-stripes" : ""}
-              ${isAnimated && hasStripe ? "animate-progress-stripes" : ""}
-              ${isIndeterminate ? "animate-progress-indeterminate w-3/12" : ""}
-            `}
-            style={{ width: isIndeterminate ? undefined : `${percent}%` }}
+            className={
+              getColorClass() + " rounded-full " +
+              sizeClasses[size] +
+              (hasStripe ? " bg-stripes" : "") +
+              (isAnimated && hasStripe ? " animate-progress-stripes" : "") +
+              (isIndeterminate ? " animate-progress-indeterminate w-3/12" : "") +
+              " [width:var(--progress-width)]"
+            }
+            style={{ "--progress-width": isIndeterminate ? undefined : percent + "%" }}
             role="progressbar"
             aria-valuenow={isIndeterminate ? undefined : value}
             aria-valuemin={min}
@@ -206,3 +102,38 @@ export default Progress;
       </div>
     );
   }
+  return (
+    <div
+      className={"inline-flex flex-col items-center justify-center " + className}
+      role="progressbar"
+      aria-valuenow={isIndeterminate ? undefined : value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      {...props}
+    >
+      <div className={"relative " + circleSizeClasses[size]}>
+        <div className="w-full h-full rounded-full border-8 border-(--bd2) flex items-center justify-center">
+          <div
+            className="absolute inset-0 rounded-full [background:conic-gradient(from_-90deg,_var(--progress-ring-color)_0deg,_var(--progress-ring-color)_var(--progress-deg)_,_transparent_var(--progress-deg))]"
+            style={{
+              "--progress-deg": deg + "deg",
+              "--progress-ring-color": getCircleBgColor().replace("bg-", "text-"),
+            }}
+          >
+            <div className="absolute inset-[8px] rounded-full bg-[var(--bg)]" />
+          </div>
+        </div>
+        {showPercentage && !isIndeterminate && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className={"text-sm font-medium " + getCircleTextColor()}>{percent.toFixed(0)}%</span>
+          </div>
+        )}
+      </div>
+      {label && (
+        <span className={"mt-2 text-sm font-medium " + getCircleTextColor()}>{label}</span>
+      )}
+    </div>
+  );
+};
+
+export default Progress;

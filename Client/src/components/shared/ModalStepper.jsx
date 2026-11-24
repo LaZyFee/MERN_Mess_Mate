@@ -18,13 +18,10 @@ export default function ModalStepper({
     {/* Connecting progress track */}
     <div className="absolute top-4 left-6 right-6 sm:left-8 sm:right-8 h-0.5 bg-(--bd2) z-0 rounded-full overflow-hidden">
      <div
-      className="h-full bg-(--p) transition-all duration-300 rounded-full"
-      style={{
-       width:
-        steps.length > 1
+      
+      className="h-full bg-(--p) transition-all duration-300 rounded-full [width:var(--inline-width)]" style={{ "--inline-width": steps.length > 1
          ? `${((currentStep - 1) / (steps.length - 1)) * 100}%`
-         : "100%",
-      }}
+         : "100%" }}
      />
     </div>
 

@@ -43,8 +43,8 @@ export default function ScrollReveal({
  return (
   <div
    ref={ref}
-   className={`${base} ${variants[animation] ?? variants["fade-up"]} ${className}`}
-   style={{ transitionDelay: `${delay}ms`, ...style }}
+   className={`${base} ${variants[animation] ?? variants["fade-up"]} [transition-delay:var(--reveal-delay)] ${className}`}
+   style={{ "--reveal-delay": `${delay}ms`, ...style }}
   >
    {children}
   </div>

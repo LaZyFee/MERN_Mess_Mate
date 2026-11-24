@@ -159,14 +159,14 @@ const Textarea = forwardRef(
       )}
       {align === "left" && (
        <div className="flex items-center justify-between gap-4">
-        <div style={{ width: labelWidth }}>{labelElement}</div>
-        <div style={{ width: inputWidth }}>{textareaContent}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": labelWidth }}>{labelElement}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": inputWidth }}>{textareaContent}</div>
        </div>
       )}
       {align === "right" && (
        <div className="flex items-center justify-between gap-4">
-        <div style={{ width: inputWidth }}>{textareaContent}</div>
-        <div style={{ width: labelWidth }}>{labelElement}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": inputWidth }}>{textareaContent}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": labelWidth }}>{labelElement}</div>
        </div>
       )}
      </>

@@ -24,39 +24,51 @@ const Skeleton = ({
   className,
  ];
 
- // Styles for different variants
+ // Styles for different variants — dimensions/radius via CSS vars + Tailwind
+ // arbitrary values; no inline style objects (§1.1)
  const variantStyles = {
-  text: {
-   classes: "h-4 w-full rounded",
-   style: {
-    width: width || "100%",
-    height: height || "1rem",
-   },
-  },
-  circle: {
-   classes: "rounded-full",
-   style: {
-    width: width || "3rem",
-    height: height || width || "3rem",
-    borderRadius: "50%",
-   },
-  },
-  rect: {
-   classes: "",
-   style: {
-    width: width || "100%",
-    height: height || "100px",
-    borderRadius: borderRadius ? `${borderRadius}px` : "0.75rem",
-   },
-  },
+  text: { classes: "rounded" },
+  circle: { classes: "rounded-full" },
+  rect: { classes: "" },
  };
 
- const selectedVariant = variantStyles[variant];
- const classes = [...baseClasses, selectedVariant.classes]
+ const defaultWidth =
+  variant === "text" ? "100%" : variant === "circle" ? width || "3rem" : "100%";
+ const defaultHeight =
+  variant === "text"
+   ? "1rem"
+   : variant === "circle"
+    ? height || width || "3rem"
+    : height || "100px";
+ const radius =
+  borderRadius
+   ? `${borderRadius}px`
+   : variant === "circle"
+    ? "50%"
+    : variant === "rect"
+     ? "0.75rem"
+     : undefined;
+
+ const classes = [
+  ...baseClasses,
+  variantStyles[variant].classes,
+  "[width:var(--sk-width)] [height:var(--sk-height)]",
+  ...(radius ? ["[border-radius:var(--sk-radius)]"] : []),
+ ]
   .filter(Boolean)
   .join(" ");
 
- return <div className={classes} style={selectedVariant.style} {...props} />;
+ return (
+  <div
+   className={classes}
+   style={{
+    "--sk-width": width || defaultWidth,
+    "--sk-height": height || defaultHeight,
+    ...(radius ? { "--sk-radius": radius } : {}),
+   }}
+   {...props}
+  />
+ );
 };
 
 /**

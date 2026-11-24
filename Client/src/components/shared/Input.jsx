@@ -205,14 +205,14 @@ const Input = forwardRef(
       )}
       {align === "left" && (
        <div className="flex items-center justify-between gap-4">
-        <div style={{ width: labelWidth }}>{labelElement}</div>
-        <div style={{ width: inputWidth }}>{inputWithIconsContent}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": labelWidth }}>{labelElement}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": inputWidth }}>{inputWithIconsContent}</div>
        </div>
       )}
       {align === "right" && (
        <div className="flex items-center justify-between gap-4">
-        <div style={{ width: inputWidth }}>{inputWithIconsContent}</div>
-        <div style={{ width: labelWidth }}>{labelElement}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": inputWidth }}>{inputWithIconsContent}</div>
+        <div className={["[width:var(--inline-width)]"].filter(Boolean).join(" ")} style={{ "--inline-width": labelWidth }}>{labelElement}</div>
        </div>
       )}
      </>

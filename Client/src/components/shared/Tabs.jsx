@@ -128,6 +128,7 @@ export const TabList = ({ children, className = "", ...props }) => {
   horizontal: "flex-row border-b border-(--bd)",
   vertical: "flex-col border-r border-(--bd)",
  };
+ const isHoriz = orientation === "horizontal";
 
  return (
   <div
@@ -142,27 +143,25 @@ export const TabList = ({ children, className = "", ...props }) => {
    {showIndicator && indicator && (
     <span
      aria-hidden="true"
-     className={`absolute rounded-full bg-(--p) pointer-events-none ${ready
-      ? "transition-[transform,width,height] duration-300 ease-out"
-      : ""
-      }`}
-     style={
-      orientation === "horizontal"
-       ? {
-        bottom: -1,
-        left: 0,
-        height: 2,
-        width: indicator.size,
-        transform: `translateX(${indicator.start}px)`,
-       }
-       : {
-        right: -1,
-        top: 0,
-        width: 2,
-        height: indicator.size,
-        transform: `translateY(${indicator.start}px)`,
-       }
-     }
+     className={[
+      "absolute rounded-full bg-(--p) pointer-events-none",
+      ready ? "transition-[transform,width,height] duration-300 ease-out" : "",
+      isHoriz
+       ? "[bottom:var(--ind-bottom)] [left:var(--ind-left)] [width:var(--ind-width)] [height:2px]"
+       : "[right:var(--ind-right)] [top:var(--ind-top)] [width:2px] [height:var(--ind-height)]",
+      "[transform:var(--ind-transform)]",
+     ].filter(Boolean).join(" ")}
+     style={{
+      "--ind-bottom": isHoriz ? "-1px" : undefined,
+      "--ind-left": isHoriz ? "0px" : undefined,
+      "--ind-right": isHoriz ? undefined : "-1px",
+      "--ind-top": isHoriz ? undefined : "0px",
+      "--ind-width": isHoriz ? `${indicator.size}px` : "2px",
+      "--ind-height": isHoriz ? "2px" : `${indicator.size}px`,
+      "--ind-transform": isHoriz
+       ? `translateX(${indicator.start}px)`
+       : `translateY(${indicator.start}px)`,
+     }}
     />
    )}
   </div>

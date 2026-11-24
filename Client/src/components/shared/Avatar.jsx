@@ -99,8 +99,8 @@ const Avatar = ({
     />
    ) : (
     <div
-     className={avatarClasses}
-     style={{ backgroundColor: getBackgroundColor() }}
+     className={[avatarClasses, "[background-color:var(--avatar-bg)]"].filter(Boolean).join(" ")}
+     style={{ "--avatar-bg": bgColor || getBackgroundColor() }}
      {...props}
     >
      <span className="font-semibold text-(--bgs)">{getInitials()}</span>
