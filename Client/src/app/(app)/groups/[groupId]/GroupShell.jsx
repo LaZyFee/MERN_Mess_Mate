@@ -13,6 +13,7 @@ import {
   LuBanknote,
   LuFileText,
   LuBarChart2,
+  LuCalendarCheck,
   LuUsers,
   LuMoreHorizontal,
   LuArrowLeft,
@@ -20,6 +21,7 @@ import {
 import { useGroupStore } from "@/lib/store/groupStore";
 import { useAuthStore } from "@/lib/store/authStore";
 import { groupsApi } from "@/lib/api/groups";
+import ThemeToggle from "@/components/shared/ThemeToggle";
 
 export const GroupContext = createContext(null);
 export const useGroup = () => useContext(GroupContext);
@@ -30,6 +32,7 @@ const TABS = [
   { key: "expenses", label: "Expenses", icon: LuReceipt, path: "/expenses" },
   { key: "money", label: "Money", icon: LuBanknote, path: "/money" },
   { key: "statements", label: "Statements", icon: LuFileText, path: "/statements" },
+  { key: "board", label: "Board", icon: LuCalendarCheck, path: "/board" },
   { key: "charts", label: "Charts", icon: LuBarChart2, path: "/charts" },
   { key: "members", label: "Members", icon: LuUsers, path: "/members" },
   { key: "more", label: "More", icon: LuMoreHorizontal, path: "/more" },
@@ -39,18 +42,27 @@ export default function GroupShell({ initialGroup, groupId, children }) {
   const router = useRouter();
   const pathname = usePathname();
   const setGroup = useGroupStore((s) => s.setGroup);
+  const myRole = useGroupStore((s) => s.myRole);
   const user = useAuthStore((s) => s.user);
 
   // Seed from server — no useEffect re-fetch
   const [group, setGroupLocal] = useState(initialGroup);
 
+  useEffect(() => { setGroupLocal(initialGroup); }, [initialGroup]);
+
   // Sync to zustand for cross-component role checks
   useEffect(() => {
     if (group) {
-      const myMembership = group.memberships?.find(
-        (m) => m.userId === user?._id || m.userId?._id === user?._id
-      );
-      setGroup({ ...group, myRole: myMembership?.role || group.myRole });
+      const myId = user?._id;
+      const mine = (group.memberships || []).find((m) => {
+        const memberId = m.userId?._id || m.userId;
+        return myId && memberId && String(memberId) === String(myId);
+      });
+      setGroup({
+        ...group,
+        myMembership: mine || null,
+        myRole: mine?.role || group.myRole || (group.admin && myId && String(group.admin) === String(myId) ? "owner" : null),
+      });
     }
   }, [group, user, setGroup]);
 
@@ -64,10 +76,11 @@ export default function GroupShell({ initialGroup, groupId, children }) {
   }, [groupId]);
 
   const base = `/groups/${groupId}`;
+  const normalized = pathname?.replace(/\/$/, "") || "";
   const activeTab =
     TABS.find((t) => {
       const full = base + t.path;
-      return t.path === "" ? pathname === full : pathname.startsWith(full);
+      return t.path === "" ? normalized === full : normalized.startsWith(full);
     })?.key || "overview";
 
   return (
@@ -84,13 +97,21 @@ export default function GroupShell({ initialGroup, groupId, children }) {
           >
             <LuArrowLeft size={20} />
           </button>
-          <div className="flex-1 min-w-0">
-            <h1
-              className="font-extrabold [font-size:1.0625rem] [color:var(--tp)] whitespace-nowrap [overflow:hidden] [text-overflow:ellipsis]"
-            >
-              {group?.name || "Group"}
-            </h1>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h1
+                className="font-extrabold [font-size:1.0625rem] [color:var(--tp)] whitespace-nowrap [overflow:hidden] [text-overflow:ellipsis]"
+              >
+                {group?.name || "Group"}
+              </h1>
+              {myRole && (
+                <span className="shrink-0 rounded-full bg-(--pale) px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-(--p)">
+                  {myRole}
+                </span>
+              )}
+            </div>
           </div>
+          <ThemeToggle />
         </div>
 
         {/* Tab nav — horizontally scrollable, no horizontal page scroll */}
@@ -114,7 +135,7 @@ export default function GroupShell({ initialGroup, groupId, children }) {
         </div>
 
         {/* Page content */}
-        <div className="p-4 [max-width:1100px] mx-auto">
+        <div className="mx-auto min-w-0 max-w-6xl p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
           {children}
         </div>
       </div>

@@ -103,7 +103,7 @@ const Button = ({
   outline:
    "bg-transparent border-[1.5px] border-(--bd2) text-(--ts) hover:bg-[var(--pale)] hover:text-(--p) hover:border-[var(--p)] hover:shadow-sm hover:-translate-y-[1px] active:bg-(--bd) active:translate-y-0 active:scale-[0.98]",
   ghost: "bg-transparent text-(--ts) hover:text-(--p) hover:bg-[var(--pale)] active:bg-[var(--bd)] active:scale-[0.98]",
-  danger: "bg-(--danger) text-(--bgs) shadow-md shadow-red-600/20 hover:bg-(--danger) hover:shadow-lg hover:shadow-red-600/30 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]",
+  danger: "bg-(--danger) text-(--bgs) shadow-md shadow-(--danger)/20 hover:bg-(--danger) hover:shadow-lg hover:shadow-(--danger)/30 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]",
   link: "bg-transparent text-(--p) hover:text-[var(--p3)] underline-offset-4 hover:underline p-0 h-auto active:scale-95",
   "danger-link":
    "bg-transparent text-(--danger) hover:text-(--danger) underline-offset-4 hover:underline p-0 h-auto active:scale-95",
@@ -190,19 +190,11 @@ const Button = ({
   return shadowClasses.default;
  };
 
- const classes = [
-  baseClasses,
-  variantClasses[variant],
-  getSizeClasses(),
-  getRoundedClass(),
-  isFullWidth ? "w-full" : "w-fit",
-  isLoading ? "cursor-wait" : "",
-  hasShadow ? getShadowClass() : "",
-  hasHoverTranslate ? hoverTranslateClasses.true : "",
-  getFilteredClassName(),
- ]
-  .filter(Boolean)
-  .join(" ");
+ const classes = `${baseClasses} ${variantClasses[variant] || ""} ${getSizeClasses()} ${getRoundedClass()} ${
+  isFullWidth ? "w-full" : "w-fit"
+ } ${isLoading ? "cursor-wait" : ""} ${hasShadow ? getShadowClass() : ""} ${
+  hasHoverTranslate ? hoverTranslateClasses.true : ""
+ } ${getFilteredClassName()}`;
 
  // Determine if we should render as a link
  const Element = href ? "a" : Component;

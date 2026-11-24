@@ -40,32 +40,20 @@ const Card = ({
  };
 
  // Interactive classes
- const interactiveClasses = [
-  isHoverable ? "transition-shadow hover:shadow-lg" : "",
-  isClickable
-   ? "cursor-pointer transition-transform hover:-translate-y-1"
-   : "",
- ].join(" ");
+ const interactiveClasses = `${
+  isHoverable ? "transition-shadow hover:shadow-lg" : ""
+ } ${isClickable ? "cursor-pointer transition-transform hover:-translate-y-1" : ""}`;
 
- const cardClasses = [
-  baseClasses,
-  variantClasses[variant],
-  interactiveClasses,
-  className,
- ].join(" ");
+ const cardClasses = `${baseClasses} ${variantClasses[variant] || ""} ${interactiveClasses} ${className}`;
+
+ const pad = paddingClasses[padding] || paddingClasses.md;
 
  // Header/footer styles
- const headerClasses = [
-  paddingClasses[padding],
-  "border-b border-(--bd)",
- ].join(" ");
+ const headerClasses = `${pad} border-b border-(--bd)`;
 
- const bodyClasses = paddingClasses[padding];
+ const bodyClasses = pad;
 
- const footerClasses = [
-  paddingClasses[padding],
-  "border-t border-(--bd)",
- ].join(" ");
+ const footerClasses = `${pad} border-t border-(--bd)`;
 
  return (
   <div className={cardClasses} {...props}>

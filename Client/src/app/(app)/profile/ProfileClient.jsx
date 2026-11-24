@@ -13,7 +13,7 @@ import { authApi } from "@/lib/api/auth";
 import { notificationsApi } from "@/lib/api/notifications";
 import { useAuthStore } from "@/lib/store/authStore";
 
-export default function ProfileClient({ initialProfile }) {
+export default function ProfileClient({ initialProfile, notificationPrefsSlot = null }) {
   const { showToast } = useToast();
   const setUser = useAuthStore((s) => s.setUser);
 
@@ -104,6 +104,7 @@ export default function ProfileClient({ initialProfile }) {
 
   return (
     <div className="space-y-4">
+      {notificationPrefsSlot}
       <Card padding="md" className="min-w-0">
         <h2 className="mb-3 text-sm font-bold text-(--tp)">Photo</h2>
         <ProfileAvatarUpload

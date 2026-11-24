@@ -40,9 +40,30 @@ function getMembershipRole(group, userId) {
   if (!userId) return group?.myRole;
   const membership = group?.memberships?.find((item) => {
     const memberUserId = item.userId?._id || item.userId;
-    return memberUserId === userId;
+    return memberUserId && String(memberUserId) === String(userId);
   });
-  return membership?.role || group?.myRole;
+  if (membership?.role) return membership.role;
+  if (group?.admin && String(group.admin) === String(userId)) return "owner";
+  return group?.myRole;
+}
+
+export async function getGroupContext(groupId, userId) {
+  const group = await getGroup(groupId);
+  const [memberships, categories] = await Promise.all([
+    getGroupMemberships(groupId).catch(() => []),
+    getGroupCategories(groupId).catch(() => []),
+  ]);
+  return {
+    group,
+    myRole: getMembershipRole(group, userId),
+    myMembership:
+      (memberships || []).find((m) => {
+        const memberUserId = m.userId?._id || m.userId;
+        return memberUserId && String(memberUserId) === String(userId);
+      }) || null,
+    memberships: (memberships || []).filter((m) => !m.leftAt),
+    categories,
+  };
 }
 
 export async function getGroupPolicyPageData(groupId, userId) {

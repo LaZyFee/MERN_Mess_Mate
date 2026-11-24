@@ -11,6 +11,7 @@ export const groupsApi = {
   getInviteCode: (groupId) => apiClient.get(`/invite/codes/${groupId}`),
   createInviteCode: (body) => apiClient.post("/invite/codes", body),
   getGroupCode: (groupId) => apiClient.get(`/messgroups/code/${groupId}`),
+  inviteByEmail: (groupId, body) => apiClient.post(`/messgroups/invite/${groupId}`, body),
   getCategories: (groupId) => apiClient.get(`/messgroups/categories/${groupId}`),
   createCategory: (groupId, body) => apiClient.post(`/messgroups/categories/${groupId}`, body),
   updateCategory: (groupId, catId, body) => apiClient.put(`/messgroups/categories/${groupId}/${catId}`, body),

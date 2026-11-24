@@ -41,7 +41,7 @@ export async function verifyToken(token = null) {
     const cached = getCachedUserData(accessToken);
     if (cached) return cached;
 
-    const { data } = await serverApi.get("/users/profile");
+    const data = await serverApi.get("/users/profile");
     const user = data?.user || data || null;
     if (user) cacheUserData(accessToken, user);
     return user;

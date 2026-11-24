@@ -54,7 +54,7 @@ const Badge = ({
    outline: "bg-transparent border border-(--danger) text-(--danger)",
   },
   warning: {
-   solid: "bg-(--warning-bg)0 text-(--bgs)",
+   solid: "bg-(--warning) text-(--bgs)",
    subtle: "bg-(--warning-bg) text-(--warning)",
    outline: "bg-transparent border border-(--warning) text-(--warning)",
   },
@@ -65,13 +65,9 @@ const Badge = ({
   },
  };
 
- const badgeClasses = [
-  baseClasses,
-  sizeClasses[size],
-  borderRadiusClasses,
-  variantClasses[variant]?.[colorScheme] || variantClasses.primary.solid,
-  className,
- ].join(" ");
+ const badgeClasses = `${baseClasses} ${sizeClasses[size] || sizeClasses.md} ${borderRadiusClasses} ${
+  variantClasses[variant]?.[colorScheme] || variantClasses.primary.solid
+ } ${className}`;
 
  const defaultIconSizes = { sm: 10, md: 12, lg: 14 };
  const finalIconSize = iconSize || defaultIconSizes[size];

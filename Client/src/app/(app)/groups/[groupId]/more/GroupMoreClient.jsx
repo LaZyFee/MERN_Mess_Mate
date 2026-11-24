@@ -17,6 +17,8 @@ import Input from "@/components/shared/Input";
 import Badge from "@/components/shared/Badge";
 import Modal from "@/components/modals/Modal";
 import ConfirmationModal from "@/components/modals/ConfirmationModal";
+import Alert from "@/components/shared/Alert";
+import Card from "@/components/shared/Card";
 import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
@@ -30,9 +32,11 @@ import ReconciliationPanel from "./ReconciliationPanel";
 function InviteSection({ groupId, initialMeta }) {
   const { showToast } = useToast();
   const [meta, setMeta] = useState(initialMeta);
-  const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [codeRevealed, setCodeRevealed] = useState(null); // { code, inviteLink }
+  const [reveal, setReveal] = useState(null); // { code, inviteLink, expiresAt, maxUses }
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
 
   const appUrl = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -42,24 +46,42 @@ function InviteSection({ groupId, initialMeta }) {
       setMeta(d?.data || d);
     } catch {
       setMeta(null);
-    } finally {
-      setLoading(false);
     }
   }, [groupId]);
 
   async function regenerate() {
     setGenerating(true);
     try {
-      const d = await groupsApi.createInviteCode({ groupId, maxUses: 50, ttlDays: 30 });
-      const code = d?.code || d?.data?.code;
-      const inviteLink = `${appUrl}/join?code=${code}&groupId=${groupId}`;
-      setCodeRevealed({ code, inviteLink });
+      const d = await groupsApi.createInviteCode({ groupId, maxUses: 20, ttlDays: 7 });
+      const payload = d?.data || d;
+      const code = payload?.code;
+      setReveal({
+        code,
+        inviteLink: `${appUrl}/join?code=${code}`,
+        expiresAt: payload?.expiresAt,
+        maxUses: payload?.maxUses,
+      });
+      setConfirmRegen(false);
       showToast({ status: "success", title: "New invite code generated" });
       loadMeta();
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.message });
+      showToast({ status: "error", title: "Error", description: ex?.data?.msg || ex?.message });
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function sendEmailInvite() {
+    if (!email.trim()) return;
+    setInviting(true);
+    try {
+      await groupsApi.inviteByEmail(groupId, { email: email.trim() });
+      showToast({ status: "success", title: "Invitation email sent" });
+      setEmail("");
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not send invite", description: ex?.data?.msg || ex?.message });
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -76,43 +98,81 @@ function InviteSection({ groupId, initialMeta }) {
   }
 
   return (
-    <div className="[background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-md)] p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <LuKey size={16} className="[color:var(--p)]" />
-        <span className="font-bold [font-size:0.9375rem] [color:var(--tp)]">Invite Code</span>
-      </div>
-      {loading ? <Skeleton variant="rect" height={60} /> : (
-        <>
-          {meta ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <code className="font-mono font-bold text-lg [color:var(--p)] [background:var(--pale)] [padding:4px_12px] [border-radius:var(--r-md)]">
-                MM-{meta.prefix}…
-              </code>
-              <span className="text-xs [color:var(--tl)]">
-                {meta.usesLeft !== undefined ? `${meta.usesLeft} uses left` : ""}{meta.expiresAt ? ` · expires ${new Date(meta.expiresAt).toLocaleDateString()}` : ""}
-              </span>
-            </div>
-          ) : (
-            <p className="[color:var(--tm)] text-sm">No active invite code.</p>
-          )}
-          {codeRevealed && (
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <code className="font-mono font-bold [color:var(--p)]">{codeRevealed.code}</code>
-                <Button size="sm" variant="ghost" leftIcon={<LuCopy size={14} />} onClick={() => copy(codeRevealed.code)}>Copy Code</Button>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="ghost" leftIcon={<LuCopy size={14} />} onClick={() => copy(codeRevealed.inviteLink)}>Copy Link</Button>
-                <Button size="sm" variant="ghost" leftIcon={<LuShare2 size={14} />} onClick={() => share(codeRevealed.inviteLink)}>Share</Button>
-              </div>
-            </div>
-          )}
-          <Button size="sm" variant="outline" leftIcon={<LuRefreshCw size={14} />} isLoading={generating} onClick={regenerate} className="mt-3">
-            {meta ? "Regenerate" : "Generate"} Code
-          </Button>
-        </>
+    <Card
+      padding="md"
+      header={
+        <div className="flex items-center gap-2">
+          <LuKey size={16} className="text-(--p)" />
+          <span className="text-sm font-bold text-(--tp)">Invite people</span>
+        </div>
+      }
+    >
+      {meta ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="rounded-[var(--r-md)] bg-(--pale) px-3 py-1 font-mono text-sm font-bold text-(--p)">
+            MM-{meta.prefix}…
+          </code>
+          <span className="text-xs text-(--tl)">
+            {meta.usesLeft !== undefined ? `${meta.usesLeft} uses left` : ""}
+            {meta.expiresAt ? ` · expires ${new Date(meta.expiresAt).toLocaleDateString("en-GB")}` : ""}
+          </span>
+        </div>
+      ) : (
+        <p className="text-xs text-(--tm)">No active invite code. Generate one to share the group.</p>
       )}
-    </div>
+      <p className="mt-2 text-[11px] text-(--tm)">
+        Codes are hashed — the plaintext is shown only once when generated. Regenerating kills every old link instantly.
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" leftIcon={<LuRefreshCw size={14} />} isLoading={generating} isDisabled={generating} onClick={() => (meta ? setConfirmRegen(true) : regenerate())}>
+          {meta ? "Regenerate code" : "Generate code"}
+        </Button>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2 border-t border-(--bd) pt-3 sm:flex-row sm:items-end">
+        <Input size="lg" type="email" label="Invite by email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="roommate@example.com" autoComplete="email" />
+        <Button size="sm" isLoading={inviting} isDisabled={inviting || !email.trim()} onClick={sendEmailInvite}>Send invite</Button>
+      </div>
+
+      <Modal
+        isOpen={Boolean(reveal)}
+        onClose={() => setReveal(null)}
+        header="Invite code (shown once)"
+        footer={<Button isFullWidth onClick={() => setReveal(null)}>Done</Button>}
+      >
+        {reveal && (
+          <div className="space-y-3">
+            <Alert status="warning" title="Copy it now">
+              This code will not be shown again. If you lose it, regenerate a new one.
+            </Alert>
+            <code className="block break-all rounded-[var(--r-md)] bg-(--bgm) px-3 py-2 text-center font-mono text-lg font-bold text-(--p)">
+              {reveal.code}
+            </code>
+            <p className="text-[11px] text-(--tm)">
+              {reveal.maxUses ? `${reveal.maxUses} uses` : "Limited uses"}
+              {reveal.expiresAt ? ` · expires ${new Date(reveal.expiresAt).toLocaleDateString("en-GB")}` : ""}
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <Button size="sm" variant="outline" leftIcon={<LuCopy size={14} />} onClick={() => copy(reveal.code)}>Copy code</Button>
+              <Button size="sm" variant="outline" leftIcon={<LuCopy size={14} />} onClick={() => copy(reveal.inviteLink)}>Copy link</Button>
+              <Button size="sm" variant="outline" leftIcon={<LuShare2 size={14} />} onClick={() => share(reveal.inviteLink)}>Share</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmationModal
+        isOpen={confirmRegen}
+        onClose={() => setConfirmRegen(false)}
+        onConfirm={regenerate}
+        title="Regenerate invite code?"
+        message="All existing invite links stop working immediately. Share the new code with anyone who still needs to join."
+        status="warning"
+        confirmText="Regenerate"
+        isSubmitting={generating}
+      />
+    </Card>
   );
 }
 
