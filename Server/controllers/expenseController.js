@@ -109,9 +109,13 @@ export const createExpense = async (req, res, next) => {
             excludeExpenseId: expense._id,
         });
 
+        // Heads-up for the reviewer: a self-approval will record who approved it
+        const approvalMeta = { requiresApproval: true, selfApprovalAllowedWithReason: true };
+
         res.status(201).json({
             msg: 'Expense draft created',
             expense,
+            approvalMeta,
             duplicateWarnings: duplicateCheck.hasWarnings ? duplicateCheck.warnings : undefined,
         });
     } catch (err) {
@@ -162,14 +166,25 @@ export const approveExpense = async (req, res, next) => {
 
             await ensureOpen({ groupId, month: expense.costPeriod, session });
 
-            // self-approval flag: if approver owns a paying/beneficiary line
+            // Self-approval: an approver whose own membership is inside the
+            // beneficiary pool. (Not merely "is a group member" — every approver
+            // is one.) Allowed only with an explicit reason; disclosed in the audit
+            // trail and in the response.
             const memberships = await Membership.find({ groupId }).session(session).lean();
             const active = memberships.filter(m => !m.endDate || new Date(m.endDate) > new Date());
             const own = active.find(m => m.user && String(m.user) === req.user.id);
-            const selfApproval = Boolean(own) && req.body?.reason ? false : Boolean(own);
-            if (selfApproval && !(req.body?.reason)) {
-                // self-approval allowed only with an explicit reason (single-reviewer disclosure)
-                expense.approvedBy = req.user.id;
+            const selfApproval = Boolean(own);
+            if (selfApproval && !String(req.body?.reason || '').trim()) {
+                throw Object.assign(
+                    new Error('Self-approval requires a reason (field: reason)'),
+                    { status: 422 }
+                );
+            }
+            if (!own && !expense.payers?.length) {
+                throw Object.assign(
+                    new Error('No payer on this expense — record payers[] before approval'),
+                    { status: 422 }
+                );
             }
 
             // allocate lines exactly

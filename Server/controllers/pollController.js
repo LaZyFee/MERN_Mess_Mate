@@ -9,11 +9,11 @@ const pollCreateSchema = z.object({
     relatedMenuItem: z.string().trim().max(120).optional().default(''),
 });
 
+// Upper bound is the model's 6-option limit; the actual option count is
+// checked in votePoll so an out-of-range index returns a clear 400.
 const voteSchema = z.object({
     optionIndex: z.number().int().min(0).max(5),
 });
-
-const closeSchema = z.object({});
 
 // GET /api/polls/groups/:groupId — list polls (open + recently closed)
 export const listPolls = async (req, res, next) => {

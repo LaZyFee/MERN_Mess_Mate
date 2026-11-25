@@ -4,7 +4,7 @@ import { create } from "zustand";
 
 /**
  * Auth store — holds ONLY non-sensitive profile data hydrated from the server.
- * No tokens, no persist. Tokens live in HttpOnly cookies (mm_at / mm_rt).
+ * No tokens, no persist. Tokens live in HttpOnly cookies (mm_at / refreshToken).
  */
 export const useAuthStore = create((set) => ({
   user: null,

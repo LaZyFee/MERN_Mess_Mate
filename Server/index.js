@@ -123,6 +123,11 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    // Without this the browser blocks the CSRF double-submit header on
+    // cross-origin (localhost:3000 → :5000) XHRs, so every cookie-authenticated
+    // mutation fails the CSRF check in local development.
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'x-csrf-token', 'x-client', 'Idempotency-Key', 'X-Admin-Key'],
+    exposedHeaders: ['Deprecation', 'Sunset', 'Link'],
 }));
 
 // ---------- Body parsing + sanitization ----------

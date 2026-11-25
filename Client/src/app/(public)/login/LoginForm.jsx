@@ -147,7 +147,7 @@ export default function LoginForm() {
             Forgot password?
           </a>
         </div>
-        <Button type="submit" isFullWidth isLoading={loading} isDisabled={loading}>
+        <Button type="submit" variant="primary" isFullWidth isLoading={loading} isDisabled={loading}>
           Sign In
         </Button>
         <Button

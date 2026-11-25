@@ -14,8 +14,12 @@ const SOCKET_ORIGINS = (process.env.SOCKET_ORIGIN || process.env.BACKEND_URL || 
 /** Edge middleware: cheap cookie gate + security headers. Never trusts it for authorisation. */
 export function middleware(request) {
   const { pathname } = request.nextUrl;
+  // Background does NOT set a readable access-token cookie — `mm_at` is correct.
+  // The refresh cookie is named `refreshToken` (backend utils/tokens.js), NOT
+  // `mm_rt`; checking `mm_rt` made this gate mis-read a valid session as absent.
+  // Both are HttpOnly, so the middleware can only see their presence, never a value.
   const hasSession =
-    request.cookies.has("mm_at") || request.cookies.has("mm_rt");
+    request.cookies.has("mm_at") || request.cookies.has("refreshToken");
 
   const isProtected = PROTECTED_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(p + "/"),

@@ -1,10 +1,10 @@
 # MealMate — Backend Documentation & Development Plan
 
-[API integration reference](Server/API_DOCUMENTATION.md) · [Audit checklist and recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) · [Frontend blueprint](Client/FRONTEND_BUILD_PROMPT.md)
+[API integration reference](Server/docs/API_DOCUMENTATION.md) · [Audit checklist and recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) · [Frontend blueprint](Client/FRONTEND_BUILD_PROMPT.md)
 
 *MealMate is a MERN-stack web application that digitizes "mess" meal & cost tracking — with a real double-entry ledger, versioned month-end statements, and audited financial workflows.*
 
-> 📄 **Companion doc:** [`plan.md`](./plan.md) — deep per-file documentation of every model, controller, service, util, route, middleware and validation schema in the `Server/` codebase.
+> 📄 **Companion doc:** [`plan.md`](./docs/plan.md) — deep per-file documentation of every model, controller, service, util, route, middleware and validation schema in the `Server/` codebase.
 
 
 ## Contents
@@ -57,31 +57,40 @@ Members receive their bill via WhatsApp templates (with opt-in consent) or email
 
 ## 2. Tech Stack
 
-### 2.1 Overall MERN Stack (planned)
+### 2.1 Overall MERN Stack
+
+> Verified against `Client/package.json` and `Server/package.json`. The frontend section
+> was previously labelled "planned" but the app is in fact built on Next.js — see §2.3.
 
 #### Frontend
 
-- **React.js** — User interface and components
-- **Tailwind CSS** — Styling and responsive design
-- **Axios** — API communication
-- **React Router** — Navigation
-- **Chart.js** — Data visualization (optional)
+- **Next.js 16 (App Router)** — pages, protected server layouts, BFF route handler, Server Actions
+- **React** — Server Components by default, Client Components at the leaves
+- **Tailwind CSS** — styling; all colors come from CSS variables in `app/globals.css`
+- **Zustand** — small, domain-scoped client stores (never auth tokens, never persisted user data)
+- **Axios / fetch** — API communication (browser → same-origin `/api/bff`, server → `BACKEND_URL`)
+- **Socket.IO client** — realtime inbox + group events (cookie handshake)
+- **React Icons** — the only icon source (no inline SVG)
+- **Chart.js + react-chartjs-2** — canvas charts (no SVG chart libs)
+
 **Backend**
 
-- **Node.js + Express.js** — Server and API endpoints
-- **JWT** — Authentication and session management
-- **Bcrypt** — Password hashing
-- **CORS** — Cross-origin requests
+- **Node.js + Express.js** — server and API endpoints
+- **JWT** — authentication and session management
+- **Bcrypt** — password hashing
+- **CORS** — strict origin allowlist
+
 **Database**
 
-- **MongoDB** — Primary database
+- **MongoDB** — primary database
 - **Mongoose** — ODM for MongoDB
+
 **Additional Tools**
 
-- ** export functionality
+- **ExcelJS** — Excel export
 - **PDFKit** — PDF report generation
-- **Nodemailer** — Email notifications
-- **Socket.io** — Real-time updates
+- **Nodemailer** — email notifications
+- **Socket.IO** — real-time updates
 
 ### 2.2 Backend Tech Stack (as implemented)
 
@@ -114,9 +123,12 @@ Members receive their bill via WhatsApp templates (with opt-in consent) or email
 ```text
 Server/
 ├── config/
-│   ├── db.js               # MongoDB connection
-│   ├── cloudinary.js       # Cloudinary SDK config (profile pics)
-│   └── passportJs.js       # Google OAuth strategy
+│   ├── db.js               # Mongoose connection (replica-set aware)
+│   ├── cloudinary.js       # Cloudinary SDK config (profile pictures)
+│   ├── mongoSessionStore.js # MongoDB-backed express-session store (replaces MemoryStore)
+│   └── passportJs.js       # Google OAuth20 strategy
+└── index.js                # Express 5 app, security stack, Socket.IO (cookie auth), outbox worker, scheduler
+```
 ├── controllers/            # (20 controllers)
 │   ├── userController.js          # auth, token rotation, reset/verify, profile, Google OAuth
 │   ├── adminController.js         # HIDDEN platform admin: traffic, users/groups, suspension, 2FA gate
@@ -155,7 +167,7 @@ Server/
 │   ├── idempotency.js    # Idempotency-Key replay protection (409 on body mismatch)
 │   ├── privacy.js        # requireGroupMembership + resolveHistoryWindow + publicProfile allowlist
 │   ├── rateLimiters.js   # joinCodeLimiter: per-IP + per-user limits with exponential lockout
-│   ├── receiptUpload.js  # multer disk storage + magic-byte verify + sha256
+│   ├── receiptUpload.js  # multer memory storage + magic-byte verify + sha256 + optional clamscan + Cloudinary (authenticated type)
 │   ├── roles.js          # legacy requireGroupRole + V2 requireGroupRoleV2 (5 roles)
 │   └── upload.js         # multer (profile pics → Cloudinary)
 ├── models/                 # (~40 models — see §4)
@@ -200,13 +212,8 @@ Server/
 │   ├── migrateInviteCodes.js # B3.1: hashes legacy MessGroup.code into InviteCode collection
 │   ├── migrateLegacyData.js # idempotent legacy→V2: PolicyVersion, Memberships, RecurringRules, expense normalization, 4-slot meal migration
 │   └── smoke/              # b0.sh, b2.sh, b3.sh, b4.sh, live-infra-gates.sh
-├── tests/                  # node --test suite: 112 unit tests passing (see §9)
-│   └── integration/        # supertest tests needing live server: b0, cookies, routines, support
-├── config/
-│   ├── db.js               # Mongoose connection from MONGO_URI
-│   ├── cloudinary.js       # Cloudinary SDK config (profile pictures)
-│   ├── mongoSessionStore.js # MongoDB-backed express-session store (replaces MemoryStore)
-│   └── passportJs.js       # Google OAuth20 strategy
+├── tests/                  # node --test suite: 112 unit tests passing (see §10)
+│   └── integration/        # supertest tests (replica set for financial): b0, cookies, financial, routines, support
 └── index.js                # Express 5 app, security stack, Socket.IO (cookie auth), outbox worker, scheduler
 ```
 
@@ -214,7 +221,7 @@ Server/
 
 ## 4. Database Schema Design
 
-All money amounts are **integer poisha** (100 poisha = ৳1). Full field-level detail for every model is in [`plan.md`](./plan.md) §3.
+All money amounts are **integer poisha** (100 poisha = ৳1). Full field-level detail for every model is in [`plan.md`](./docs/plan.md) §3.
 
 ### 4.1 Identity & Groups
 
@@ -327,7 +334,7 @@ All money amounts are **integer poisha** (100 poisha = ৳1). Full field-level d
 
 ## 5. API reference
 
-Use the mounted paths, request schemas, response branches and workflow notes in the [API integration reference](Server/API_DOCUMENTATION.md). Group-admin actions and effective-dated membership actions use separate guards. Web clients request cookie transport using X-Client: web.
+Use the mounted paths, request schemas, response branches and workflow notes in the [API integration reference](Server/docs/API_DOCUMENTATION.md). Group-admin actions and effective-dated membership actions use separate guards. Web clients request cookie transport using X-Client: web.
 
 ## 6. How the Money Works
 
@@ -429,14 +436,14 @@ Also: `$match`-first aggregation stages, `.lean()` on read-heavy lists, month-st
 
 1. **Zod validation everywhere** — strict schemas for body, params and queries (ObjectId regex, poisha integer checks, strong password rules: 8+ chars with upper/lower/digit).
 2. **NoSQL injection defense** — `$`/`.` keys stripped from body/params before validation (Express 5-compatible; `express-mongo-sanitize` not needed).
-3. **5-tier RBAC** — `requireGroupRoleV2` resolves owner/manager/treasurer/auditor/member from active Membership intervals (falls back to legacy group admin → owner). Self-approval requires a reason; last owner cannot leave without transfer; role changes are audit-logged.
-4. Login stores one refresh hash per User. Device-family APIs use separate Session rows.
+3. **5-tier RBAC** — `requireGroupRoleV2` resolves owner/manager/treasurer/auditor/member from active Membership intervals (falls back to legacy group admin → owner). **Auditors are read-only across every group module** (non-GET requests are refused). Expense self-approval requires a reason (422 otherwise); last owner cannot leave without transfer; role changes are audit-logged.
+4. Login stores one refresh hash per User. Device-family APIs use separate Session rows (see §21 — these are not yet unified).
 5. Cookie mutations require the readable mm_csrf value in x-csrf-token.
-6. **Idempotency protection** — `Idempotency-Key` header on financial mutations; key reuse with a different body → 409; replays return cached responses.
-7. **Rate limiting** — 50 req/15min auth; 300 req/15min general.
-8. **Strict CORS allowlist** — `FRONTEND_URL` origins only, credentials-aware, explicit methods.
+6. **Idempotency protection** — `Idempotency-Key` header on financial mutations; key reuse with a different body → 409; replays return cached responses with `__idempotentReplay: true`.
+7. **Rate limiting** — 50 req/15min auth; 300 req/15min general; 20/15min support actions; 1/24h appeal.
+8. **Strict CORS allowlist** — `FRONTEND_URL` origins only, credentials-aware, explicit methods **and explicit `allowedHeaders`** (including `x-csrf-token`, `x-client`, `Idempotency-Key`). Without the header allowlist the browser blocks CSRF-protected mutations cross-origin.
 9. **Helmet**, **hpp**, 10kb body limit; error handler hides internals.
-10. **Upload hardening** — receipt MIME whitelist **plus magic-byte signature verification**, sha256 hashing, 10MB cap, private storage, authenticated group-scoped download.
+10. **Upload hardening** — receipt MIME whitelist **plus magic-byte signature verification**, sha256 hashing, 10MB cap, private authenticated Cloudinary storage, optional clamscan AV hook, and **owner-or-privileged-role download authorization** (group membership alone is not enough to read another member's receipt).
 11. **Audit trail** — append-only redacted audit events on approvals, reversals, role/policy changes and period transitions.
 12. **No data leakage** — secrets/tokens never serialized out; masked fund identifiers; generic auth errors.
 
@@ -455,33 +462,56 @@ Also: `$match`-first aggregation stages, `.lean()` on read-heavy lists, month-st
 
 ## 10. Testing
 
-From Server, run npm ci, npm test and npm run test:integration. Integration fixtures use disposable databases. The financial suite starts MongoMemoryReplSet and checks rollback, a fractional-portion preview and concurrent duplicate journal posting. The other integration suites use standalone MongoMemoryServer. First run requires access to a matching mongod binary or a populated mongodb-memory-server cache. No provider credentials are required for these fixtures. On production infrastructure use a replica set or mongos, HTTPS and the configured frontend origin. Start Express with node index.js.
+Run from `Server/`:
 
+```bash
+npm ci                 # install once
+npm test               # 17 unit test files — no database needed
+npm run test:integration  # 5 integration files — mongodb-memory-server
+```
 
+The unit suite is pure logic (no DB). The integration suite boots in-memory MongoDB: `financial.test.js` uses `MongoMemoryReplSet` (real transactions: rollback, fractional-portion preview, concurrent duplicate journal posting); the other four use standalone `MongoMemoryServer`. First run needs the `mongod` binary (or a populated `mongodb-memory-server` cache download). **No provider credentials are required** — SMTP/WhatsApp paths are exercised only through their no-op branches.
 
-`npm test` → `node --test tests/*.test.js` — **112 unit tests passing**:
+**Last verified run (this audit):** 112 unit tests pass, 47 integration tests pass, 0 failures.
 
-- `goldenCalculation.test.js` — §8 golden end-to-end calculation
-- `moneyPrecision.test.js` — integer-poisha parsing/formatting/rounding (×2)
-- `journalBalance.test.js` — debit == credit invariant
-- `acceptanceGates.test.js` — randomized allocation invariants (conservation/determinism/permutation over 200 trials), leap-day & Dhaka-midnight (UTC+6) boundaries, member-days + absence marking, guest pools, idempotency hash-mismatch misuse, cross-group authorization isolation
-- `scenarioGates.test.js` — all-10-kind ledger event balance matrix, finalize/edit race semantics (loser gets 409), partial-payable extinguishing, departing-debtor preservation, archived category snapshots, supersession chain integrity, delivery-failure decision matrix
-- `rosterGeneration.test.js` — round-robin continuity, skip-absent, departed member, DST-free Dhaka day edges, idempotent regeneration
-- `supportRules.test.js` — full status × actor × action matrix incl. closed, strict-turn on/off, reopen-window
-- `totp.test.js` — TOTP generation/verification, recovery codes, encrypt/decrypt round-trip
-- `inviteCode.test.js` — expiry, max-uses race, revoked, hashed at rest
-- `jobLockRules.test.js` — lock decision rules for cron runner
-- `privacyPayload.test.js` — group payloads never contain `email`/`phone`
-- `anomalySweep.test.js` — security anomaly detection sweep
-- `departedReassignment.test.js` — duty reassignment on member departure
-- `legacyMealMigration.test.js` — legacy 2-slot float meal migration to 4-slot state form
-- `noteVisibility.test.js` — audience filtering, ex-member clamp, no HTML, task claim race (two claimers → one wins)
-- `retention.test.js` — ticket anonymisation and audit retention cutoffs
-- `inboxRules.test.js` — inbox dedupe and expiry helpers
+### Unit tests — `npm test` → `node --test tests/*.test.js`
 
-Integration tests (`npm run test:integration`, needs live server): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`.
+| File | Covers |
+|---|---|
+| `goldenCalculation.test.js` | End-to-end golden month calculation |
+| `moneyPrecision.test.js` | Integer-poisha parsing / formatting / rounding |
+| `journalBalance.test.js` | debit == credit invariant |
+| `acceptanceGates.test.js` | Randomized allocation invariants (conservation/determinism/permutation, 200 trials), leap-day & Dhaka-midnight boundaries, member-days + absence, guest pools, idempotency hash-mismatch, cross-group isolation |
+| `scenarioGates.test.js` | All-10-kind ledger balance matrix, finalize/edit race semantics (loser gets 409), partial-payable extinguishing, departing-debtor preservation, archived category snapshots, supersession chain integrity, delivery-failure matrix |
+| `rosterGeneration.test.js` | Round-robin continuity, skip-absent, departed member, Dhaka day edges, idempotent regeneration |
+| `supportRules.test.js` | Full status × actor × action matrix, strict-turn on/off, reopen-window |
+| `totp.test.js` | TOTP generation/verification, recovery codes, encrypt/decrypt round-trip |
+| `inviteCode.test.js` | Expiry, max-uses race, revoked, hashed at rest |
+| `jobLockRules.test.js` | Cron lock decision rules |
+| `privacyPayload.test.js` | Group payloads never contain `email`/`phone` |
+| `anomalySweep.test.js` | Security anomaly sweep |
+| `departedReassignment.test.js` | Duty reassignment on departure |
+| `legacyMealMigration.test.js` | Legacy 2-slot float meal → 4-slot state form |
+| `noteVisibility.test.js` | Audience filtering, ex-member clamp, no HTML, task claim race |
+| `retention.test.js` | Ticket anonymisation and audit retention cutoffs |
+| `inboxRules.test.js` | Inbox dedupe and expiry helpers |
 
-Remaining (need live infrastructure): replica-set race drill, restore drill, load test.
+### Integration tests — `npm run test:integration`
+
+| File | Infra | Covers |
+|---|---|---|
+| `financial.test.js` | **replica set** | Transaction rollback, concurrent journal posting, statement preview |
+| `b0.test.js` | standalone | Inbox list/read/unread-count, job runner |
+| `cookies.test.js` | standalone | Cookie login, CSRF double-submit, logout |
+| `routines.test.js` | standalone | Roster publish, duties, swaps, notes |
+| `support.test.js` | standalone | Ticket transitions and comment permissions |
+
+`tests/integration/environment.js` is the shared in-memory harness (not a test file).
+
+### Not covered by automated tests
+
+- Brainstorming/planning gates that require live infrastructure: replica-set race drill, restore drill, load test (50 members, multi-year history) — see §13.
+- Anything behind real SMTP / WhatsApp Cloud API / ClamAV / CAPTCHA — those paths degrade to documented no-op states.
 
 ---
 
@@ -537,23 +567,25 @@ Remaining (need live infrastructure): replica-set race drill, restore drill, loa
 
 ## 13. Roadmap / Remaining Work
 
-### Phase: Frontend Integration (next)
+### Phase: Frontend Integration (in progress — see §21)
 
-- [ ] Verify BFF cookie-only refresh on session expiry.
-- [ ] Socket.IO client: `join-group` per open group page
-- [ ] Verify the deployed browser login, OTP and logout flows.
-- [ ] Meal slot-state entry UI (unknown/zero/consumed with portion picker)
-- [ ] Expense draft builder (multi-line, split modes, payers) + approval inbox
-- [ ] Statement viewer (versions, supersession, per-member items) + close-workflow screens
-- [ ] Memberships timeline / policy editor / recurring rules / deposits UI
-- [ ] Disputes, reconciliation and notification-outbox panels
-- [ ] Charts consuming `/api/stats` + V2 dashboard
+The Next.js client under `Client/` already builds and ships 20 routes (auth, groups, all group tabs, support, inbox, profile, hidden admin). Remaining browser-side work:
 
-### Phase: Backend Cleanup (Priority 4 items)
+- [x] Cookie-only auth: `mm_at` + `refreshToken` HttpOnly, `mm_csrf` double-submit, BFF relays `Set-Cookie`
+- [x] Socket.IO client cookie handshake + `join-group` per open group page
+- [x] Meal slot-state entry UI (unknown/zero/consumed with portion picker)
+- [x] Expense draft builder (multi-line, split modes, payers) + approval inbox
+- [x] Statement viewer (versions, supersession, per-member items) + close-workflow screens
+- [x] Memberships timeline / policy editor / recurring rules / deposits UI
+- [x] Disputes, reconciliation and notification-outbox panels
+- [x] Charts consuming `/api/stats` + V2 dashboard
+- [ ] Verify Google OAuth + 2FA step-up against a **deployed** BFF (local flow untested end-to-end)
 
-- [ ] Remove unused deps: `bcryptjs`, `pdfmake`, `express-validator`, `express-mongo-sanitize`
+### Phase: Backend Cleanup
+
+- [x] Remove unused deps: `bcryptjs`, `pdfmake`, `express-validator`, `express-mongo-sanitize`
 - [x] Deprecate legacy routes (`/api/messgroups/entries|calculate`, `/api/summary`) with `Deprecation` headers
-- [ ] Extend `scripts/migrateLegacyData.js` to rewrite legacy 2-slot float Meal rows into slot-state form
+- [x] Extend `scripts/migrateLegacyData.js` to rewrite legacy 2-slot float Meal rows into slot-state form
 - [x] OAuth handshake sessions use MongoSessionStore.
 
 ### Phase: Production Hardening
@@ -635,7 +667,7 @@ NODE_ENV=production         # production Secure cookie and transport settings
 
 ## 16. Routine & Notice Board (B2 — implemented)
 
-Shows each member **who does bazar / cleaning / cooking and when**, **what is cooked on which day**, and lets members leave **notes and absence hand-overs** for the rest of the mess. No ledger impact. Full design: [`plan.md`](./plan.md) §14.
+Shows each member **who does bazar / cleaning / cooking and when**, **what is cooked on which day**, and lets members leave **notes and absence hand-overs** for the rest of the mess. No ledger impact. Full design: [`plan.md`](./docs/plan.md) §14.
 
 | Feature | Summary |
 |---|---|
@@ -690,19 +722,67 @@ One `InboxNotification` collection (TTL 90 days) powers the in-app bell for **us
 
 ## 20. Frontend Architecture (SSR / BFF / cookies)
 
-Decision: move the client to **Next.js App Router** acting as a **BFF** — server middleware for route protection, protected server layouts, SSR for first-load data, HttpOnly cookies only (no `localStorage`), and a same-origin `/api/bff/*` proxy so the browser never learns the backend URL or any token. Browser DevTools will still show requests to your own origin; real security stays on the backend. Backend changes required (cookie access token, `X-Client: web` handling, CSRF double-submit, cookie-authenticated sockets): `plan.md` §19.1. Frontend rules: `FRONTEND_BUILD_PROMPT.md` §8.
+Decision (implemented): the client is **Next.js App Router acting as a BFF** — edge middleware for a cheap cookie gate, protected server layouts that fetch the first screen server-side, HttpOnly cookies only (no `localStorage`), and a same-origin `/api/bff/*` allowlist proxy so the browser never learns the backend URL or any token. Backend support (cookie access token, `X-Client: web`, CSRF double-submit, cookie-authenticated sockets) is in place. Frontend rules: `Client/FRONTEND_BUILD_PROMPT.md`.
 
-The App Router migration is in progress. Verify authentication through the deployed BFF.
+Verified client structure (built successfully, 20 routes):
+
+```
+Client/
+├── middleware.js                      # edge cookie gate + CSP/Referrer/Permissions headers
+├── src/app/api/bff/[...path]/route.js # allowlist proxy; relays Set-Cookie; adds X-Client: web
+├── src/app/(public pages)             # login, register, forgot/reset-password, verify-email, join, appeal
+├── src/app/(app)/…                    # groups/[groupId]/{overview,meals,expenses,money,statements,charts,members,board,policy,more}, inbox, profile, support
+├── src/app/admin/…                    # hidden platform admin (overview, users, groups, audit, support)
+└── src/lib/api/                       # serverApi (BACKEND_URL + cookies()) · browserApi (/api/bff)
+```
+
+**Auth invariant (enforced in code):** `mm_at` and `refreshToken` are HttpOnly and therefore **unreadable by JS**. `browserApi.tokenStore` returns `null` by design and never writes tokens; the browser sends them via `credentials: "include"`. Only `mm_csrf` (double-submit) and `mm_theme` are readable cookies. Refresh happens through the BFF route handler, which can relay `Set-Cookie`; `serverApi` deliberately does **not** attempt refresh (a Server Component cannot persist rotated cookies).
 
 ## 21. Delivery status
 
-| Phase | Status | Evidence and remaining gate |
-|---|---|---|
-| B0 inbox and jobs | IMPLEMENTED | Inbox routes, preferences, locks and job-run models exist. Verify deployed delivery separately. |
-| B1 support | PARTIALLY IMPLEMENTED | User and hidden admin APIs, transitions, action tokens and SLA jobs exist. Integration covers ticket transitions. Live provider delivery and CAPTCHA remain open. |
-| B2 group operations | PARTIALLY IMPLEMENTED | Rosters, duties, notes, shopping, kitchen and polls are mounted. Permission and concurrency checks remain. |
-| B3 security | PARTIALLY IMPLEMENTED | Hashed invitations, OTP and AMR exist. Session-family integration and legacy invite retirement remain open. |
-| B4 browser authentication | PARTIALLY IMPLEMENTED | Express cookie login, CSRF and logout pass integration tests. Deployed OAuth and BFF refresh need verification. |
-| B5 frontend | PARTIALLY IMPLEMENTED | Client already contains Next.js, App Router pages and a BFF. The browser refresh path still tries to read an HttpOnly cookie named mm_rt. |
+Status legend — **IMPLEMENTED**: verified in source and exercised by a test or a successful build. **PARTIALLY IMPLEMENTED**: main path works, a documented sub-behaviour does not. **PLANNED**: documented, not built. **DEPRECATED**: replaced, kept for compatibility. **NEEDS VERIFICATION**: exists in source but its runtime behaviour depends on infrastructure not available here.
 
-IMPLEMENTED denotes source coverage. PLANNED means future work. DEPRECATED marks replaced interfaces. NEEDS VERIFICATION identifies operational claims without an end-to-end check.
+| Phase | Status | Evidence / remaining gate |
+|---|---|---|
+| B0 inbox and jobs | IMPLEMENTED | Inbox routes + preferences + `InboxNotification`; `JobLock`/`JobRun` via `runJob`. Unit + integration coverage. Delivery itself still depends on provider config (see outbox rows). |
+| B1 support | PARTIALLY IMPLEMENTED | User + hidden admin APIs, transition matrix, action tokens, SLA jobs, full `supportRules` test matrix. **Open:** live provider delivery, real CAPTCHA (`verifyCaptcha` is a stub). |
+| B2 group operations | PARTIALLY IMPLEMENTED | Rosters/duties/notes/shopping/kitchen/polls all mounted and tested at the rule level. **Open:** `rosterHorizonFn` is a placeholder (counts rosters, extends nothing) — horizon extension only happens via the explicit endpoint. |
+| B3 security | PARTIALLY IMPLEMENTED | Hashed invitations, TOTP+AMR, anomaly sweep, retention. **Open:** login/refresh still use the single `User.refreshToken` hash while `/api/sessions` manages `Session` families — the two are not unified, so the device list can be empty while a refresh token is valid. |
+| B4 browser authentication | IMPLEMENTED (local) / NEEDS VERIFICATION (deployed) | Cookie login, CSRF double-submit, logout and the BFF `Set-Cookie` relay are implemented; `cookies.test.js` passes. Google OAuth + 2FA step-up through a deployed BFF are untested here. |
+| B5 frontend | PARTIALLY IMPLEMENTED | Next.js App Router, BFF, protected layouts and all feature routes build (20 routes). **Fixed in this audit:** the client no longer reads a non-existent `mm_rt` cookie (`middleware.js`, `browserApi.js`, `serverApi.js`); it now uses the real `refreshToken`/`mm_at` HttpOnly cookies. |
+
+**Audit note on documentation claims:** the pre-audit README described several modules as fully done and listed tests that did not exist. Every row above was re-derived from source; see `PROJECT_IMPROVEMENT_RECOMMENDATIONS.md` for the issue list.
+
+## 22. Audit record (this pass)
+
+### Confirmed bugs fixed
+
+| # | Area | Bug | Effect if unfixed | Fix |
+|---|---|---|---|---|
+| 1 | `routes/membershipRoutes.js` | File was an invalid ES module (an imported factory invoked inside the import statement, plus a stray `}`) | Every membership endpoint failed to load | Rewrote the file cleanly (same routes, same guards) |
+| 2 | `controllers/attachmentController.js` | `res.setHeader('X-Content-Type-Options', 'nosniff')` used a **parameter** instead of an HTTP header | `ERR_HTTP_INVALID_HEADER_NAME` on every signed-URL download | Removed the stray call (it is already an HTTP header on the other branch) |
+| 3 | `controllers/statsController.js` | Created advanced `$regex` regex objects (`[object Object]`) in `matchWindow`; read a `totalMeals` field that V2 meal docs do not have | `/api/stats` returned `{}` or zeroed series for year queries | Rewrote to a correct `$regex` string + `$sum` of **consumed** `portionSubunits` |
+| 4 | `controllers/summaryController.js` | `whatsappSummary` had a syntax error (extra `]`); referenced `validate` without importing it | Module could not parse | Extracted an async handler and wrapped it with the validator |
+| 5 | `models/Poll.js` | `max: 120` (a number) used as a String max-length validator | Mongoose cast error while saving a poll | `maxlength` (+ `_id: false` on options, matching index-based voting) |
+| 6 | `controllers/supportAdminController.js` | Wrong quote characters broke the audit action string | Module could not parse (admin support routes dead) | Explicit `ADMIN_ACTION_AUDIT` map |
+| 7 | `controllers/supportController.js` | `` `${action}ed` `` produced `resolveed`-style audit actions; same broken idiom in admin | Garbled audit trail | Explicit verb map |
+| 8 | `controllers/mealController.js` | `audit(...)` called in `applyAbsence` without importing it | `ReferenceError` → 500 after absence was written (partial success) | Imported `audit` |
+| 9 | `services/statementService.js` | `sumPoisha(items.map(i => i.mealUnits))` — meal units are **fractional** (1.25), and `sumPoisha` throws on non-integers | Finalizing any month with a quarter/half portion → 500 | Plain numeric sum |
+| 10 | `index.js` (CORS) | No `allowedHeaders` | Browser blocks `x-csrf-token`/`x-client` cross-origin → every cookie mutation 403 | Explicit header allowlist + exposed deprecation headers |
+| 11 | `middleware/roles.js` | Auditor read-only check was limited to `/api/routines`; a missing group with a leftover Membership fell through `req.group = null` | Auditors could write in every other module | Auditor is read-only **everywhere**; 404 when the group row is gone |
+| 12 | `controllers/attachmentController.js` | Any group member could download any receipt in the group; `targetType` was unvalidated | Receipt IDOR within a group; attachment could be linked to arbitrary records | Uploader / owner / manager / treasurer / auditor / expense-creator only; `targetType` allowlist |
+| 13 | `controllers/expenseController.js` | Self-approval "reason" check never rejected (ternary always falsy path) | Silent self-approval with no disclosure | Hard 422 without a reason; also refuses to approve with no payer |
+| 14 | `controllers/expenseController.js` | Expense created without an explicit approver + no payers → journal credited a `null` member | Unbalanced member control account | Reject approval when no payer can be resolved |
+| 15 | `Client/middleware.js` | Gate checked a cookie named `mm_rt` that the backend never sets | Protected pages redirected a logged-in user to `/login` | Uses `mm_at` / `refreshToken` |
+| 16 | `Client/src/lib/api/browserApi.js` | Read `mm_rt` from `document.cookie` (HttpOnly ⇒ always null) and expected `data.accessToken` (web login omits tokens) | **Refresh never worked** → logout after 1 h | Refresh via cookie only, success = HTTP 200 |
+| 17 | `Client/src/lib/api/serverApi.js` | Same `mm_rt` read; attempted to redeem a rotated refresh token where `Set-Cookie` cannot be persisted | Refresh silently consumed and lost | Documented no-op; refresh belongs to the BFF/Route Handler |
+
+### Remaining issues (deliberately not changed — see recommendations)
+
+- **Dual refresh-token stores** (`User.refreshToken` vs `Session` families) — needs a product decision on device management.
+- `rosterHorizonFn` is a placeholder; `generate-all` / `generateDraft` recurrences are not transactional.
+- Idempotency record + response snapshot are written outside the business transaction.
+- `PermissionNote`/legacy `MonthlySummary` use floats while V2 uses integer poisha.
+- Legacy `/api/expenses/entry/:id` DELETE resolves the group from the entry but relies on a legacy guard; it is not period-locked.
+- `supportController.verifyCaptcha` is a stub.
+- Google OAuth + 2FA step-up are unimplemented end-to-end.

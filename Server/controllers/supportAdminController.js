@@ -13,6 +13,8 @@ import User from '../models/User.js';
 
 const PRIORITY_RANK = { urgent: 0, high: 1, normal: 2, low: 3 };
 
+const ADMIN_ACTION_AUDIT = { resolve: 'resolved', close: 'closed', reopen: 'reopened' };
+
 const emitTicketEvent = (req, event, payload) => {
     const io = req.app?.get('io');
     if (io) io.emit(event, payload); // admins listen on their user room
@@ -62,7 +64,7 @@ export const adminGetTicket = async (req, res, next) => {
                     .select('role startDate endDate').lean()
                 : [],
         ]);
-        res.json({ ticket, messages, owner, memberships, slaStage: canTransition && null });
+        res.json({ ticket, messages, owner, memberships, slaStage: canTransition ? null : null });
     } catch (err) { next(err); }
 };
 
@@ -164,7 +166,7 @@ export const adminAction = async (req, res, next) => {
             return res.status(result.error.code === 'TICKET_STATE_CHANGED' ? 409 : 403)
                 .json({ msg: result.error.reason || 'Not allowed', code: result.error.code });
         }
-        await audit({ actorId: req.user.id, action: `support.ticket.${action}d`.replace('closedd', 'closed').replace('resolvedd', 'resolved').replace('reopend', 'reopened'), targetType: 'support_ticket', targetId: ticket._id });
+        await audit({ actorId: req.user.id, action: `support.ticket.${ADMIN_ACTION_AUDIT[action] || action}`, targetType: 'support_ticket', targetId: ticket._id });
         await notify({
             userIds: [ticket.userId], type: `support.ticket_${result.status}`,
             title: `Ticket ${ticket.ticketNo} ${result.status}`,

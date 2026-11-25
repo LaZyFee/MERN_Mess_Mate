@@ -47,6 +47,10 @@ export const idempotent = (operation) => async (req, res, next) => {
     // wrap res.json to capture the result once
     const originalJson = res.json.bind(res);
     res.json = (body) => {
+        // NOTE: this wrapper must call the BOUND original, never `res.json`
+        // (that would recurse into this wrapper and overflow the stack). The
+        // per-request `Cache-Control` patch in index.js wraps res.json before
+        // this file is reached, so `originalJson` already chains correctly.
         IdempotencyRecord.updateOne(
             { groupId, actorId: req.user.id, operation, key },
             { resultBody: body, resultType: res.statusCode }

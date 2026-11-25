@@ -154,46 +154,45 @@ const computeSummary = async (group, month) => {
 
 // GET /api/summary/whatsapp/:groupId/:month — admin gets wa.me deep links per member
 // (zero-config default). If WHATSAPP_TOKEN is configured, also sends directly.
-export const whatsappSummary = [
-    validate(monthParamSchema, 'params'),
-    async (req, res, next) => {
-        try {
-            const group = req.group;
-            const month = req.params.month;
+const sendWhatsappSummary = async (req, res, next) => {
+    try {
+        const group = req.group;
+        const month = req.params.month;
 
-            const existing = await MonthlySummary.findOne({ groupId: group._id, month });
-            const summary = existing?.isFinalized
-                ? existing
-                : await computeSummary(group, month);
+        const existing = await MonthlySummary.findOne({ groupId: group._id, month });
+        const summary = existing?.isFinalized
+            ? existing
+            : await computeSummary(group, month);
 
-            const links = await buildWaSummaryLinks({ group, summary });
+        const links = await buildWaSummaryLinks({ group, summary });
 
-            // If Cloud API configured, send directly (best effort)
-            let sent = 0;
-            if (process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID) {
-                for (const item of links) {
-                    if (item.waLink) {
-                        const ok = await sendWaDirect(
-                            item.message && item.waLink.match(/wa\.me\/(\d+)/)?.[1],
-                            item.message
-                        ).catch(() => false);
-                        if (ok) sent++;
-                    }
+        // If Cloud API configured, send directly (best effort)
+        let sent = 0;
+        if (process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID) {
+            for (const item of links) {
+                if (item.waLink) {
+                    const ok = await sendWaDirect(
+                        item.message && item.waLink.match(/wa\.me\/(\d+)/)?.[1],
+                        item.message
+                    ).catch(() => false);
+                    if (ok) sent++;
                 }
             }
-
-            res.json({
-                msg: process.env.WHATSAPP_TOKEN
-                    ? `Sent ${sent}/${links.filter(l => l.waLink).length} via WhatsApp Cloud API`
-                    : 'Open these links to send each member their summary',
-                month,
-                recipients: links,
-            });
-        } catch (err) {
-            next(err);
         }
-    },
-];
+
+        res.json({
+            msg: process.env.WHATSAPP_TOKEN
+                ? `Sent ${sent}/${links.filter(l => l.waLink).length} via WhatsApp Cloud API`
+                : 'Open these links to send each member their summary',
+            month,
+            recipients: links,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const whatsappSummary = [validate(monthParamSchema, 'params'), sendWhatsappSummary];
 
 // GET /api/summary/:groupId/:month
 export const getSummary = [

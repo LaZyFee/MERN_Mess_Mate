@@ -80,12 +80,19 @@ export const requireGroupRoleV2 = (minRole = 'member') => async (req, res, next)
             req.group = group;
         } else {
             req.group = await MessGroup.findById(groupId).lean();
+            // Membership rows whose group was deleted must not grant access
+            if (!req.group) return res.status(404).json({ msg: 'Group not found' });
         }
 
         if (!role) return res.status(403).json({ msg: 'Not a member of this group' });
-        if (role === 'auditor' && req.baseUrl === '/api/routines' && !['GET', 'HEAD'].includes(req.method)) {
-            return res.status(403).json({ msg: 'Auditor has read-only routine access' });
+
+        // Auditors are READ-ONLY across every group-scoped module (not just
+        // routines). They can see everything a member sees, but no writes.
+        const isReadMethod = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+        if (role === 'auditor' && !isReadMethod) {
+            return res.status(403).json({ msg: 'Auditor access is read-only' });
         }
+
         if (RANK[role] < RANK[minRole]) {
             return res.status(403).json({ msg: `Forbidden: requires ${minRole} role` });
         }

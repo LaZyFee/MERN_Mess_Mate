@@ -7,6 +7,7 @@ import Note from '../models/Note.js';
 import { mealEntrySchema, guestMealSchema, mealBulkSchema, absenceRangeSchema, idParamSchema, monthParamSchema, mealFilterQuerySchema, headcountQuerySchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import { ensureOpen, bumpRevision } from '../services/periodService.js';
+import { audit } from '../models/AuditEvent.js';
 import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
 
 const SLOT_NAMES = ['breakfast', 'lunch', 'snacks', 'dinner'];

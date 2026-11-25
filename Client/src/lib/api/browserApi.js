@@ -5,12 +5,16 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/bff";
 
 /**
  * Browser-side fetch client. Only ever talks to same-origin /api/bff.
- * Tokens ride HttpOnly cookies (mm_at / mm_rt) set by the backend via the BFF
- * — never readable/writable by JS. credentials: "include" sends them automatically.
- * 401 → single-flight refresh → retry. Failure → redirect to /login.
+ * Tokens ride HttpOnly cookies set by the backend through the BFF:
+ *   mm_at        (access, Path=/)        — never readable by JS
+ *   refreshToken (refresh, Path=/api)    — never readable by JS
+ * `credentials: "include"` sends them automatically.
+ * 401 → single-flight POST /users/refresh → retry once. Failure → /login.
  */
 
 /* ---------- cookie helpers (readable cookies only) ---------- */
+
+// Only used for mm_csrf (double-submit) and mm_theme — see getCsrfToken below.
 
 function getCookie(name) {
   if (typeof document === "undefined") return null;
@@ -70,21 +74,17 @@ export function isRateLimitResponse(res) {
 }
 
 /* ---------- token store ---------- */
-// mm_at / mm_rt are HttpOnly: document.cookie cannot read them on the client,
-// but credentials: "include" sends them automatically. Readable cookies
-// (mm_csrf, mm_theme) still work through getCookie/deleteCookie.
+// `mm_at` and `refreshToken` are HttpOnly — `document.cookie` can NEVER read them.
+// They are sent automatically because every request uses credentials: "include".
+// The store below is therefore deliberately empty for tokens; only the readable
+// `mm_csrf` / `mm_theme` cookies are accessible from JS. Do not "fix" this by
+// writing tokens into readable cookies or localStorage — that reopens XSS theft.
 export const tokenStore = {
   getAccess() {
-    if (typeof window === "undefined") {
-      return getCookie("mm_at") || null;
-    }
-    return getCookie("mm_at") || null;
+    return null; // HttpOnly: not readable by design
   },
   getRefresh() {
-    if (typeof window === "undefined") {
-      return getCookie("mm_rt") || null;
-    }
-    return getCookie("mm_rt") || null;
+    return null; // HttpOnly: not readable by design
   },
   setTokens() {
     // Tokens are managed server-side via HttpOnly cookies.
@@ -92,8 +92,6 @@ export const tokenStore = {
   },
   clear() {
     if (typeof window === "undefined") return;
-    deleteCookie("mm_at");
-    deleteCookie("mm_rt");
     deleteCookie("mm_csrf");
     deleteCookie("mm_theme");
     deleteCookie("auth-token");
@@ -101,7 +99,6 @@ export const tokenStore = {
     deleteCookie("user-roles");
     deleteCookie("pending-verification-email");
     deleteCookie("session_expired");
-
   },
 };
 
@@ -134,13 +131,10 @@ class APIClient {
       isFormData = false,
     } = options;
 
-    const token = tokenStore.getAccess();
-
     const config = {
       method,
       headers: {
         ...(isFormData ? {} : { "Content-Type": "application/json" }),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
       credentials: "include",
@@ -267,27 +261,16 @@ class APIClient {
 
     this._refreshing = (async () => {
       try {
-        const refreshToken = tokenStore.getRefresh();
-        if (!refreshToken) {
-          tokenStore.clear();
-          return false;
-        }
-
+        // The refresh token lives in an HttpOnly cookie scoped to /api, so it is
+        // sent automatically. We cannot (and must not) read it from JS.
         const response = await fetch(`${this.baseURL}/users/refresh`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Client": "web" },
           credentials: "include",
         });
 
-        const data = await response.json().catch(() => ({}));
-
-        if (response.ok && data?.accessToken) {
-          tokenStore.setTokens({
-            accessToken: data.accessToken,
-            refreshToken: data.refreshToken,
-          });
-          return true;
-        }
+        // Success = new HttpOnly cookies were set by the backend via the BFF.
+        if (response.ok) return true;
 
         tokenStore.clear();
         return false;

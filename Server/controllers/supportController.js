@@ -17,6 +17,11 @@ const OPTIMISTIC = { code: 'TICKET_STATE_CHANGED' };
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
+// Action → audit verb. Naive `${action}ed` produces "reopened"→"reopen ed" style
+// garbage and "resolved"→"resolvedd", so map explicitly.
+const ACTION_AUDIT = { resolve: 'resolved', close: 'closed', reopen: 'reopened', rate: 'rated' };
+const actionOf = (req) => req.route.path.split('/').at(-1);
+
 /** Compute permissions block via the PURE rule functions (never re-implemented). */
 const permissionsFor = (ticket) => {
     const c = canUserComment(ticket);
@@ -201,7 +206,7 @@ export const addMessage = async (req, res, next) => {
 /** POST /api/support/tickets/:id/:action (resolve|close|reopen|rate). */
 export const ticketAction = async (req, res, next) => {
     try {
-        const action = req.route.path.split('/').at(-1);
+        const action = actionOf(req);
         const ticket = await SupportTicket.findOne({ _id: req.params.ticketId, userId: req.user.id });
         if (!ticket) return notFound(res);
 
@@ -220,7 +225,7 @@ export const ticketAction = async (req, res, next) => {
             return res.status(result.error.code === OPTIMISTIC.code ? 409 : 403)
                 .json({ msg: result.error.reason || 'Not allowed', code: result.error.code });
         }
-        await audit({ actorId: req.user.id, action: `support.ticket.${action}ed`.replace('closeed', 'closed'), targetType: 'support_ticket', targetId: ticket._id });
+        await audit({ actorId: req.user.id, action: `support.ticket.${ACTION_AUDIT[action] || action}`, targetType: 'support_ticket', targetId: ticket._id });
         res.json({ msg: `Ticket ${action} done`, status: result.status });
     } catch (err) { next(err); }
 };

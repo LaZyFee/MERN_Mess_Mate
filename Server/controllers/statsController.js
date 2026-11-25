@@ -25,17 +25,18 @@ import mongoose from 'mongoose';
  * stacked bars / pie charts of where money went.
  */
 
-// Build an aggregation pipeline matching the requested window
+// Build an aggregation pipeline matching the requested window.
+// NOTE: aggregation $match does NOT auto-cast strings → ObjectIds, so ids are
+// cast explicitly here.
 const matchWindow = (groupId, q) => {
-    // aggregations do NOT auto-cast strings to ObjectId like queries do
     const match = { groupId: new mongoose.Types.ObjectId(groupId) };
     if (q.userId) match.userId = new mongoose.Types.ObjectId(q.userId);
 
     if (q.month) {
         match.month = q.month;
-    } else if (q.granularity === 'month' && q.year) {
-        match.month = { $regex: `^${q.year}-` };
-    } else if (q.granularity === 'year' && q.year) {
+    } else if (q.year) {
+        // granularity=month → 12 monthly buckets inside the year
+        // granularity=year  → all buckets for the year, collapsed client-side
         match.month = { $regex: `^${q.year}-` };
     }
     return match;
@@ -56,12 +57,24 @@ export const getStats = async (req, res, next) => {
         const match = matchWindow(groupId, q);
 
         // ---- Meals aggregation ----
+        // Group by month (or day for a single-month drill-down) and sum portions.
+        // `totalMealSubunits` is the integer-thousandths total; `totalMeals` is
+        // the UI-friendly decimal (1.25 = one and a quarter portions).
         const mealAgg = await Meal.aggregate([
             { $match: match },
             {
                 $group: {
                     _id: q.month ? '$date' : '$month', // daily buckets for single-month, monthly otherwise
-                    totalMeals: { $sum: '$totalMeals' },
+                    totalMealSubunits: {
+                        $sum: {
+                            $add: [
+                                { $cond: [{ $eq: ['$breakfast.state', 'consumed'] }, { $ifNull: ['$breakfast.portionSubunits', 0] }, 0] },
+                                { $cond: [{ $eq: ['$lunch.state', 'consumed'] }, { $ifNull: ['$lunch.portionSubunits', 0] }, 0] },
+                                { $cond: [{ $eq: ['$snacks.state', 'consumed'] }, { $ifNull: ['$snacks.portionSubunits', 0] }, 0] },
+                                { $cond: [{ $eq: ['$dinner.state', 'consumed'] }, { $ifNull: ['$dinner.portionSubunits', 0] }, 0] },
+                            ],
+                        },
+                    },
                     entries: { $sum: 1 },
                 },
             },
@@ -69,8 +82,11 @@ export const getStats = async (req, res, next) => {
         ]);
 
         // ---- Expenses aggregation (per period + per category) ----
+        // Only approved, non-reversal expenses are real spend. Drafts and
+        // submitted rows are work-in-progress; rejected rows are void.
+        const expenseMatch = { ...match, status: 'approved', isReversal: { $ne: true } };
         const expenseAgg = await Expense.aggregate([
-            { $match: match },
+            { $match: expenseMatch },
             {
                 $group: {
                     _id: q.month ? '$date' : '$month',
@@ -83,7 +99,7 @@ export const getStats = async (req, res, next) => {
 
         // category-wise totals (needs a separate group stage)
         const categoryAgg = await Expense.aggregate([
-            { $match: match },
+            { $match: expenseMatch },
             {
                 $group: {
                     _id: '$categoryId',
@@ -105,7 +121,8 @@ export const getStats = async (req, res, next) => {
             categoryId: c._id,
             name: c._id ? (catMap.get(String(c._id))?.name || 'Unknown') : 'Uncategorized',
             icon: c._id ? (catMap.get(String(c._id))?.icon || '') : '',
-            total: Math.round(c.total * 100) / 100,
+            totalPoisha: c.total,           // canonical
+            total: c.total / 100,           // legacy taka value (kept for old clients)
             count: c.count,
         }));
 
@@ -115,8 +132,10 @@ export const getStats = async (req, res, next) => {
                 bucket: q.month
                     ? new Date(a._id).getDate()                // day number
                     : a._id,                                    // "2026-03" or year bucket
-                meals: isMeal ? a.totalMeals : undefined,
-                amount: !isMeal ? Math.round(a.total * 100) / 100 : undefined,
+                meals: isMeal ? Number(((a.totalMealSubunits || 0) / 1000).toFixed(3)) : undefined,
+                mealSubunits: isMeal ? a.totalMealSubunits : undefined,
+                amount: !isMeal ? a.total / 100 : undefined,
+                amountPoisha: !isMeal ? a.total : undefined,
                 entries: a.entries ?? a.count,
             }));
 
@@ -124,9 +143,11 @@ export const getStats = async (req, res, next) => {
         const expenseSeries = normalizeBucket(expenseAgg, false);
 
         // ---- Summary stats ----
-        const totalMeals = mealAgg.reduce((s, a) => s + a.totalMeals, 0);
-        const totalExpenses = expenseAgg.reduce((s, a) => s + a.total, 0);
-        const mealRate = totalMeals > 0 ? totalExpenses / totalMeals : 0;
+        const totalMealSubunits = mealAgg.reduce((s, a) => s + (a.totalMealSubunits || 0), 0);
+        const totalMeals = totalMealSubunits / 1000;
+        const totalExpensePoisha = expenseAgg.reduce((s, a) => s + a.total, 0);
+        // mealRate is poisha per meal unit (integer); 0 when there are no meals
+        const mealRatePoisha = totalMeals > 0 ? Math.round(totalExpensePoisha / totalMeals) : 0;
 
         // finalized snapshots, useful for year-over-year comparison
         const summaryMatch = q.month
@@ -144,9 +165,12 @@ export const getStats = async (req, res, next) => {
             month: q.month || null,
             userId: q.userId || null,
             totals: {
-                totalMeals,
-                totalExpenses: Math.round(totalExpenses * 100) / 100,
-                mealRate: Math.round(mealRate * 100) / 100,
+                totalMeals,                         // decimal meal units (1.25)
+                totalMealSubunits,                  // integer thousandths (1250)
+                totalExpensesPoisha: totalExpensePoisha,
+                totalExpensesTaka: totalExpensePoisha / 100,
+                mealRatePoisha,                     // poisha per meal unit
+                mealRateTaka: mealRatePoisha / 100,
             },
             mealsSeries,
             expenseSeries,

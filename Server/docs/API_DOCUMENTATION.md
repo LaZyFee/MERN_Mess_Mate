@@ -1,8 +1,20 @@
-# MealMate API integration reference
+﻿# MealMate API integration reference
 
 Each operation below includes its full Express path. Substitute IDs with 24-character MongoDB ObjectIds and months with YYYY-MM. Guards execute in the order shown. An empty guard list denotes a public route. Legacy admin means MessGroup.admin. The v2 minimum-role order is member, auditor, treasurer, manager, owner. Controller-specific ownership and lifecycle checks can further restrict access.
 
+**Role semantics (verified in `middleware/roles.js`):**
+
+- `requireGroupRoleV2(min)` ranks roles `member(0) < auditor(1) < treasurer(2) < manager(3) < owner(4)`; a higher rank always satisfies a lower minimum.
+- **Auditor is read-only everywhere.** Any non-`GET/HEAD/OPTIONS` request from a user whose effective role is `auditor` is refused with `403 { msg: 'Auditor access is read-only' }` â€” in every group module, not only routines.
+- `requireGroupRole('admin'|'member')` (no `V2`) is the **legacy** guard: it reads the embedded `MessGroup.members[]`/`admin` arrays. Legacy admin satisfies both.
+- A valid membership row whose `MessGroup` was deleted yields `404 { msg: 'Group not found' }`, not a role error.
+- The platform-admin plane (`/api/admin*`) uses a different guard (`requirePlatformAdmin` + 2FA) and is entirely separate from group roles.
+
 Use application/json unless a multipart field or download is shown. Send X-Client: web on all web authentication calls. Registration (201), login, refresh and successful OTP verification set mm_at (HttpOnly, /), refreshToken (HttpOnly, /api) and mm_csrf (readable, /). Successful web JSON contains user with id, username, email, phone, profilePic and isVerified. Non-web callers can receive token fields. For cookie mutations copy mm_csrf into x-csrf-token. Preserve each Set-Cookie separately in the BFF. Access lasts one hour and refresh seven days. Retry refresh once per request chain. Logout clears cookies and the stored refresh hash. Issued access JWTs can survive logout until expiry.
+
+**The refresh cookie is named `refreshToken`, not `mm_rt`.** There is no `mm_rt` cookie anywhere in the backend â€” code that looks for one will always see a logged-out user. Both `mm_at` and `refreshToken` are HttpOnly and therefore unreadable from JavaScript; send requests with credentials so the browser attaches them.
+
+**CORS note:** the backend sends an explicit `Access-Control-Allow-Headers` allowlist (`Content-Type`, `Authorization`, `x-auth-token`, `x-csrf-token`, `x-client`, `Idempotency-Key`, `X-Admin-Key`). Any new custom request header must be added there or the browser preflight will block the call.
 
 On routes marked idempotent, send an optional Idempotency-Key for each logical mutation, keep it for retries and use a fresh key for changed input. An in-flight request or mismatched replay can return 409. A saved response replay adds __idempotentReplay. Authentication can return 401, group restrictions 403, concealed administration 404, validation 400 with {msg, errors:[{field,message}]}, and rate limits 429. The global handler returns {msg:"Server error"}. Paginated and unpaginated envelopes differ by route. Preserve a successful empty list, distinguish denied access from empty state and retain unsent form values on conflicts.
 
@@ -23,7 +35,7 @@ Request schema names below resolve to the schema appendix. The appendix preserve
 | Task | Request sequence and expected UI behavior |
 |---|---|
 | Meals and guests | Read configured slots. Submit a daily entry with date and slots, for example {"date":"2026-11-24","slots":{"lunch":{"state":"consumed","portionSubunits":500},"dinner":{"state":"confirmed_zero","portionSubunits":0}}}. Missing/unknown slots can block closing. Admins preview then apply bulk entries or absence ranges. Guests use a separate guests route, for example {"guestName":"Rafi","slot":"dinner","portionSubunits":1000,"poolMode":"individual"}. Individual guests count toward the host for displayed units. Universal guests enter the shared pool. |
-| Expense lifecycle | Fetch group categories. POST an expense draft with date, costPeriod and lines, for example {"date":"2026-11-24","costPeriod":"2026-11","lines":[{"categoryId":"65a000000000000000000012","amount":12550,"splitMode":"equal_all"}]}. The amount is ৳125.50. Use the returned expense ID to submit. Treasurer or higher approves or rejects submitted records. Approval allocates lines and posts a balanced journal. A reversal preserves provenance. Reload expenses and balances after posting. Verify actual payer attribution before production use. |
+| Expense lifecycle | Fetch group categories. POST an expense draft with date, costPeriod and lines, for example {"date":"2026-11-24","costPeriod":"2026-11","lines":[{"categoryId":"65a000000000000000000012","amount":12550,"splitMode":"equal_all"}]}. The amount is à§³125.50. Use the returned expense ID to submit. Treasurer or higher approves or rejects submitted records. Approval allocates lines and posts a balanced journal. A reversal preserves provenance. Reload expenses and balances after posting. Verify actual payer attribution before production use. |
 | Money and funds | Load funds and active memberships. Submit a contribution with {"kind":"contribution","amount":50000,"fromMember":"65a000000000000000000013","toAccount":"65a000000000000000000014","method":"cash"}. Treasurer confirms to post, rejects submitted entries or reverses a confirmed transaction. Fetch the member balance and fund list again. Owner controls custody changes. |
 | Reconcile and track assets | Treasurer selects a fund and posts accountId, actualBalance in poisha and optional asOf. Show the returned discrepancy and accounting equation. Resolve using the recorded resolution and explanation. Refundable asset purchases and refund records have separate assets endpoints. |
 | Month review | Read period and preview. List unresolved meals, submitted expenses and money separately. The checklist currently returns journal balance and period editability. Manager begins review or returns to open. Owner posts finalize with the displayed expectedRevision and a stable idempotency key. On 409 refetch before prompting again. A 422 can identify the first unresolved slot as text. |
@@ -35,7 +47,7 @@ Request schema names below resolve to the schema appendix. The appendix preserve
 | Inbox and realtime | Fetch unread count and feed, page by cursor, then mark selected IDs or all read. Save preferences separately. Connect Socket.IO with credentials, join the current group, leave on navigation and reconnect after refresh. Treat an inbox-new event as a signal to update the user feed. Group outbox delivery states are independent of inbox read state. |
 | Routines | A manager creates a roster with rotation, publishes it and reads generated duties. Members mark assigned work done, request swaps and respond. Refresh the duty and swap state after acceptance. Board/today aggregates duties, menus, pinned notes and handovers. Role and membership visibility still apply to note detail. |
 | Shopping and stock | Add and check items on the open shopping list. For conversion, select a group category and a positive price for each checked item. A successful conversion returns the draft expense and closed list. Review that draft before submitting. Inventory refills use the item ID and positive quantity and return the updated stock. |
-| Polls | Create an expiring question with 2–6 options. Submit a zero-based optionIndex to vote, then fetch results. A change of vote replaces the previous choice. Closing is available to the creator and the roles accepted by the controller (owner, manager, treasurer). |
+| Polls | Create an expiring question with 2â€“6 options. Submit a zero-based optionIndex to vote, then fetch results. A change of vote replaces the previous choice. Closing is available to the creator and the roles accepted by the controller (owner, manager, treasurer). |
 
 The status endpoint GET / returns plain text "Meal Mate Server is running". It checks the HTTP process only.
 
@@ -61,13 +73,13 @@ Example JSON body `{}`.
 
 verify. Middleware `auth`.
 
-Request `body totpController.verifySchema` · `body { code }`.
+Request `body totpController.verifySchema` Â· `body { code }`.
 
 Responses
 
 - `404 { msg: 'User not found' }`
 - `409 { msg: '2FA already enabled', code: 'TWO_FA_ALREADY_ENABLED' }`
-- `400 { msg: 'No pending setup — call /setup first', code: 'TWO_FA_NO_SETUP' }`
+- `400 { msg: 'No pending setup â€” call /setup first', code: 'TWO_FA_NO_SETUP' }`
 - `400 { msg: 'Invalid verification code', code: 'TWO_FA_INVALID_CODE' }`
 - `200 { msg: '2FA enabled', recoveryCodes: codes }`
 
@@ -79,7 +91,7 @@ Example JSON body `{"code":"123456"}`.
 
 disable. Middleware `auth`.
 
-Request `body totpController.disableSchema` · `body { password, code }`.
+Request `body totpController.disableSchema` Â· `body { password, code }`.
 
 Responses
 
@@ -97,7 +109,7 @@ Example JSON body `{"password":"ExamplePass71","code":"123456"}`.
 
 login Challenge. Public.
 
-Request `body schemas.loginSchema` · `body { email, password }`.
+Request `body schemas.loginSchema` Â· `body { email, password }`.
 
 Responses
 
@@ -115,7 +127,7 @@ Example JSON body `{"email":"nila@example.com","password":"ExamplePass71"}`.
 
 login2fa. Public.
 
-Request `body totpController.login2faSchema` · `body { challengeToken, code }`.
+Request `body totpController.login2faSchema` Â· `body { challengeToken, code }`.
 
 Responses
 
@@ -133,7 +145,7 @@ Example JSON body `{"challengeToken":"issued-challenge-here","code":"123456"}`.
 
 register. Public.
 
-Request `body schemas.registerSchema` · `body { username, email, password, phone }` · `body whatsapp`.
+Request `body schemas.registerSchema` Â· `body { username, email, password, phone }` Â· `body whatsapp`.
 
 Responses
 
@@ -149,7 +161,7 @@ Example JSON body `{"username":"Nila","email":"nila@example.com","password":"Exa
 
 login. Public.
 
-Request `body schemas.loginSchema` · `body { email, password }`.
+Request `body schemas.loginSchema` Â· `body { email, password }`.
 
 Responses
 
@@ -191,7 +203,7 @@ Responses
 
 forgot Password. Public.
 
-Request `body schemas.forgotPasswordSchema` · `body email`.
+Request `body schemas.forgotPasswordSchema` Â· `body email`.
 
 Responses
 
@@ -205,7 +217,7 @@ Example JSON body `{"email":"nila@example.com"}`.
 
 reset Password. Public.
 
-Request `body schemas.resetPasswordSchema` · `body { token, password }`.
+Request `body schemas.resetPasswordSchema` Â· `body { token, password }`.
 
 Responses
 
@@ -273,7 +285,7 @@ Responses
 
 update Profile. Middleware `auth`.
 
-Request `body schemas.updateProfileSchema` · `body k`.
+Request `body schemas.updateProfileSchema` Â· `body k`.
 
 Responses
 
@@ -288,7 +300,7 @@ Example JSON body `{"username":"Nila"}`.
 
 change Password. Middleware `auth`.
 
-Request `body schemas.changePasswordSchema` · `body currentPassword` · `body newPassword`.
+Request `body schemas.changePasswordSchema` Â· `body currentPassword` Â· `body newPassword`.
 
 Responses
 
@@ -349,7 +361,7 @@ Responses
 
 list Audit Events. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR`.
 
-Request `query limit` · `query action` · `query groupId`.
+Request `query limit` Â· `query action` Â· `query groupId`.
 
 Responses
 
@@ -361,7 +373,7 @@ Responses
 
 admin List Users. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR`.
 
-Request `query limit` · `query q` · `query cursor`.
+Request `query limit` Â· `query q` Â· `query cursor`.
 
 Responses
 
@@ -386,7 +398,7 @@ Responses
 
 admin Update User. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR`.
 
-Request `params z.object({ userId: objectId })` · `body { isVerified, suspended }`.
+Request `params z.object({ userId: objectId })` Â· `body { isVerified, suspended }`.
 
 Responses
 
@@ -409,7 +421,7 @@ Responses
 
 admin List Groups. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR`.
 
-Request `query limit` · `query q`.
+Request `query limit` Â· `query q`.
 
 Responses
 
@@ -450,7 +462,7 @@ Responses
 
 create Group. Middleware `auth`.
 
-Request `body schemas.createGroupSchema` · `body name` · `body mealSlots` · `body mealWeights` · `body defaultMealSubunits` · `body defaultMealsEnabled`.
+Request `body schemas.createGroupSchema` Â· `body name` Â· `body mealSlots` Â· `body mealWeights` Â· `body defaultMealSubunits` Â· `body defaultMealsEnabled`.
 
 Responses
 
@@ -464,13 +476,13 @@ Example JSON body `{"name":"Weekly bazar"}`.
 
 join By Code. Middleware `auth`.
 
-Request `body schemas.joinByCodeSchema` · `body code`.
+Request `body schemas.joinByCodeSchema` Â· `body code`.
 
 Responses
 
 - `404 { msg: 'Invalid join code' }`
 - `400 { msg: 'Already requested or member' }`
-- `200 { msg: 'Request sent â€” waiting for admin approval' }`
+- `200 { msg: 'Request sent Ã¢â‚¬â€ waiting for admin approval' }`
 
 [Handler](controllers/messGroupController.js#L374)
 
@@ -505,7 +517,7 @@ Responses
 
 add Member. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.addMemberSchema` · `body { userId, role }`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.addMemberSchema` Â· `body { userId, role }`.
 
 Responses
 
@@ -545,7 +557,7 @@ Responses
 
 add Extra. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.extraSchema` · `body name` · `body amount`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.extraSchema` Â· `body name` Â· `body amount`.
 
 Responses
 
@@ -571,7 +583,7 @@ Responses
 
 invite By Email. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.inviteSchema` · `body { email }`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.inviteSchema` Â· `body { email }`.
 
 Responses
 
@@ -651,7 +663,7 @@ Request `params schemas.groupAndUserParamSchema`.
 Responses
 
 - `403 { msg: 'Only admin can remove other members' }`
-- `400 { msg: 'Admin cannot be removed â€” transfer admin role first' }`
+- `400 { msg: 'Admin cannot be removed Ã¢â‚¬â€ transfer admin role first' }`
 - `404 { msg: 'Not a member of this group' }`
 - `200 { msg: isSelf ? 'You left the group' : 'Member removed' }`
 
@@ -673,7 +685,7 @@ Responses
 
 create Category. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.categorySchema` · `body { name, icon, splitMode }`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.categorySchema` Â· `body { name, icon, splitMode }`.
 
 Responses
 
@@ -700,7 +712,7 @@ Responses
 
 update Category. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdAndIdParamSchema` · `body categorySchema.partial()` · `body { name, icon, splitMode }`.
+Request `params schemas.objectIdAndIdParamSchema` Â· `body categorySchema.partial()` Â· `body { name, icon, splitMode }`.
 
 Responses
 
@@ -740,7 +752,7 @@ Responses
 
 update Feature Flags. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body messGroupController.flagSchema`.
+Request `params schemas.objectIdParamSchema` Â· `body messGroupController.flagSchema`.
 
 Responses
 
@@ -755,7 +767,7 @@ Example JSON body `{}`.
 
 get Group Audit Log. Middleware `auth`, `requireGroupRole('member')`.
 
-Request `params schemas.objectIdParamSchema` · `query { limit = 50, cursor }`.
+Request `params schemas.objectIdParamSchema` Â· `query { limit = 50, cursor }`.
 
 Responses
 
@@ -771,7 +783,7 @@ Responses
 
 add Meal. Middleware `auth`, `requireGroupRole('member')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.mealEntrySchema` · `body date` · `body slots`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.mealEntrySchema` Â· `body date` Â· `body slots`.
 
 Responses
 
@@ -786,7 +798,7 @@ Example JSON body `{"slots":{"lunch":{"state":"consumed","portionSubunits":1000}
 
 create Guest Meal. Middleware `auth`, `requireGroupRole('member')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.guestMealSchema` · `body date` · `body slot` · `body guestName` · `body portionSubunits` · `body poolMode` · `body eventPoolRef`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.guestMealSchema` Â· `body date` Â· `body slot` Â· `body guestName` Â· `body portionSubunits` Â· `body poolMode` Â· `body eventPoolRef`.
 
 Responses
 
@@ -801,7 +813,7 @@ Example JSON body `{"slot":"dinner","portionSubunits":1000,"poolMode":"individua
 
 list Guest Meals. Middleware `auth`, `requireGroupRole('member')`.
 
-Request `params schemas.objectIdParamSchema` · `query from` · `query to`.
+Request `params schemas.objectIdParamSchema` Â· `query from` Â· `query to`.
 
 Responses
 
@@ -813,7 +825,7 @@ Responses
 
 preview Bulk Meals. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.mealBulkSchema` · `body entries`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.mealBulkSchema` Â· `body entries`.
 
 Responses
 
@@ -827,7 +839,7 @@ Example JSON body `{"entries":[{"userId":"65a000000000000000000013","date":"2026
 
 apply Bulk Meals. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.mealBulkSchema` · `body entries`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.mealBulkSchema` Â· `body entries`.
 
 Responses
 
@@ -841,7 +853,7 @@ Example JSON body `{"entries":[{"userId":"65a000000000000000000013","date":"2026
 
 preview Absence. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.absenceRangeSchema` · `body from` · `body to` · `body userId` · `body slots`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.absenceRangeSchema` Â· `body from` Â· `body to` Â· `body userId` Â· `body slots`.
 
 Responses
 
@@ -855,7 +867,7 @@ Example JSON body `{"from":"2026-11-24","to":"2026-11-24"}`.
 
 apply Absence. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.absenceRangeSchema` · `body from` · `body to` · `body userId` · `body slots`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.absenceRangeSchema` Â· `body from` Â· `body to` Â· `body userId` Â· `body slots`.
 
 Responses
 
@@ -869,7 +881,7 @@ Example JSON body `{"from":"2026-11-24","to":"2026-11-24"}`.
 
 update Meal. Middleware `auth`.
 
-Request `params schemas.idParamSchema` · `body mealEntrySchema.partial()` · `body date` · `body slots`.
+Request `params schemas.idParamSchema` Â· `body mealEntrySchema.partial()` Â· `body date` Â· `body slots`.
 
 Responses
 
@@ -894,7 +906,7 @@ Responses
 
 get Tomorrow Headcount. Middleware `auth`, `requireGroupRole('member')`.
 
-Request `query schemas.headcountQuerySchema` · `query date` · `query includeGuests`.
+Request `query schemas.headcountQuerySchema` Â· `query date` Â· `query includeGuests`.
 
 Responses
 
@@ -906,7 +918,7 @@ Responses
 
 get Meals By Month. Middleware `auth`, `requireGroupRole('member')`.
 
-Request `params schemas.monthParamSchema` · `query schemas.mealFilterQuerySchema`.
+Request `params schemas.monthParamSchema` Â· `query schemas.mealFilterQuerySchema`.
 
 Responses
 
@@ -935,7 +947,7 @@ Responses
 
 add Expense. Middleware `auth`, `requireGroupRole('member')`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.expenseEntrySchema` · `body { amount, description, categoryId }` · `body date`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.expenseEntrySchema` Â· `body { amount, description, categoryId }` Â· `body date`.
 
 Responses
 
@@ -950,7 +962,7 @@ Example JSON body `{"amount":12550,"categoryId":"65a000000000000000000013"}`.
 
 update Expense. Middleware `auth`.
 
-Request `params schemas.idParamSchema` · `body schemas.expenseUpdateSchema`.
+Request `params schemas.idParamSchema` Â· `body schemas.expenseUpdateSchema`.
 
 Responses
 
@@ -1004,7 +1016,7 @@ Responses
 
 list Expenses. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `query schemas.listExpenseQuery` · `query { cursor, limit }`.
+Request `params schemas.groupIdParam` Â· `query schemas.listExpenseQuery` Â· `query { cursor, limit }`.
 
 Responses
 
@@ -1017,7 +1029,7 @@ Responses
 
 create Expense. Middleware `auth`, `requireGroupRoleV2('member')`, `idempotent('expense.create')`.
 
-Request `params schemas.groupIdParam` · `body schemas.createExpenseSchema` · `body { supplierName = '', description = '', date, costPeriod, serviceStart = null, serviceEnd = null, lines = [], isPayable = false, receiptReference = '', }`.
+Request `params schemas.groupIdParam` Â· `body schemas.createExpenseSchema` Â· `body { supplierName = '', description = '', date, costPeriod, serviceStart = null, serviceEnd = null, lines = [], isPayable = false, receiptReference = '', }`.
 
 Responses
 
@@ -1049,12 +1061,23 @@ Responses
 
 approve Expense. Middleware `auth`, `requireGroupRoleV2('treasurer')`, `idempotent('expense.approve')`.
 
-Request `params schemas.expenseIdParam` · `body schemas.reasonBody`.
+Runs inside a MongoDB transaction: allocation is computed and frozen, the balanced Journal is posted, `expense.revision` is incremented, and the period revision is bumped â€” all or nothing.
+
+**Self-approval rule:** if the approver's own membership is in the active member pool (practically always true for a treasurer who is a resident), `reason` is **required**; without it the request fails with `422 { msg: 'Self-approval requires a reason (field: reason)' }` and nothing is written. Supply a short reason such as "own bazar receipt reviewed with the manager". The approval is recorded in the audit trail.
+
+**Payer rule:** an expense with no `payers[]` is journaled against the approver's own membership. If the approver has no active membership either, approval fails with `422 { msg: 'No payer on this expense â€” record payers[] before approval' }`.
+
+Request `params schemas.expenseIdParam` Â· `body schemas.reasonBody` (`reason` required when self-approving).
 
 Responses
 
-- `200 { msg: 'Expense approved and posted', ...result }`
-- `err.status { msg: err.message }`
+- `200 { msg: 'Expense approved and posted', expense, journalId, selfApproved }`
+- `404 { msg: 'Expense not found' }`
+- `409 { msg: 'Cannot approve from state: ${expense.status}' }`
+- `409 { msg: 'Period is finalized; use the correction process' | 'Period is in review; ordinary edits are stopped' }`
+- `422 { msg: 'Self-approval requires a reason (field: reason)' }`
+- `422 { msg: 'No payer on this expense â€” record payers[] before approval' }`
+- `422 { msg: 'Allocation charges must sum to the expense line total' | 'Fixed allocations (â€¦) must equal the line total (â€¦)' | â€¦ }` â€” allocation cannot be computed (e.g. `meal_units` line with zero meal units)
 
 Example JSON body `{"reason":"Receipt and payment reviewed"}`.
 
@@ -1064,7 +1087,7 @@ Example JSON body `{"reason":"Receipt and payment reviewed"}`.
 
 reject Expense. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.expenseIdParam` · `body schemas.reasonBody`.
+Request `params schemas.expenseIdParam` Â· `body schemas.reasonBody`.
 
 Responses
 
@@ -1080,7 +1103,7 @@ Example JSON body `{"reason":"Receipt and payment reviewed"}`.
 
 reverse Expense. Middleware `auth`, `requireGroupRoleV2('treasurer')`, `idempotent('expense.reverse')`.
 
-Request `params schemas.expenseIdParam` · `body schemas.reasonBody` · `body reason`.
+Request `params schemas.expenseIdParam` Â· `body schemas.reasonBody` Â· `body reason`.
 
 Responses
 
@@ -1099,13 +1122,13 @@ Example JSON body `{"reason":"Receipt and payment reviewed"}`.
 
 get V2Dashboard. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `query month`.
+Request `params schemas.groupIdParam` Â· `query month`.
 
 Responses
 
 - `200 { groupId, month, period: { state: periodState, revision, reviewStartedAt: period?.reviewStartedAt || null, finalizedAt: period?.finalizedAt || null, }, activeMembersCount: activeMemberships.length, expenses: { draft: { count: drafts.length, totalPoisha: draftTotal, totalTaka: (draftTotal / 100).toFixed(2) }, submitted: { count: submitted.length, totalPoisha: submittedTotal, totalTaka: (submittedTotal / 100).toFixed(2) }, approved: { count: approved.length, totalPoisha: approvedTotal, totalTaka: (approvedTotal / 100).toFixed(2) }, rejected: { count: rejected.length }, payablesOutstanding: { count: payables.length, totalPoisha: outstandingPayables, totalTaka: (outstandingPayables / 100).toFixed(2) }, }, money: { totalContributionsPoisha: totalContributions, totalContributionsTaka: (totalContributions / 100).toFixed(2), personalSupplierPaymentsPoisha: totalPersonalSupplierPayments, pendingTransactions: { count: pendingTx.length, totalPoisha: pendingMoneyTotal, totalTaka: (pendingMoneyTotal / 100).toFixed(2) }, }, funds: { totalAssetsPoisha: totalFundAssets, totalAssetsTaka: (totalFundAssets / 100).toFixed(2), accounts: fundBalances, }, settlement, }`
 
-[Handler](controllers/statsController.js#L167)
+[Handler](controllers/statsController.js#L191)
 
 ### GET `/api/stats/:groupId`
 
@@ -1116,9 +1139,17 @@ Request `params schemas.objectIdParamSchema`.
 Responses
 
 - `400 { msg: 'Validation failed', errors: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })), }`
-- `200 { groupId, granularity: q.month ? 'day' : q.granularity, year: q.year || null, month: q.month || null, userId: q.userId || null, totals: { totalMeals, totalExpenses: Math.round(totalExpenses * 100) / 100, mealRate: Math.round(mealRate * 100) / 100, }, mealsSeries, expenseSeries, categoryBreakdown, finalizedMonths: finalized, }`
+- `200 { groupId, granularity: 'day'|'month'|'year', year, month, userId, totals: { totalMeals, totalMealSubunits, totalExpensesPoisha, totalExpensesTaka, mealRatePoisha, mealRateTaka }, mealsSeries, expenseSeries, categoryBreakdown, finalizedMonths, }`
 
-[Handler](controllers/statsController.js#L44)
+[Handler](controllers/statsController.js#L45)
+
+**Series semantics (verified in source):**
+
+- `mealsSeries[].mealSubunits` is the **integer-thousandths** sum of `portionSubunits` over slots whose state is `consumed`; `mealsSeries[].meals` is the same value Ã· 1000 (e.g. `1.25`).
+- `expenseSeries[].amountPoisha` / `amount` are the aggregate spend; `categoryBreakdown[].totalPoisha` is the canonical value (`total` remains in taka for legacy clients).
+- Only expenses with `status: 'approved'` and `isReversal !== true` are counted.
+- `bucket` is a day-of-month **number** when `month=` is supplied, otherwise a `"YYYY-MM"` string.
+- `mealRatePoisha` = `round(totalExpensePoisha / totalMeals)` â€” 0 when there are no meal units.
 
 
 ## Memberships
@@ -1139,7 +1170,7 @@ Responses
 
 list Active. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `query at`.
+Request `params schemas.groupIdParam` Â· `query at`.
 
 Responses
 
@@ -1163,7 +1194,7 @@ Responses
 
 create Membership. Middleware `auth`, `requireGroupRoleV2('manager')`, `idempotent('membership.create')`.
 
-Request `params schemas.groupIdParam` · `body schemas.createMembershipSchema` · `body { userId = null, displayName, startDate, endDate = null, role = 'member', room = '', weight = 1, isPlaceholder = false, }`.
+Request `params schemas.groupIdParam` Â· `body schemas.createMembershipSchema` Â· `body { userId = null, displayName, startDate, endDate = null, role = 'member', room = '', weight = 1, isPlaceholder = false, }`.
 
 Responses
 
@@ -1178,7 +1209,7 @@ Example JSON body `{"displayName":"Nila","startDate":"2026-11-24"}`.
 
 update Membership. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params schemas.groupIdParam` · `body { role, room, weight, endDate, displayName, linkUserId }` · `body reason`.
+Request `params schemas.groupIdParam` Â· `body { role, room, weight, endDate, displayName, linkUserId }` Â· `body reason`.
 
 Responses
 
@@ -1191,7 +1222,7 @@ Responses
 
 depart Membership. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params schemas.groupIdParam` · `body at`.
+Request `params schemas.groupIdParam` Â· `body at`.
 
 Responses
 
@@ -1219,7 +1250,7 @@ Responses
 
 publish Policy. Middleware `auth`, `requireGroupRoleV2('owner')`.
 
-Request `params schemas.groupIdParam` · `body schemas.publishPolicySchema` · `body { effectiveFrom, mealWeights, allowedPortions, entryCutoffHour, currency, timezone, requireExpenseApproval, reviewGraceDays }`.
+Request `params schemas.groupIdParam` Â· `body schemas.publishPolicySchema` Â· `body { effectiveFrom, mealWeights, allowedPortions, entryCutoffHour, currency, timezone, requireExpenseApproval, reviewGraceDays }`.
 
 Responses
 
@@ -1311,7 +1342,7 @@ Responses
 
 record Correction. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params schemas.monthParam` · `body schemas.correctionSchema`.
+Request `params schemas.monthParam` Â· `body schemas.correctionSchema`.
 
 Responses
 
@@ -1328,7 +1359,7 @@ Example JSON body `{}`.
 
 list Transactions. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `query schemas.listMoneyQuery` · `query { cursor, limit }`.
+Request `params schemas.groupIdParam` Â· `query schemas.listMoneyQuery` Â· `query { cursor, limit }`.
 
 Responses
 
@@ -1341,11 +1372,11 @@ Responses
 
 submit Transaction. Middleware `auth`, `requireGroupRoleV2('member')`, `idempotent('money.submit')`.
 
-Request `params schemas.groupIdParam` · `body schemas.moneySchema` · `body { kind, amount, fromMember = null, toMember = null, fromAccount = null, toAccount = null, supplierName = '', method = 'cash', reference = '', paidAt, evidenceUrl = '', }`.
+Request `params schemas.groupIdParam` Â· `body schemas.moneySchema` Â· `body { kind, amount, fromMember = null, toMember = null, fromAccount = null, toAccount = null, supplierName = '', method = 'cash', reference = '', paidAt, evidenceUrl = '', }`.
 
 Responses
 
-- `201 { msg: 'Transaction submitted — awaiting confirmation by receiver/treasurer', transaction: tx }`
+- `201 { msg: 'Transaction submitted â€” awaiting confirmation by receiver/treasurer', transaction: tx }`
 - `400 { msg: err.message }`
 
 Example JSON body `{"kind":"contribution","amount":12550,"fromMember":"65a000000000000000000013","toAccount":"65a000000000000000000014","method":"cash"}`.
@@ -1369,7 +1400,7 @@ Responses
 
 reject Transaction. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.txIdParam` · `body schemas.reasonBody`.
+Request `params schemas.txIdParam` Â· `body schemas.reasonBody`.
 
 Responses
 
@@ -1385,7 +1416,7 @@ Example JSON body `{"reason":"Receipt and payment reviewed"}`.
 
 reverse Transaction. Middleware `auth`, `requireGroupRoleV2('treasurer')`, `idempotent('money.reverse')`.
 
-Request `params schemas.txIdParam` · `body schemas.reasonBody` · `body reason`.
+Request `params schemas.txIdParam` Â· `body schemas.reasonBody` Â· `body reason`.
 
 Responses
 
@@ -1424,7 +1455,7 @@ Responses
 
 create Fund. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.groupIdParam` · `body schemas.fundSchema` · `body { name, kind, maskedIdentifier = '' }`.
+Request `params schemas.groupIdParam` Â· `body schemas.fundSchema` Â· `body { name, kind, maskedIdentifier = '' }`.
 
 Responses
 
@@ -1438,7 +1469,7 @@ Example JSON body `{"name":"Weekly bazar","kind":"cash"}`.
 
 change Custodian. Middleware `auth`, `requireGroupRoleV2('owner')`.
 
-Request `params schemas.groupIdParam` · `body schemas.custodianSchema` · `body newCustodianId`.
+Request `params schemas.groupIdParam` Â· `body schemas.custodianSchema` Â· `body newCustodianId`.
 
 Responses
 
@@ -1493,7 +1524,7 @@ Responses
 
 finalize. Middleware `auth`, `requireGroupRoleV2('owner')`, `idempotent('statement.finalize')`.
 
-Request `params schemas.monthParam` · `body schemas.finalizeSchema`.
+Request `params schemas.monthParam` Â· `body schemas.finalizeSchema`.
 
 Responses
 
@@ -1523,7 +1554,7 @@ Responses
 
 create Rule. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.groupIdParam` · `body schemas.recurringSchema` · `body name` · `body categoryId` · `body amount` · `body splitMode` · `body beneficiaries` · `body fixedAmounts` · `body weights` · `body supplierName` · `body dueDayOfMonth` · `body effectiveFrom` · `body effectiveTo`.
+Request `params schemas.groupIdParam` Â· `body schemas.recurringSchema` Â· `body name` Â· `body categoryId` Â· `body amount` Â· `body splitMode` Â· `body beneficiaries` Â· `body fixedAmounts` Â· `body weights` Â· `body supplierName` Â· `body dueDayOfMonth` Â· `body effectiveFrom` Â· `body effectiveTo`.
 
 Responses
 
@@ -1550,7 +1581,7 @@ Responses
 
 update Rule. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.ruleIdParam` · `body k`.
+Request `params schemas.ruleIdParam` Â· `body k`.
 
 Responses
 
@@ -1563,7 +1594,7 @@ Responses
 
 generate Draft. Middleware `auth`, `requireGroupRoleV2('treasurer')`, `idempotent('recurring.generate')`.
 
-Request `params schemas.ruleIdParam` · `body schemas.generateSchema`.
+Request `params schemas.ruleIdParam` Â· `body schemas.generateSchema`.
 
 Responses
 
@@ -1586,7 +1617,7 @@ Example JSON body `{"costPeriod":"2026-11"}`.
 
 list Reconciliations. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `query schemas.listReconciliationQuery`.
+Request `params schemas.groupIdParam` Â· `query schemas.listReconciliationQuery`.
 
 Responses
 
@@ -1610,13 +1641,13 @@ Responses
 
 create Reconciliation. Middleware `auth`, `requireGroupRoleV2('treasurer')`, `idempotent('reconciliation.create')`.
 
-Request `params schemas.groupIdParam` · `body schemas.reconciliationSchema` · `body { accountId, asOf, actualBalance }`.
+Request `params schemas.groupIdParam` Â· `body schemas.reconciliationSchema` Â· `body { accountId, asOf, actualBalance }`.
 
 Responses
 
 - `404 { msg: 'Fund account not found' }`
 - `400 { msg: 'actualBalance must be integer poisha' }`
-- `201 { msg: rec.variance === 0 ? 'Reconciled exactly' : 'Variance recorded — resolve before close', reconciliation: rec, }`
+- `201 { msg: rec.variance === 0 ? 'Reconciled exactly' : 'Variance recorded â€” resolve before close', reconciliation: rec, }`
 
 Example JSON body `{"accountId":"65a000000000000000000013","actualBalance":12550}`.
 
@@ -1626,7 +1657,7 @@ Example JSON body `{"accountId":"65a000000000000000000013","actualBalance":12550
 
 resolve Reconciliation. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.recIdParam` · `body schemas.resolveReconciliationSchema` · `body { resolution, explanation }`.
+Request `params schemas.recIdParam` Â· `body schemas.resolveReconciliationSchema` Â· `body { resolution, explanation }`.
 
 Responses
 
@@ -1646,7 +1677,7 @@ Example JSON body `{"resolution":"adjusted"}`.
 
 list Disputes. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `query schemas.disputeListQuery`.
+Request `params schemas.groupIdParam` Â· `query schemas.disputeListQuery`.
 
 Responses
 
@@ -1658,7 +1689,7 @@ Responses
 
 open Dispute. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `body schemas.disputeSchema` · `body { targetType, targetId, reason, statementId = null, membershipId = null }`.
+Request `params schemas.groupIdParam` Â· `body schemas.disputeSchema` Â· `body { targetType, targetId, reason, statementId = null, membershipId = null }`.
 
 Responses
 
@@ -1673,7 +1704,7 @@ Example JSON body `{"targetType":"expense","targetId":"65a000000000000000000013"
 
 respond To Dispute. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.disputeIdParam` · `body schemas.disputeRespondSchema` · `body text`.
+Request `params schemas.disputeIdParam` Â· `body schemas.disputeRespondSchema` Â· `body text`.
 
 Responses
 
@@ -1689,7 +1720,7 @@ Example JSON body `{"text":"Weekly bazar"}`.
 
 resolve Dispute. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params schemas.disputeIdParam` · `body schemas.disputeResolveSchema`.
+Request `params schemas.disputeIdParam` Â· `body schemas.disputeResolveSchema`.
 
 Responses
 
@@ -1708,7 +1739,7 @@ Example JSON body `{}`.
 
 whatsapp Webhook Verify. Public.
 
-Request `query 'hub.mode'` · `query 'hub.verify_token'` · `query 'hub.challenge'`.
+Request `query 'hub.mode'` Â· `query 'hub.verify_token'` Â· `query 'hub.challenge'`.
 
 Responses
 
@@ -1747,7 +1778,7 @@ Responses
 
 list Outbox. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params schemas.groupIdParam` · `query schemas.outboxQuery`.
+Request `params schemas.groupIdParam` Â· `query schemas.outboxQuery`.
 
 Responses
 
@@ -1785,7 +1816,7 @@ Responses
 
 manual Share Links. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params schemas.groupIdParam` · `body schemas.manualShareSchema` · `body { statementId }`.
+Request `params schemas.groupIdParam` Â· `body schemas.manualShareSchema` Â· `body { statementId }`.
 
 Responses
 
@@ -1842,30 +1873,35 @@ Example JSON body `{}`.
 
 upload Attachment. Middleware `auth`, `requireGroupRoleV2('member')`, `receiptMulter.single('file')`.
 
-Request `params schemas.groupIdParam` · `body { targetType = 'expense_receipt', targetId = null }`.
+Request `params schemas.groupIdParam` Â· `body { targetType = 'expense_receipt', targetId = null }`.
+
+`targetType` enum: **`expense_receipt` | `payment_evidence` | `support`**. `targetId` is optional (links the file to that expense/transaction).
 
 Responses
 
 - `400 { msg: 'No file uploaded' }`
+- `422 { msg: 'targetType must be one of: expense_receipt, payment_evidence, support' }`
 - `400 { msg: 'File signature does not match claimed MIME type (rejected)' }`
 - `400 { msg: 'File failed antivirus scan (rejected)' }`
 - `201 { msg: 'Attachment uploaded to cloud storage, verified and scanned', scan: { scanned: scan.scanned, verdict: scan.verdict }, attachment: { id: attachment._id, originalName: attachment.originalName, mimeType: attachment.mimeType, size: attachment.size, sha256: attachment.sha256, scanStatus: attachment.scanStatus, url: '/api/attachments/groups/${groupId}/${attachment._id}', }, }`
 
-[Handler](controllers/attachmentController.js#L17)
+[Handler](controllers/attachmentController.js#L47)
 
 ### GET `/api/attachments/groups/:groupId/:attachmentId`
 
 download Attachment. Middleware `auth`, `requireGroupRoleV2('member')`.
 
+**Authorization (not mere group membership):** the caller must be the uploader, hold `owner|manager|treasurer|auditor`, be the creator/legacy owner of the linked `expense_receipt`, or be the submitter of the linked `payment_evidence`. Everyone else â€” including ordinary members â€” receives the same `404 { msg: 'Attachment not found' }` so IDs cannot be probed.
+
 Request `params schemas.groupIdParam`.
 
 Responses
 
-- `404 { msg: 'Attachment not found' }`
-- `302 redirect to signed receipt URL`
-- `404 { msg: 'File no longer exists on storage' }`
+- `404 { msg: 'Attachment not found' }` â€” missing, other-group, or not authorized
+- `302` redirect to a short-lived (1 h) signed receipt URL (`Cache-Control` is not set; the URL itself expires)
+- `404 { msg: 'File no longer exists on storage' }` â€” legacy local-storage fallback only
 
-[Handler](controllers/attachmentController.js#L107)
+[Handler](controllers/attachmentController.js#L141)
 
 
 ## Refundable assets
@@ -1886,13 +1922,13 @@ Responses
 
 create Asset. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.groupIdParam` · `body { name, kind = 'landlord_deposit', initialAmount, fundingShares = [], custodianId = null, notes = '' }`.
+Request `params schemas.groupIdParam` Â· `body { name, kind = 'landlord_deposit', initialAmount, fundingShares = [], custodianId = null, notes = '' }`.
 
 Responses
 
 - `400 { msg: 'name and positive initialAmount in poisha required' }`
 - `400 { msg: 'fundingShares must include at least one member share' }`
-- `422 { msg: 'Funding shares total (৳${totalFunded / 100}) must equal initial amount (৳${initialAmount / 100})' }`
+- `422 { msg: 'Funding shares total (à§³${totalFunded / 100}) must equal initial amount (à§³${initialAmount / 100})' }`
 - `201 { msg: 'Asset/deposit tracked successfully', asset }`
 
 [Handler](controllers/depositAssetController.js#L18)
@@ -1901,13 +1937,13 @@ Responses
 
 record Asset Refund. Middleware `auth`, `requireGroupRoleV2('treasurer')`.
 
-Request `params schemas.groupIdParam` · `body { membershipId, amount, note = '', moneyTransactionId = null }`.
+Request `params schemas.groupIdParam` Â· `body { membershipId, amount, note = '', moneyTransactionId = null }`.
 
 Responses
 
 - `404 { msg: 'Asset not found' }`
 - `404 { msg: 'Member not found in asset funding shares' }`
-- `422 { msg: 'Amount exceeds maximum remaining refundable share (৳${maxRefundable / 100})' }`
+- `422 { msg: 'Amount exceeds maximum remaining refundable share (à§³${maxRefundable / 100})' }`
 - `200 { msg: 'Asset refund recorded', asset }`
 
 [Handler](controllers/depositAssetController.js#L58)
@@ -1941,7 +1977,7 @@ Responses
 
 mark Read. Middleware `auth`.
 
-Request `body inboxSchemas.inboxReadSchema` · `body { ids, all }`.
+Request `body inboxSchemas.inboxReadSchema` Â· `body { ids, all }`.
 
 Responses
 
@@ -1994,7 +2030,7 @@ Responses
 
 appeal. Middleware `appealLimiter`.
 
-Request `body supportSchemas.appealSchema` · `body { email, message, captchaToken }`.
+Request `body supportSchemas.appealSchema` Â· `body { email, message, captchaToken }`.
 
 Responses
 
@@ -2008,7 +2044,7 @@ Example JSON body `{"email":"nila@example.com","message":"Weekly bazar"}`.
 
 create Ticket. Middleware `auth`, `idempotent('support.ticket.create')`.
 
-Request `body supportSchemas.ticketCreateSchema` · `body { category, subject, body, groupId, attachContext, attachmentIds }`.
+Request `body supportSchemas.ticketCreateSchema` Â· `body { category, subject, body, groupId, attachContext, attachmentIds }`.
 
 Responses
 
@@ -2045,7 +2081,7 @@ Responses
 
 add Message. Middleware `auth`, `messageLimiter`.
 
-Request `body supportSchemas.ticketMessageSchema` · `body body` · `body attachmentIds`.
+Request `body supportSchemas.ticketMessageSchema` Â· `body body` Â· `body attachmentIds`.
 
 Responses
 
@@ -2063,7 +2099,7 @@ Example JSON body `{"body":"Weekly bazar"}`.
 
 ticket Action. Middleware `auth`.
 
-Request `body supportSchemas.ticketTransitionSchema` · `body score` · `body comment`.
+Request `body supportSchemas.ticketTransitionSchema` Â· `body score` Â· `body comment`.
 
 Responses
 
@@ -2080,7 +2116,7 @@ Example JSON body `{}`.
 
 ticket Action. Middleware `auth`.
 
-Request `body supportSchemas.ticketTransitionSchema` · `body score` · `body comment`.
+Request `body supportSchemas.ticketTransitionSchema` Â· `body score` Â· `body comment`.
 
 Responses
 
@@ -2097,7 +2133,7 @@ Example JSON body `{}`.
 
 ticket Action. Middleware `auth`.
 
-Request `body supportSchemas.ticketTransitionSchema` · `body score` · `body comment`.
+Request `body supportSchemas.ticketTransitionSchema` Â· `body score` Â· `body comment`.
 
 Responses
 
@@ -2114,7 +2150,7 @@ Example JSON body `{}`.
 
 ticket Action. Middleware `auth`.
 
-Request `body supportSchemas.ticketRateSchema` · `body score` · `body comment`.
+Request `body supportSchemas.ticketRateSchema` Â· `body score` Â· `body comment`.
 
 Responses
 
@@ -2159,7 +2195,7 @@ Responses
 
 admin Reply. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.idParam` · `body supportSchemas.adminReplySchema` · `body body` · `body attachmentIds`.
+Request `params supportAdminRoutes.idParam` Â· `body supportSchemas.adminReplySchema` Â· `body body` Â· `body attachmentIds`.
 
 Responses
 
@@ -2176,7 +2212,7 @@ Example JSON body `{"body":"Weekly bazar"}`.
 
 admin Internal Note. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.idParam` · `body supportSchemas.adminReplySchema` · `body body`.
+Request `params supportAdminRoutes.idParam` Â· `body supportSchemas.adminReplySchema` Â· `body body`.
 
 Responses
 
@@ -2191,7 +2227,7 @@ Example JSON body `{"body":"Weekly bazar"}`.
 
 admin Assign. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.idParam` · `body supportSchemas.adminAssignSchema` · `body assignedAdminId`.
+Request `params supportAdminRoutes.idParam` Â· `body supportSchemas.adminAssignSchema` Â· `body assignedAdminId`.
 
 Responses
 
@@ -2206,7 +2242,7 @@ Example JSON body `{"assignedAdminId":"65a000000000000000000013"}`.
 
 admin Patch Ticket. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.idParam` · `body supportSchemas.adminTicketPatchSchema` · `body { priority, category, tags }`.
+Request `params supportAdminRoutes.idParam` Â· `body supportSchemas.adminTicketPatchSchema` Â· `body { priority, category, tags }`.
 
 Responses
 
@@ -2219,7 +2255,7 @@ Responses
 
 admin Action. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.idParam` · `body adminRedactSchema.partial({ reason: true })`.
+Request `params supportAdminRoutes.idParam` Â· `body adminRedactSchema.partial({ reason: true })`.
 
 Responses
 
@@ -2233,7 +2269,7 @@ Responses
 
 admin Action. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.idParam` · `body adminRedactSchema.partial({ reason: true })`.
+Request `params supportAdminRoutes.idParam` Â· `body adminRedactSchema.partial({ reason: true })`.
 
 Responses
 
@@ -2247,7 +2283,7 @@ Responses
 
 admin Action. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.idParam` · `body supportSchemas.adminRedactSchema`.
+Request `params supportAdminRoutes.idParam` Â· `body supportSchemas.adminRedactSchema`.
 
 Responses
 
@@ -2263,7 +2299,7 @@ Example JSON body `{"reason":"Weekly bazar"}`.
 
 admin Redact Message. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params supportAdminRoutes.msgParam` · `body supportSchemas.adminRedactSchema` · `body reason`.
+Request `params supportAdminRoutes.msgParam` Â· `body supportSchemas.adminRedactSchema` Â· `body reason`.
 
 Responses
 
@@ -2312,7 +2348,7 @@ Example JSON body `{"title":"Weekly bazar","body":"Weekly bazar"}`.
 
 update Canned Reply. Middleware `auth`, `requirePlatformAdmin`, `requireAdminAMR (parent mount)`.
 
-Request `params z.object({ replyId: objectId })` · `body supportSchemas.cannedReplySchema`.
+Request `params z.object({ replyId: objectId })` Â· `body supportSchemas.cannedReplySchema`.
 
 Responses
 
@@ -2355,7 +2391,7 @@ Responses
 
 create Roster. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params routineSchemas.groupIdParam` · `body routineSchemas.rosterCreateSchema`.
+Request `params routineSchemas.groupIdParam` Â· `body routineSchemas.rosterCreateSchema`.
 
 Responses
 
@@ -2382,7 +2418,7 @@ Responses
 
 update Roster. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params routineSchemas.rosterIdParam` · `body routineSchemas.rosterUpdateSchema`.
+Request `params routineSchemas.rosterIdParam` Â· `body routineSchemas.rosterUpdateSchema`.
 
 Responses
 
@@ -2397,7 +2433,7 @@ Example JSON body `{}`.
 
 publish Roster. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params routineSchemas.rosterIdParam` · `body { horizonDays, taskKeys = ['bazar'] }`.
+Request `params routineSchemas.rosterIdParam` Â· `body { horizonDays, taskKeys = ['bazar'] }`.
 
 Responses
 
@@ -2411,7 +2447,7 @@ Responses
 
 extend Horizon. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params routineSchemas.rosterIdParam` · `body { additionalDays }`.
+Request `params routineSchemas.rosterIdParam` Â· `body { additionalDays }`.
 
 Responses
 
@@ -2424,7 +2460,7 @@ Responses
 
 list Duties. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `query { localDate, membershipId, status, rosterId }`.
+Request `params routineSchemas.groupIdParam` Â· `query { localDate, membershipId, status, rosterId }`.
 
 Responses
 
@@ -2436,7 +2472,7 @@ Responses
 
 mark Duty Done. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `body { doneNote }`.
+Request `params routineSchemas.groupIdParam` Â· `body { doneNote }`.
 
 Responses
 
@@ -2450,7 +2486,7 @@ Responses
 
 reassign Duty. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params routineSchemas.groupIdParam` · `body routineSchemas.dutyReassignSchema` · `body { toMembershipId, reason }`.
+Request `params routineSchemas.groupIdParam` Â· `body routineSchemas.dutyReassignSchema` Â· `body { toMembershipId, reason }`.
 
 Responses
 
@@ -2465,7 +2501,7 @@ Example JSON body `{"toMembershipId":"65a000000000000000000013"}`.
 
 create Swap. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `body routineSchemas.swapCreateSchema` · `body { assignmentId, toMembershipId, reason }`.
+Request `params routineSchemas.groupIdParam` Â· `body routineSchemas.swapCreateSchema` Â· `body { assignmentId, toMembershipId, reason }`.
 
 Responses
 
@@ -2480,7 +2516,7 @@ Example JSON body `{"assignmentId":"65a000000000000000000013"}`.
 
 respond Swap. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `body routineSchemas.swapRespondSchema` · `body { accept, reason }`.
+Request `params routineSchemas.groupIdParam` Â· `body routineSchemas.swapRespondSchema` Â· `body { accept, reason }`.
 
 Responses
 
@@ -2496,7 +2532,7 @@ Example JSON body `{"accept":true}`.
 
 set Menu Plan. Middleware `auth`, `requireGroupRoleV2('manager')`.
 
-Request `params routineSchemas.groupIdParam` · `body routineSchemas.menuPlanCreateSchema` · `body { weekStart, ...rest }`.
+Request `params routineSchemas.groupIdParam` Â· `body routineSchemas.menuPlanCreateSchema` Â· `body { weekStart, ...rest }`.
 
 Responses
 
@@ -2510,7 +2546,7 @@ Example JSON body `{"weekStart":"2026-11-24"}`.
 
 get Menu Plan. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `query { weekStart }`.
+Request `params routineSchemas.groupIdParam` Â· `query { weekStart }`.
 
 Responses
 
@@ -2522,7 +2558,7 @@ Responses
 
 create Note. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `body routineSchemas.noteCreateSchema` · `body pinned`.
+Request `params routineSchemas.groupIdParam` Â· `body routineSchemas.noteCreateSchema` Â· `body pinned`.
 
 Responses
 
@@ -2562,7 +2598,7 @@ Responses
 
 update Note. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.noteIdParam` · `body routineSchemas.noteUpdateSchema`.
+Request `params routineSchemas.noteIdParam` Â· `body routineSchemas.noteUpdateSchema`.
 
 Responses
 
@@ -2645,7 +2681,7 @@ Responses
 
 menu Bazar Suggestions. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `query { weekStart }`.
+Request `params routineSchemas.groupIdParam` Â· `query { weekStart }`.
 
 Responses
 
@@ -2657,7 +2693,7 @@ Responses
 
 duty Fairness Board. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `query { month }`.
+Request `params routineSchemas.groupIdParam` Â· `query { month }`.
 
 Responses
 
@@ -2669,7 +2705,7 @@ Responses
 
 bazar Spend Rotation. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `query { from, to }`.
+Request `params routineSchemas.groupIdParam` Â· `query { from, to }`.
 
 Responses
 
@@ -2681,7 +2717,7 @@ Responses
 
 emergency Broadcast. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params routineSchemas.groupIdParam` · `body { title, body }`.
+Request `params routineSchemas.groupIdParam` Â· `body { title, body }`.
 
 Responses
 
@@ -2710,7 +2746,7 @@ Responses
 
 add Item. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params shoppingListRoutes.groupIdParam` · `body shoppingListRoutes.itemSchema` · `body shoppingListController.itemSchema`.
+Request `params shoppingListRoutes.groupIdParam` Â· `body shoppingListRoutes.itemSchema` Â· `body shoppingListController.itemSchema`.
 
 Responses
 
@@ -2725,7 +2761,7 @@ Example JSON body `{"name":"Weekly bazar"}`.
 
 toggle Item. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params shoppingListRoutes.groupIdParam` · `params shoppingListRoutes.itemIdParam` · `body shoppingListRoutes.itemCheckSchema` · `body shoppingListController.itemCheckSchema`.
+Request `params shoppingListRoutes.groupIdParam` Â· `params shoppingListRoutes.itemIdParam` Â· `body shoppingListRoutes.itemCheckSchema` Â· `body shoppingListController.itemCheckSchema`.
 
 Responses
 
@@ -2741,7 +2777,7 @@ Example JSON body `{"itemId":"65a000000000000000000013","checked":true}`.
 
 remove Item. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params shoppingListRoutes.groupIdParam` · `params shoppingListRoutes.itemIdParam`.
+Request `params shoppingListRoutes.groupIdParam` Â· `params shoppingListRoutes.itemIdParam`.
 
 Responses
 
@@ -2754,7 +2790,7 @@ Responses
 
 to Expense. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params shoppingListRoutes.groupIdParam` · `body shoppingListRoutes.toExpenseSchema` · `body shoppingListController.toExpenseSchema`.
+Request `params shoppingListRoutes.groupIdParam` Â· `body shoppingListRoutes.toExpenseSchema` Â· `body shoppingListController.toExpenseSchema`.
 
 Responses
 
@@ -2797,7 +2833,7 @@ Responses
 
 create Kitchen Item. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params kitchenInventoryRoutes.groupIdParam` · `body kitchenInventoryRoutes.itemCreateSchema` · `body kitchenInventoryController.itemCreateSchema`.
+Request `params kitchenInventoryRoutes.groupIdParam` Â· `body kitchenInventoryRoutes.itemCreateSchema` Â· `body kitchenInventoryController.itemCreateSchema`.
 
 Responses
 
@@ -2812,7 +2848,7 @@ Example JSON body `{"name":"Weekly bazar"}`.
 
 update Kitchen Item. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params kitchenInventoryRoutes.groupIdParam` · `params kitchenInventoryRoutes.itemIdParam` · `body kitchenInventoryRoutes.itemUpdateSchema` · `body kitchenInventoryController.itemUpdateSchema`.
+Request `params kitchenInventoryRoutes.groupIdParam` Â· `params kitchenInventoryRoutes.itemIdParam` Â· `body kitchenInventoryRoutes.itemUpdateSchema` Â· `body kitchenInventoryController.itemUpdateSchema`.
 
 Responses
 
@@ -2827,7 +2863,7 @@ Example JSON body `{}`.
 
 record Refill. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params kitchenInventoryRoutes.groupIdParam` · `params kitchenInventoryRoutes.itemIdParam` · `body kitchenInventoryRoutes.refillSchema` · `body kitchenInventoryController.refillSchema`.
+Request `params kitchenInventoryRoutes.groupIdParam` Â· `params kitchenInventoryRoutes.itemIdParam` Â· `body kitchenInventoryRoutes.refillSchema` Â· `body kitchenInventoryController.refillSchema`.
 
 Responses
 
@@ -2842,7 +2878,7 @@ Example JSON body `{"quantity":1}`.
 
 delete Kitchen Item. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params kitchenInventoryRoutes.groupIdParam` · `params kitchenInventoryRoutes.itemIdParam`.
+Request `params kitchenInventoryRoutes.groupIdParam` Â· `params kitchenInventoryRoutes.itemIdParam`.
 
 Responses
 
@@ -2870,7 +2906,7 @@ Responses
 
 create Poll. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `params pollRoutes.groupIdParam` · `body pollRoutes.pollCreateSchema` · `body pollController.pollCreateSchema`.
+Request `params pollRoutes.groupIdParam` Â· `body pollRoutes.pollCreateSchema` Â· `body pollController.pollCreateSchema`.
 
 Responses
 
@@ -2884,7 +2920,7 @@ Example JSON body `{"question":"Friday dinner?","options":["Fish curry","Chicken
 
 vote Poll. Middleware `auth`, `requireGroupRoleV2('member')`.
 
-Request `body pollRoutes.voteSchema` · `body pollController.voteSchema`.
+Request `body pollRoutes.voteSchema` Â· `body pollController.voteSchema`.
 
 Responses
 
@@ -2925,7 +2961,7 @@ Responses
 
 join By Code. Middleware `auth`.
 
-Request `body z.object({ code: z.string().min(1), groupId: z.string().min(1), })` · `body { code, groupId }`.
+Request `body z.object({ code: z.string().min(1), groupId: z.string().min(1), })` Â· `body { code, groupId }`.
 
 Responses
 
@@ -2941,7 +2977,7 @@ Responses
 
 create Invite Code. Middleware `auth`.
 
-Request `body z.object({ groupId: z.string().min(1), maxUses: z.number().int().min(1).max(1000).optional(), ttlDays: z.number().int().min(1).max(365).optional(), })` · `body { groupId, maxUses, ttlDays }`.
+Request `body z.object({ groupId: z.string().min(1), maxUses: z.number().int().min(1).max(1000).optional(), ttlDays: z.number().int().min(1).max(365).optional(), })` Â· `body { groupId, maxUses, ttlDays }`.
 
 Responses
 
@@ -2974,7 +3010,7 @@ The entries and calculate reads and the summary month read carry deprecation mid
 
 add Entry. Middleware `auth`, `requireGroupRole('member')`, `allowSelfOrAdmin`.
 
-Request `params schemas.objectIdParamSchema` · `body schemas.addEntrySchema` · `body { date, meals, costs }`.
+Request `params schemas.objectIdParamSchema` Â· `body schemas.addEntrySchema` Â· `body { date, meals, costs }`.
 
 Responses
 
@@ -3017,7 +3053,7 @@ Responses
 
 upsert Payment Note. Middleware `auth`, `requireGroupRole('admin')`.
 
-Request `body schemas.paymentNoteSchema` · `body { note, amountDue = 0, isPaid = false }`.
+Request `body schemas.paymentNoteSchema` Â· `body { note, amountDue = 0, isPaid = false }`.
 
 Responses
 
@@ -3272,7 +3308,7 @@ Responses
 
 **schemas.expenseEntryBase**
 
-`z.object({ date: z.coerce.date().optional(), amount: z.number().positive().max(1_000_000), description: z.string().trim().max(200).optional(), categoryId: objectIdSchema, // required — from GET /api/messgroups/categories/:groupId category: z.string().trim().max(50).optional(), // optional display label; derived from category server-side })`
+`z.object({ date: z.coerce.date().optional(), amount: z.number().positive().max(1_000_000), description: z.string().trim().max(200).optional(), categoryId: objectIdSchema, // required â€” from GET /api/messgroups/categories/:groupId category: z.string().trim().max(50).optional(), // optional display label; derived from category server-side })`
 
 **schemas.expenseUpdateSchema**
 
@@ -3300,7 +3336,7 @@ Responses
 
 **schemas.poisha**
 
-`z.number().int().min(1, 'Amount must be integer poisha ≥ 1')`
+`z.number().int().min(1, 'Amount must be integer poisha â‰¥ 1')`
 
 **schemas.expenseIdParam**
 

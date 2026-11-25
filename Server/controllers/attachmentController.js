@@ -11,6 +11,36 @@ import {
 
 // Attachment controller — upload, magic byte check, and authorized private download (Doc §10, §15)
 
+// Roles that can read any receipt in the group (money-handling + audit roles).
+const PRIVILEGED = ['owner', 'manager', 'treasurer', 'auditor'];
+
+/**
+ * Authorization for a private receipt download.
+ *
+ * Allowed: the uploader, a privileged group role (owner/manager/treasurer/auditor),
+ * the creator of the linked expense, or a member who paid the linked transaction.
+ * Everyone else gets the same generic 404 so attachment ids cannot be probed.
+ *
+ * Throws an Error with `status: 404` when denied.
+ */
+const assertCanReadAttachment = async ({ req, attachment, groupId }) => {
+    const deny = () => { throw Object.assign(new Error('Attachment not found'), { status: 404 }); };
+
+    if (String(attachment.uploadedBy) === String(req.user.id)) return;
+    if (PRIVILEGED.includes(req.groupRole)) return;
+
+    if (attachment.targetId && attachment.targetType === 'expense_receipt') {
+        const expense = await Expense.findOne({ _id: attachment.targetId, groupId }).select('createdBy userId').lean();
+        const owner = expense && (String(expense.createdBy) === String(req.user.id) || String(expense.userId) === String(req.user.id));
+        if (owner) return;
+    }
+    if (attachment.targetId && attachment.targetType === 'payment_evidence') {
+        const tx = await MoneyTransaction.findOne({ _id: attachment.targetId, groupId }).select('submittedBy fromMember').lean();
+        if (tx && String(tx.submittedBy) === String(req.user.id)) return;
+    }
+    return deny();
+};
+
 /**
  * POST /api/attachments/groups/:groupId/upload
  */
@@ -22,6 +52,10 @@ export const uploadAttachment = async (req, res, next) => {
 
         const { groupId } = req.params;
         const { targetType = 'expense_receipt', targetId = null } = req.body;
+        const ALLOWED_TARGETS = ['expense_receipt', 'payment_evidence', 'support']; // 'support' = ticket attachment
+        if (!ALLOWED_TARGETS.includes(targetType)) {
+            return res.status(422).json({ msg: `targetType must be one of: ${ALLOWED_TARGETS.join(', ')}` });
+        }
         const buffer = req.file.buffer;
         const mimeType = req.file.mimetype;
 
@@ -113,6 +147,10 @@ export const downloadAttachment = async (req, res, next) => {
             return res.status(404).json({ msg: 'Attachment not found' });
         }
 
+        // Receipts/payment evidence are PRIVATE. Being a member of the group is not
+        // enough: the uploader, a treasurer+ role, or the expense's creator may read it.
+        await assertCanReadAttachment({ req, attachment, groupId });
+
         if (attachment.provider === 'cloudinary' && attachment.publicId) {
             const resourceType =
                 attachment.resourceType ||
@@ -135,6 +173,7 @@ export const downloadAttachment = async (req, res, next) => {
         const stream = fs.createReadStream(attachment.storagePath);
         stream.pipe(res);
     } catch (err) {
+        if (err.status === 404) return res.status(404).json({ msg: 'Attachment not found' });
         next(err);
     }
 };

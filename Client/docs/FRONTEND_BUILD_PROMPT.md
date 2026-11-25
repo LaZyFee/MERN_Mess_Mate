@@ -1,14 +1,28 @@
 # MealMate Frontend — Build Prompt (paste into IDE AI)
 
-> Follow §8.9 for the three application layers. Maintain the P0–P12 TODO across sessions and use the API reference in §4.
+> **Read this first — current status (after the backend/frontend audit):** the app under `Client/` is **mostly built**.
+> `next build` succeeds and emits 20 routes (auth, home, every group tab, support, inbox, profile, hidden admin).
+> So this document is **two things**: (a) the binding architecture + design rules for all *new* work, and
+> (b) the checklist used to finish/verify what exists. Do **not** re-scaffold what is already built — read
+> `Client/TODO.md` and finish from the first unfinished task (§2).
+>
+> **Three rules that override everything else in this file:**
+> 1. **Cookie-only auth.** The backend sets exactly three auth cookies: `mm_at` (access, HttpOnly, `/`),
+>    `refreshToken` (refresh, HttpOnly, `/api`), `mm_csrf` (readable double-submit). **There is no `mm_rt` cookie** —
+>    any code referencing it is a bug (three such bugs were fixed in the audit: `middleware.js`, `browserApi.js`,
+>    `serverApi.js`). `mm_at`/`refreshToken` can never be read by JS; send requests with credentials.
+> 2. **No token in any JS-accessible storage.** No `localStorage`, `sessionStorage`, IndexedDB, cookies written by
+>    JS, or Zustand `persist` for auth. `authStore` holds only `{ user, roles }`. No backend secrets in `NEXT_PUBLIC_*`.
+> 3. **§8.9 (Server/Client layering) wins every conflict** with §1–§7. Where an older task says something else, §8.9
+>    and §8.1–§8.8 are authoritative.
 
 ## 0. ROLE & GOAL
 
-You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The audited backend lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Next.js App Router + React). Use Server/API_DOCUMENTATION.md for integration and the root assessment for open release gates.
+You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The audited backend lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Next.js App Router + React). Integrate **only** against `Server/docs/API_DOCUMENTATION.md` (219 verified endpoints) and keep `PROJECT_IMPROVEMENT_RECOMMENDATIONS.md` open for known backend gaps.
 
 **Priorities, in order:** (1) follow the rules below, (2) **mobile responsiveness — top priority for every screen and component**, (3) token efficiency, (4) working code, (5) modern UI polish.
 
-**Fixed stack decisions:** Next.js App Router + React · Zustand (chosen shared store, used selectively) · react-icons (one family: `react-icons/lu`) · Chart.js + react-chartjs-2 (canvas) · CSS variables from `app/globals.css` for all colors. New backend modules covered: Invite Codes, TOTP 2FA, In-App Inbox, Support Desk, Routine & Board, Shopping List, Kitchen Inventory, Polls, cookie-only auth (`mm_at`/`mm_csrf` cookies).
+**Fixed stack decisions (verified in `Client/package.json` — do not add libraries):** Next.js 16 App Router + React 19 · Zustand (small, domain-scoped, never persisted for auth) · react-icons (**one family**, recorded in Notes) · Chart.js + react-chartjs-2 (canvas only) · CSS variables from `app/globals.css` for **all** colors · `fetch` for transport (`src/lib/api/browserApi.js` and `serverApi.js` already exist — extend them, do not add axios). Socket.IO client (cookie handshake). Backend modules covered: Invite Codes, TOTP 2FA, In-App Inbox, Support Desk, Routine & Board, Shopping List, Kitchen Inventory, Polls, cookie-only auth.
 
 ---
 
@@ -60,11 +74,12 @@ You are a senior React engineer. Build the complete frontend for **MealMate**, a
 
 - Default to Server Components and server-owned data, props, `useState`, and `useReducer`.
 - Use React Context for genuinely shared UI state within a client-component subtree (e.g. a group shell). Do not prohibit Context categorically.
-- **Zustand is the chosen shared store** (already in dependencies). Use it only for cross-route or widely shared client state that props/Context cannot reasonably provide. Do not install it merely to hold API responses.
+- **Zustand is the chosen shared store** (already in dependencies). Use it only for cross-route or widely shared client state that props/Context cannot reasonably provide (e.g. `groupStore` = current group + `myRole`, `uiStore` = theme + open sheets). Do not install it merely to hold API responses.
+- **Never persist auth.** No `persist` middleware on an auth store; `{ user, roles }` are re-hydrated from server-rendered props on every load, so a stale paint is impossible.
 - Never duplicate server-owned data across React state, Context, Zustand and a query cache without a documented synchronization reason.
-- Keep authentication tokens out of all client state and persistence. Client auth state, if needed, may contain only safe display data (`user`, `roles`), hydrated from server-rendered props.
+- **Authentication cookies are HttpOnly and therefore invisible to JS.** Client auth state, if any, may contain only safe display data (`user`, `roles`). Never attempt `document.cookie` access to `mm_at` or `refreshToken` — it silently returns nothing.
 - Keep temporary UI state local. Derive values instead of storing redundant derived state.
-- If Zustand is used, keep stores small and domain-specific, use selectors (`useStore(s => s.x)`; `useShallow` for multiple fields), avoid persistence for sensitive data, and clear user/group-scoped state on logout or group change.
+- If Zustand is used, keep stores small and domain-specific, use selectors (`useStore(s => s.x)`; `useShallow` for multiple fields), and clear user/group-scoped state on logout or group change.
 - Socket events should refresh or invalidate only the relevant active data source. Do not assume every domain needs a Zustand store.
 
 ### 1.6 Mobile-first — TOP PRIORITY
@@ -132,12 +147,13 @@ Last Session: (none) → T0.1
 - [ ] T0.10 utils/format.js: formatPoisha (poisha→৳ string), parseTaka (৳→integer poisha), month helpers (toMonthString, formatMonth, monthRange), day helpers (Dhaka civil date via Intl timeZone 'Asia/Dhaka').
 
 ## P1 Auth & Sessions
-- [ ] T1.1 Register page (username, email, phone?, whatsapp?, password + PasswordStrengthMeter, confirm)
-- [ ] T1.2 Login page (+ Google button → GET /api/users/auth/google)
-- [ ] T1.3 On /login/success, load the profile from cookies. Verify cookie scope and the registered OAuth callback through the deployment proxy.
+- [ ] T1.1 Register page (username, email, phone?, whatsapp?, password + PasswordStrengthMeter, confirm) → `POST /users/register`
+- [ ] T1.2 Login page → `POST /users/login`; if the response is `{ twoFactorRequired: true, challengeToken }` route to the OTP screen (§8.9 P12/T12.1). Google button = top-level navigation to `GET /users/auth/google` (NOT fetch — it is a redirect flow).
+- [ ] T1.3 `/login/success`: the backend already set cookies before redirecting; load the profile server-side, then `router.replace(next || '/')`. Never read tokens.
 - [ ] T1.4 Forgot password + Reset password (token from URL) pages
-- [ ] T1.5 Verify email page (/verify-email/:token)
-- [ ] T1.6 Sessions page (profile sub-tab): GET /api/sessions/users/sessions device list; revoke one (`DELETE /:familyId`) and revoke-all with ConfirmationModal.
+- [ ] T1.5 Verify email page (`/verify-email/[token]`)
+- [ ] T1.6 Sessions page (profile sub-tab): `GET /sessions/users/sessions`; revoke one (`DELETE /:familyId`), revoke all. **Show a notice** that the server currently tracks device families separately from the login refresh token (§8.11) — do not claim it signs out every device.
+- [ ] T1.7 **Refresh contract:** on 401 `browserApi` POSTs `/users/refresh` **with cookies only** and treats HTTP 200 as success (web responses contain no token fields). The BFF must relay **every** `Set-Cookie`. If you change either client, keep this invariant and re-run the audit checks in §8.10.
 
 ## P2 Groups & Memberships
 - [ ] T2.1 Home dashboard: my groups (Card grid, Skeleton, empty state, create/join buttons)
@@ -146,8 +162,8 @@ Last Session: (none) → T0.1
 - [ ] T2.4 Group layout: header + Tabs (Overview, Meals, Expenses, Money, Statements, Charts, Members, More); useGroup hook; socket join-group/leave-group
 - [ ] T2.5 Overview tab: V2 dashboard GET /api/stats/groups/:groupId/dashboard — period state badge, expense pipeline counts, money totals, fund balances, latest statement link
 - [ ] T2.6 Members tab: membership list (Avatar, role Badge owner/manager/treasurer/auditor/member, active interval), manager+: create membership (member or placeholder with displayName), edit role/room/weight, depart; placeholders marked with a chip
-- [ ] T2.7 Settings tab: join code view + **copyable inviteLink** (copy button + navigator.share) + regenerate (confirm), email invite, categories manager (CRUD + 8 splitMode picker + archive), recurring rules CRUD (+ generate drafts), deposits/assets list + create + refund, extras CRUD (legacy)
-- [ ] T2.8 Policy editor (owner): GET/POST /api/policies/groups/:groupId/policies — mealWeights, entryCutoffHour, reviewGraceDays; version history list
+- [ ] T2.7 Settings tab: join code view + **copyable inviteLink** (copy button + navigator.share) + regenerate (confirm, warns old links die), email invite, categories manager (CRUD + **split-mode picker with all 8 modes** + archive), extras CRUD (legacy). Recurring rules, deposits/assets, reconciliation and disputes now have their own modules — link, don't duplicate.
+- [ ] T2.8 Policy editor (owner): `GET/POST /policies/groups/:groupId/policies` — mealWeights, entryCutoffHour, reviewGraceDays; version history list (each publish creates a new immutable version)
 
 ## P3 Meals (slot-state)
 - [ ] T3.1 Meals tab: month picker + day strip; my quick-entry: 4 slot cards (breakfast/lunch/snacks/dinner) each a segmented control — Unknown / Absent (confirmed_zero) / portion (¼ ½ ¾ 1) — POST /api/meals/:groupId { date, slots }
@@ -172,8 +188,8 @@ Last Session: (none) → T0.1
 
 ## P6 Statements & Month-End Close
 - [ ] T6.1 Statements tab: list current statements GET /api/statements/groups/:groupId/statements; statement detail: totals (meals, meal/other/total expenses, mealRate), per-member items table (mealUnits, mealCost, otherCost, contributions, closingCredit, owes/receives/settled badge), policy snapshot summary
-- [ ] T6.2 Version history: GET /:month returns versions with supersedes chain; badge "superseded"; view any version
-- [ ] T6.3 Close workflow (manager/owner): period detail GET /api/periods/…/:month; Preview statement (draft, no persist); close checklist (GET …/checklist); Begin review / Return to open buttons; Finalize modal with expectedRevision (handle 409 conflict message "data changed, refresh and retry" and 422 text identifying the first unresolved member, slot and date)
+- [ ] T6.2 Version history: `GET /statements/groups/:groupId/statements/:month` returns every version with the `supersedes` chain; badge "superseded"; any version is viewable (immutable).
+- [ ] T6.3 Close workflow (manager/owner): period detail `GET /periods/groups/:groupId/periods/:month`; preview statement (no persist); close checklist (`…/:month/checklist`); Begin review / Return to open; Finalize modal with `expectedRevision` — handle **409** ("data changed — refetch and retry") and **422** (message names the first unresolved member/slot/date; render it as a fixable list, not a raw string).
 - [ ] T6.4 Corrections: capture a reason and require explicit owner confirmation before finalizing a new version.
 
 ## P7 Notifications & Disputes
@@ -207,7 +223,21 @@ One line per component: `Name · path · props (required*/optional) · use-for`.
 
 ## 4. Backend contract
 
-Integrate from [Server/API_DOCUMENTATION.md](../Server/API_DOCUMENTATION.md). Strip the leading /api when the transport supplies it. Keep legacy taka amounts separate from v2 integer poisha. Display unknown meal slots separately from confirmed zeros.
+Integrate from [Server/docs/API_DOCUMENTATION.md](../Server/docs/API_DOCUMENTATION.md) — 219 endpoints, verified route-by-route against the Express router table (0 missing either way). Strip the leading `/api` when the transport supplies it. Keep legacy taka amounts separate from v2 integer poisha.
+
+**Enums and shapes that bite (verified in source):**
+
+- **Meal slot states:** `unknown` | `confirmed_zero` | `consumed`; `portionSubunits` is integer thousandths — `250`=¼, `500`=½, `750`=¾, `1000`=1. Render unknown as `?` and confirmed_zero as `0`/✕ — never merge them.
+- **Meal counts are fractional.** A statement `mealUnits` of `1.25` is normal. Never pass them through an integer-poisha helper.
+- **Expense status:** `draft → submitted → approved | rejected`; `approved → reversed` (a separate reversal row is created; the original is never deleted).
+- **Money status:** `submitted → confirmed | rejected`; `confirmed → reversed`.
+- **Money kinds:** `contribution`, `payout`, `supplier_payment`, `member_settlement`, `transfer`, `fee`.
+- **Methods:** `cash`, `bkash`, `nagad`, `rocket`, `bank`, `other`.
+- **Split modes:** `meal_units`, `equal_all`, `equal_selected`, `member_days`, `fixed_amounts`, `weighted`, `usage`, `personal`.
+- **Period state:** `open | review | finalized`. Finalize sends `expectedRevision`; a stale revision → **409** (refetch and retry); an unresolved slot → **422** whose message names the first member/slot/date.
+- **Statement item status:** `owes | receives | settled`. Outbox: `pending | processing | sent | failed | skipped | not_configured`. Support ticket: `open | answered | awaiting_admin | resolved | closed`.
+- **Attachments:** upload is `multipart/form-data` with field **`file`** (≤10 MiB, jpeg/png/webp/pdf); `targetType` ∈ `expense_receipt | payment_evidence | support`. Download is a **302 to a 1-hour signed URL** and is authorized to the uploader / owner / manager / treasurer / auditor / expense creator — a plain member will get 404 for another member's receipt. Handle 404 as "not available", not as an error toast storm.
+- **Money is integer poisha everywhere in V2.** Send integers; format with one helper (`formatPoisha`).
 
 ## 5. ARCHITECTURE RULES
 
@@ -266,21 +296,22 @@ Vite SPA cannot provide server middleware, protected server layouts or SSR. Move
 ### 8.2 Auth, cookies, storage
 
 - **No `localStorage` / `sessionStorage` / IndexedDB for auth or user data.** Remove zustand `persist` from `authStore`. The store holds `{ user, roles }` only, hydrated from server-rendered props; **tokens are never in JS**.
-- Cookies (set by the backend through the BFF, `HttpOnly; Secure; SameSite=Strict`): `mm_at` (access), `refreshToken` (refresh), `mm_csrf` (readable, double-submit). Web requests send `X-Client: web` so the backend omits tokens from JSON bodies.
+- Cookies (set by the backend through the BFF): `mm_at` (access, `HttpOnly; Path=/; SameSite=Strict` in prod), **`refreshToken`** (refresh, `HttpOnly; Path=/api; Max-Age=7d`), `mm_csrf` (readable, double-submit). **There is no `mm_rt` cookie.** Web requests send `X-Client: web` so the backend omits tokens from JSON bodies.
+- In development `SameSite=Lax` (localhost is cross-port, not cross-site); in production `Strict` + `Secure`. The frontend must therefore always call **same-origin** `/api/bff` — never the backend directly — otherwise cookies are not attached.
 - Theme preference: a plain non-sensitive cookie `mm_theme` (so SSR renders the right theme without flash) — the only non-HttpOnly cookie besides `mm_csrf`.
 
 ### 8.3 BFF layer
 
 `app/api/bff/[...path]/route.js` — a catch-all handler that: validates the path against an **allowlist of backend route prefixes**, forwards method/body/query to `${BACKEND_URL}/api/...`, forwards `Cookie`, `Idempotency-Key`, `X-CSRF-Token`, streams blobs (attachments, xlsx, pdf), relays `Set-Cookie`, strips hop-by-hop and server headers, and adds `X-Client: web`. Refresh is handled here (single-flight per request chain). The admin key, if still used, is attached here only for `/api/admin/*`.
 
-### 8.4 Two axios instances (replaces T0.4)
+### 8.4 Two API clients (replaces T0.4; the files already exist)
 
 | File | Used from | Behaviour |
 |---|---|---|
-| `lib/api/serverApi.js` | Server Components, layouts, route handlers | baseURL `process.env.BACKEND_URL`; builds the `Cookie` header from `cookies()` (`next/headers`); on 401 delegates refresh to a Route Handler or Server Action that can relay Set-Cookie; throws typed errors (`NotFound`, `Forbidden`, `Unauthorized`) so `notFound()` / `redirect()` can be used |
-| `lib/api/browserApi.js` | Client components, zustand actions | baseURL `/api/bff`; `withCredentials: true`; attaches `x-csrf-token` from the `mm_csrf` cookie; **single-flight** 401 → `POST /api/bff/users/refresh` → retry queue; on refresh failure → `router.replace('/login?next=…')` and clear stores; 429 → RateLimit handler; always adds an `Idempotency-Key` helper for financial mutations |
+| `src/lib/api/serverApi.js` | Server Components, layouts, Server Actions | baseURL `process.env.BACKEND_URL` (server-only); forwards the incoming `cookies()` as a `Cookie` header; adds `X-Client: web`; throws typed errors (`NotFound`, `Forbidden`, `Unauthorized`) so pages can call `notFound()`/`redirect()`. **Does not attempt refresh** — a Server Component cannot persist rotated `Set-Cookie`; a 401 surfaces as `Unauthorized` and the layout redirects to `/login`. |
+| `src/lib/api/browserApi.js` | Client components, Zustand actions | baseURL `/api/bff`; `credentials: "include"`; copies `mm_csrf` into `x-csrf-token`; adds `X-Client: web`; single-flight 401 → `POST /users/refresh` (cookies only) → retry **once**; on failure clears stores and redirects to `/login?next=…`; 429 → RateLimit event; exports `idempotencyKey()` / `withIdempotency()` for financial mutations. |
 
-One domain file per area under `lib/api/` (auth, groups, meals, …, **support, routines, inbox**) exporting functions that take the axios instance as a parameter or use a small `apiFor(context)` helper so the same function runs on server and client.
+One domain file per area under `src/lib/api/` (auth, groups, memberships, meals, expenses, money, statements, periods, stats, notifications, disputes, reconciliation, support, inbox, routines, shopping, inventory, polls, admin) exporting functions that accept an API client so the same function runs on server and client.
 
 ### 8.5 Routing, middleware, protected layout / component (replaces T0.6)
 
@@ -545,3 +576,111 @@ Never add literal colors. If a needed token is missing, add it to `globals.css` 
 - Prominent "Total due" / balance card on Summary and Home (meal cost + other costs breakdown).
 - `formatPoisha` for all ৳ display (2 decimals, `tabular-nums`). Send integer poisha to server.
 - Negative balances shown with `--danger`; positive/receives with `--success`.
+
+---
+
+## 8.10 COMPLETION CRITERIA (binding — a task is not done until every line is true)
+
+### Security & privacy
+- [ ] **No token in JS-accessible storage.** `localStorage`, `sessionStorage`, IndexedDB, JS-written cookies and Zustand `persist` contain no token, refresh token or session id. `authStore` holds `{ user, roles }` only.
+- [ ] **No `mm_rt` anywhere.** The only auth cookies are `mm_at`, `refreshToken`, `mm_csrf`. Grep must be empty: `grep -rn "mm_rt" Client/src Client/app Client/middleware.js` → nothing.
+- [ ] **No backend secret in the browser.** `BACKEND_URL`, `ADMIN_PANEL_KEY`, `SESSION_SECRET`, `JWT_SECRET`, SMTP/WhatsApp/Cloudinary keys are never `NEXT_PUBLIC_*`. Grep: `grep -rn "NEXT_PUBLIC_" Client/src Client/app` → only non-secret config (e.g. an explicit public API base), never a secret.
+- [ ] **Correct cookie/CSRF handling.** Every mutation through `browserApi` carries `x-csrf-token` from `mm_csrf`; the BFF forwards `Cookie`, `x-csrf-token`, `Idempotency-Key` and relays **every** `Set-Cookie`; no mutation is sent to the backend origin directly from the browser.
+- [ ] **Role-gated UI is cosmetic.** Every role check in the client also exists on the server. Hiding a button is not protection.
+- [ ] **No cross-group leakage.** Switching groups clears group-scoped Zustand state; a group you do not belong to renders `notFound()` (404 UI), never an "access denied" message that confirms the group exists.
+- [ ] **Ex-member history notice.** Former members see a clamped-history banner rather than an error.
+
+### Correctness of financial display
+- [ ] **Amounts:** every ৳ value goes through one `formatPoisha` helper (2 decimals, `tabular-nums`); every submitted amount is an integer poisha. Negative = owes (`--danger`), positive = receives (`--success`) — colour is never the only cue (icon + label too).
+- [ ] **Statement detail explains charges:** mealUnits × mealRate, other charges, contributions, personal payments, settlements, opening → closing, with the frozen snapshot values — not recomputed guesses.
+- [ ] **Approval communicates impact:** before approving, show total, per-line split mode, beneficiaries and payer(s), plus a self-approval reason field (the server returns **422** without it).
+- [ ] **Finalize shows unresolved items:** 409 = revision conflict (refetch, show diff), 422 = unresolved member/slot/date list. Never auto-retry a finalize.
+- [ ] **Reconciliation explains variance:** expected vs counted, signed difference, and the resolution choice — no silent "fix".
+
+### Resilience & API hygiene
+- [ ] **No unhandled null/undefined.** Every response is narrowed (`data?.x ?? []`); empty list ≠ error ≠ hidden. Render real empty states.
+- [ ] **Consistent error handling.** 401 → login redirect, 403 → inline permission message, 404 → `notFound()`/empty state, 409 → conflict UI, 422 → field-level errors, 429 → rate-limit UI with retry-after, 5xx → generic retry.
+- [ ] **Loading & first paint.** Server-rendered first data (no client fetch flash) on Overview, Board, Support list, Statements; `loading.js` skeletons elsewhere.
+
+### Responsive, theme, a11y
+- [ ] Works at **320 / 360 / 390 / 768 / 1024 / 1280** with no horizontal page scroll; touch targets ≥ 44px; inputs ≥ 16px font.
+- [ ] Light **and** dark theme verified for every screen; zero literal colours outside `globals.css` (§1.1 grep); zero inline SVG (§1.4 grep).
+- [ ] Keyboard operable; `:focus-visible` rings; `prefers-reduced-motion` respected.
+
+### Build & tests
+- [ ] `npm run lint` clean; `npx next build` succeeds.
+- [ ] No `console.log`, no commented-out code, no `TODO` comments in source (TODOs live in `TODO.md`).
+- [ ] `TODO.md` updated (`[x]` + `Last Session` line) after every task.
+
+---
+
+## 8.11 KNOWN BACKEND GAPS THE UI MUST NOT LIE ABOUT
+
+These are verified limitations of the current backend (see `PROJECT_IMPROVEMENT_RECOMMENDATIONS.md`). The UI must
+degrade honestly instead of implying a capability that does not exist.
+
+| Gap | What the backend actually does | What the UI must do |
+|---|---|---|
+| Device sessions vs login refresh | Login rotates `User.refreshToken`; the session APIs under `/api/sessions/users/sessions` manage separate `Session` families | Label the sessions page as informational; state that it does not guarantee sign-out of every device |
+| Refreshing inside a Server Component | `serverApi` cannot persist rotated cookies | Never call refresh from a Server Component; let the 401 propagate to the protected layout redirect |
+| Self-approval | Requires `reason` whenever the approver has an active membership (422) | Always show the reason field in the approve dialog for resident treasurers |
+| Meals with no record | An `unknown` slot blocks finalize (422) | Surface the unresolved-slot list with a link to the day/slot so it can be fixed |
+| Receipt access | Ordinary members cannot read other members' receipts (404) | Show "receipt not shared" for 404 rather than an error; only show the link where the server will authorize it |
+| Outbox delivery | Email/WhatsApp are `not_configured` without SMTP/Cloud API credentials | Render `not_configured` as an informational state, and offer the wa.me manual-share links |
+| CAPTCHA on appeal | Server verifier is a stub | Render the CAPTCHA slot but treat success as best-effort; never rely on it client-side |
+| Renewal of roster horizon | The scheduled job is a placeholder | Expose the explicit `extend-horizon` action instead of promising automatic renewal |
+| Recurring drafts | Manual generation is per-rule / generate-all | Always link the generated draft into the expense review queue rather than promising auto-approval |
+
+---
+
+## 8.12 AUDITED STATE OF THE CLIENT (what already exists — do not rebuild)
+
+`npx next build` succeeds and emits these routes. Before creating any file, check whether it exists.
+
+```
+/                                   /login                    /register
+/forgot-password                    /reset-password           /verify-email/[token]
+/join                               /appeal                   /auth/google/callback
+/profile                            /profile/sessions         /inbox
+/support                            /support/tickets/[ticketId]   /support/action/[token]
+/groups/create                      /groups/[groupId]         /groups/[groupId]/meals
+/groups/[groupId]/expenses          /groups/[groupId]/money   /groups/[groupId]/statements
+/groups/[groupId]/charts            /groups/[groupId]/members /groups/[groupId]/board
+/groups/[groupId]/policy            /groups/[groupId]/more
+/admin  /admin/users  /admin/groups  /admin/audit  /admin/support  /admin/support/[ticketId]
+/api/bff/[...path]        ← allowlist proxy (relays Set-Cookie, attaches X-Client: web, X-Admin-Key for /admin)
+```
+
+Infrastructure that exists and must be reused:
+`src/lib/api/browserApi.js` (BFF client, CSRF, single-flight refresh), `src/lib/api/serverApi.js` (SSR transport),
+`src/lib/api/*.js` domain modules, `middleware.js` (cookie gate + CSP), `src/lib/store/*` (group/ui stores),
+`src/components/{shared,modals,guards,socket}`.
+
+Remaining work is **verification and polish**, not scaffolding: run the completion criteria in §8.10 against each
+module in §8.13, then the phase checks at the end of §7.
+
+---
+
+## 8.13 FEATURE MODULE INVENTORY (route · data · permissions · states)
+
+Use this as the per-module definition of done. "API" refers to `Server/docs/API_DOCUMENTATION.md`.
+
+| Module | Route(s) | First-load data (server) | Mutation permissions | Must have |
+|---|---|---|---|---|
+| Auth & sessions | `/login`, `/register`, `/forgot-password`, `/reset-password`, `/verify-email/[token]`, `/login` OTP step | none (public); profile after login | public | OTP step-up screen; password strength; generic error copy; no token read |
+| Home | `/` | `GET /messgroups/my-groups` | — | empty state with create/join; group cards with role badge |
+| Group shell | `/groups/[groupId]` layout | `GET /messgroups/:groupId` (404→notFound) | — | tabs, socket join/leave, clear group state on switch |
+| Overview | `/groups/[groupId]` | `GET /stats/groups/:groupId/dashboard` | — | period badge, pipeline counts, fund balances, settlement card |
+| Meals | `…/meals` | `GET /meals/:groupId?month=` | member: own slots; manager: bulk/absence | slot state picker (¼½¾1 / absent / unknown), unknown distinct from zero, absence preview→apply, guest form, tomorrow headcount |
+| Expenses | `…/expenses` | `GET /expenses/groups/:groupId/expenses?status=&costPeriod=` | member: create/submit; treasurer: approve/reject/reverse | multi-line builder, split-mode editor, payer picker, duplicate warnings, impact summary before approval, receipt upload (field `file`), 409/422 handling |
+| Money & funds | `…/money` | `GET /money/groups/:groupId/money`, `GET …/funds` | member: submit; treasurer: confirm/reject/reverse; owner: custody | kind-specific from/to pickers, method chips, balance card, ledger-derived fund balances |
+| Statements & close | `…/statements` | `GET /statements/groups/:groupId/statements`; `GET /periods/groups/:groupId/periods/:month/preview` | manager: review; owner: finalize | version/supersession view, charge explanation, checklist, finalize with `expectedRevision`, 409/422 UX |
+| Policy & recurring | `…/policy` | `GET /policies/…`, `GET /recurring/…` | owner: publish policy; treasurer: rules | version history, split-mode editor, generated-draft link into expenses |
+| Reconciliation & assets | `…/money` (tab) / `…/more` | `GET /reconciliation/…`, `GET /assets/…` | treasurer | expected vs counted, signed variance, resolution select, accounting-equation health |
+| Disputes | `…/more` or `…/statements` | `GET /disputes/groups/:groupId/disputes` | member: open/respond; manager: resolve | target picker, thread, resolution note |
+| Routines & board | `…/board` | `GET /routines/groups/:groupId/board/today` | manager: rosters; member: duties/swaps | roster editor, duty agenda (mobile), swap flow, notes with audience, handover tasks, auditor = read-only |
+| Shopping & inventory | `…/more` | `GET /shopping-list/…`, `GET /kitchen-inventory/…` | member | check/uncheck, price per checked item → draft, refill form, `daysRemaining` |
+| Polls | `…/more` | `GET /polls/groups/:groupId` | member; creator/manager close | option index voting, live counts, closed state |
+| Inbox | `/inbox`, TopBar bell | `GET /inbox/unread-count`, `GET /inbox` | — | socket `inbox-new`, mark read/all, deep links, preferences |
+| Support | `/support`, `/support/tickets/[id]`, `/support/action/[token]`, `/appeal` | `GET /support/tickets`, thread `permissions` | member | composer driven only by `permissions.canComment` + `reason`; neutral action-token result |
+| Platform admin | `/admin/*` (separate layout) | `GET /admin/overview` (404 → notFound) | platform admin + 2FA | separate shell; never linked from group UI; user suspend, group archive, audit feed, support queue |

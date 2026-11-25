@@ -98,7 +98,7 @@ export default function RegisterForm() {
         errorMessage={errors.phone}
         autoComplete="tel"
         inputMode="tel"
-        helperText="Used for bKash/Nagad references and WhatsApp reminders."
+        helperText="Used for WhatsApp reminders."
       />
       <div>
         <PasswordInput
@@ -121,7 +121,7 @@ export default function RegisterForm() {
         errorMessage={errors.confirmPassword}
         autoComplete="new-password"
       />
-      <Button type="submit" size="lg" isFullWidth isLoading={loading} isDisabled={loading}>
+      <Button type="submit" size="lg" variant="primary" isFullWidth isLoading={loading} isDisabled={loading}>
         Create account
       </Button>
     </form>

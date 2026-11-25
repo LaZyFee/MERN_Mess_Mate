@@ -151,7 +151,10 @@ export const buildStatementDraft = async ({ groupId, month }) => {
 
     return {
         memberships, items, mealExpenses, otherExpenses, totalExpenses,
-        totalUnits: sumPoisha(items.map(i => i.mealUnits)) + universalGuestUnits,
+        // mealUnits are FRACTIONAL (weighted portions, e.g. 1.25 units), so these
+        // must NOT go through sumPoisha() — it rejects non-integers and would make
+        // finalization throw 500 on any month with half portions.
+        totalUnits: items.reduce((sum, i) => sum + i.mealUnits, 0) + universalGuestUnits,
         universalGuestUnits,
         mealRate, transactions,
     };

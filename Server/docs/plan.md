@@ -1,6 +1,6 @@
 # MealMate — Project Plan & Full Backend Architecture Documentation
 
-[API integration reference](Server/API_DOCUMENTATION.md) · [Audit checklist and recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) · [Frontend blueprint](Client/FRONTEND_BUILD_PROMPT.md)
+[API integration reference](Server/docs/API_DOCUMENTATION.md) · [Audit checklist and recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) · [Frontend blueprint](Client/FRONTEND_BUILD_PROMPT.md)
 
 **Project Root:** `MealMate/` — Backend lives in `Server/`
 **Stack:** Express 5 · Mongoose 8 (MongoDB) · Socket.IO 4 · Zod 4 · JWT · Passport (Google OAuth) · ES Modules (`"type": "module"`)
@@ -28,7 +28,7 @@ MealMate is a **mess/mess-group management and accounting system** for shared li
 | Cache control | `Cache-Control: no-store` on authenticated JSON responses |
 | Trust proxy | `app.set('trust proxy', 1)` for rate limiting behind reverse proxies |
 | Rate limiting | `express-rate-limit` — auth: 50 req/15min; general: 300 req/15min; support actions: 20/15min; appeal: 1/day/IP |
-| CORS | Strict allowlist from `FRONTEND_URL` env (comma-separated), credentials enabled |
+| CORS | Strict allowlist from `FRONTEND_URL` env (comma-separated), credentials enabled, explicit `methods`, **explicit `allowedHeaders`** (`Content-Type`, `Authorization`, `x-auth-token`, `x-csrf-token`, `x-client`, `Idempotency-Key`, `X-Admin-Key`) and `exposedHeaders` (`Deprecation`, `Sunset`, `Link`) |
 | Body limits | `express.json({limit:'10kb'})` + urlencoded — rejects oversized payloads |
 | Parameter pollution | `hpp()` |
 | CSRF | `middleware/csrf.js` — double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; requests without authentication cookies skip this check |
@@ -233,7 +233,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **mealController** — slot-state meal engine: `addMeal`/`updateMeal`/`deleteMeal`/`getMeals`/`getMealsByMonth` (period-open enforcement + revision bumps, upsert by groupId+userId+day), `createGuestMeal`/`listGuestMeals`, `previewBulkMeals`/`applyBulkMeals` (dry-run change set, then apply, admin-only), `previewAbsence`/`applyAbsence` (date window → `confirmed_zero` slots with source `absence`).
 
-**expenseController** — V2 workflow: `createExpense` (draft, poisha validation per line, duplicate warnings), `submitExpense`, `approveExpense` (in `withTransaction()`: allocation built + Allocation frozen + Journal posted, revision bumped, self-approval flagging), `rejectExpense`, `reverseExpense` (reversal row + mirrored journal), `listExpenses` (cursor pagination + filters); legacy simple CRUD (`addExpense`, `updateExpense`, `getExpenses`, `getExpensesByMonth`, `deleteExpense`).
+**expenseController** — V2 workflow: `createExpense` (draft, poisha validation per line, duplicate warnings), `submitExpense`, `approveExpense` (in `withTransaction()`: allocation built + Allocation frozen + Journal posted, revision bumped; **self-approval requires a reason or 422**; **refuses to approve with no resolvable payer**), `rejectExpense`, `reverseExpense` (reversal row + mirrored journal), `listExpenses` (cursor pagination + filters); legacy simple CRUD (`addExpense`, `updateExpense`, `getExpenses`, `getExpensesByMonth`, `deleteExpense`).
 
 **moneyController** — `submitTransaction`, `confirmTransaction` (journal posted per kind via `buildJournalLines`, inside a transaction), `rejectTransaction`, `reverseTransaction`, `listTransactions` (cursor pagination), `getBalance` (ledger-derived member balance), `listFunds` (ledger balances), `createFund`, `changeCustodian`.
 
@@ -255,7 +255,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **sessionController** — `getSessions` (device list), `revokeOne` (by familyId), `revokeAll`.
 
-**attachmentController** — `uploadAttachment` (magic-byte verify, sha256, persist metadata, link to target), `downloadAttachment` (authenticated stream).
+**attachmentController** — `uploadAttachment` (magic-byte verify, sha256, optional AV scan, Cloudinary authenticated upload, metadata persist, link to target; `targetType` restricted to `expense_receipt | payment_evidence | support`), `downloadAttachment` (signed-URL redirect; **authorized**: uploader, privileged role (owner/manager/treasurer/auditor), or the linked expense creator / transaction submitter — otherwise generic 404).
 
 **depositAssetController** — `listAssets`, `createAsset` (funding shares sum validation), `recordAssetRefund`.
 
@@ -265,7 +265,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **summaryController** (legacy) — `computeSummary` (float meal-rate engine), `getSummary`, `finalizeSummary` (now returns 410/409 directing to V2), `whatsappSummary`.
 
-**statsController** — `getStats` (legacy aggregates + category breakdown) and `getV2Dashboard` — ledger-derived dashboard: period state, expense counts by status, money totals, fund balances, statement/settlement figures with draft-preview fallback.
+**statsController** — `getStats` (legacy aggregates + category breakdown; sums **consumed portionSubunits**, not the legacy `totalMeals` field, and counts only approved non-reversal expenses) and `getV2Dashboard` — ledger-derived dashboard: period state, expense counts by status, money totals, fund balances, statement/settlement figures with draft-preview fallback.
 
 **adminController** (`controllers/adminController.js`) — hidden platform admin (already documented in §3.6/§7): `getOverview`, `getTraffic`, `listAuditEvents`, `adminListUsers`, `adminGetUser`, `adminUpdateUser` (suspend/verify), `adminListGroups`, `adminGetGroup`, `adminDeleteGroup`. Guard `requirePlatformAdmin` + `requireAdminAMR` (2FA mandatory).
 
@@ -291,7 +291,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 ---
 
-## 7. Router map (full mounted contracts in Server/API_DOCUMENTATION.md)
+## 7. Router map (full mounted contracts in Server/docs/API_DOCUMENTATION.md)
 
 | Router | Key endpoints |
 |---|---|
@@ -332,13 +332,13 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 |---|---|---|
 | **auth** | `middleware/auth.js` | Reads `mm_at` HttpOnly cookie, `x-auth-token` header, or `Authorization: Bearer`; verifies JWT against `JWT_SECRET`; validates ObjectId-shaped `user.id`; enforces `User.suspended` on every request (blocks login/refresh/all API access). Attaches `req.user`. |
 | **roles (legacy)** | `middleware/roles.js` | `requireGroupRole('admin'|'member')` checks embedded MessGroup members/admin; `allowSelfOrAdmin` sets `req.canEditOthers`. |
-| **roles V2** | `middleware/roles.js` | `requireGroupRoleV2(minRole)` resolves effective role from active Membership interval (`owner>manager>treasurer>auditor>member`, RANK comparison), falls back to group.admin→owner; sets `req.group`, `req.groupRole`, `req.membership`. Plus `flagSelfApproval` (self-approval needs a reason → 422), `assertOwnerTransfer`, `auditRoleChange`. |
+| **roles V2** | `middleware/roles.js` | `requireGroupRoleV2(minRole)` resolves effective role from active Membership interval (`owner>manager>treasurer>auditor>member`, RANK comparison), falls back to group.admin→owner; 404s when the group row is missing (even if a stale Membership exists); **auditors are read-only for every non-GET request in every module**; sets `req.group`, `req.groupRole`, `req.membership`. Plus `flagSelfApproval` (self-approval needs a reason → 422), `assertOwnerTransfer`, `auditRoleChange`. |
 | **csrf** | `middleware/csrf.js` | Double-submit cookie (`mm_csrf`) + `x-csrf-token` header for cookie-authenticated mutations; requests without authentication cookies skip this check. Origin/Referer check against CORS allowlist. Exposes `setCSRFCookie(res)` for login/register responses. |
 | **amrGate** | `middleware/amrGate.js` | Requires `amr` claim to include `otp` (2FA verified). Returns generic 404 if not satisfied — used on admin routes so non-2FA users cannot confirm they exist. |
 | **rateLimiters** | `middleware/rateLimiters.js` | `joinCodeLimiter` — per-IP (10/15min) and per-user (20/hour) join-by-code limits with exponential lockout after 5 failures. Exposes buckets for recording failures/resets. |
 | **idempotency** | `middleware/idempotency.js` | `idempotent(operation)` — honors `Idempotency-Key` header; sha256 request hash; replays cached responses (`__idempotentReplay: true`); key-reuse with a different body → 409; duplicate concurrent create → 409 retry. |
 | **deprecate** | `middleware/deprecate.js` | Sets `Deprecation: true`, `Sunset`, and `Link: rel="successor-version"` headers on legacy routes kept for back-compat. |
-| **receiptUpload** | `middleware/receiptUpload.js` | Multer disk storage in `/uploads/receipts` with random names; MIME whitelist + 10MB limit; `verifyMagicBytes()` (JPEG FFD8FF, PNG signature, `%PDF`, RIFF/WEBP); `computeFileSha256()`. |
+| **receiptUpload** | `middleware/receiptUpload.js` | Multer **memory storage** (nothing is persisted to local disk); MIME whitelist (jpeg/png/webp/pdf) + 10MB limit; `verifyMagicBytes()` (JPEG FFD8FF, PNG signature, `%PDF`, RIFF/WEBP); `computeBufferSha256()`; `scanForViruses()` optional clamscan hook (returns `scanner-unavailable` → attachment stored with `scanStatus: 'pending'`); `uploadToCloudinary()` as an **authenticated** resource; `signedReceiptUrl()` (1 h TTL). |
 | **upload** | `middleware/upload.js` | Multer for profile pictures → Cloudinary. |
 | **validate** | `validation/validate.js` | Generic Zod middleware `validate(schema, source)`; deep-strips Mongo operator keys (`$…`, dotted) from body/params — NoSQL-injection defense (Express 5 forbids reassigning `req.query`, so queries land on `req.validated`). Returns 400 with field-level errors. |
 | **privacy** | `middleware/privacy.js` | `requireGroupMembership` — hard gate: active-membership lookup; non-members get generic 404. `resolveHistoryWindow` — ex-member reads clamped to `[firstJoin, lastDeparture]`. `MEMBER_VISIBLE_FIELDS` / `publicProfile()` — central allowlist (`username`, `profilePic`). |
@@ -346,6 +346,8 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 ---
 
 ## 9. VALIDATION (`validation/schemas.js` — Zod)
+
+> **Audit note (contract drift):** several modules declare their Zod schemas **locally** instead of in `validation/`: `pollRoutes`/`pollController` (pollCreate/vote), `shoppingListRoutes`/`shoppingListController` (item/toExpense), `kitchenInventoryRoutes`/`kitchenInventoryController` (item/refill), `attachmentController` (`targetType` allowlist is inline), `totpController` (setup/verify/disable/login2fa), `supportAdminRoutes` (`idParam`/`msgParam`), `adminRoutes` (`z.object({ userId: objectId })` inline). These are validated, but duplicated across route and controller in several places — a consolidation target, not a bug. All shared money/meal/expense schemas live here.
 
 Shared primitives: `objectIdSchema` (24-hex), `passwordSchema` (8+ chars, upper/lower/digit), `whatsappSchema` (10–15 digits), `month` (`^\d{4}-\d{2}$`), `poisha` (integer ≥ 1), the 8-value `splitMode` enum.
 
@@ -378,7 +380,7 @@ Schema groups:
 - **`scripts/migrateInviteCodes.js`** — B3.1: hashes existing `MessGroup.code` values into `InviteCode` collection. Idempotent. Run: `node scripts/migrateInviteCodes.js`.
 - **`scripts/checkIndexes.js`** — asserts every expected index (including TTL indexes) exists across all collections. Run: `node scripts/checkIndexes.js`.
 - **`scripts/smoke/*.sh`** — smoke test scripts for B0 (`b0.sh`), B2 (`b2.sh`), B3 (`b3.sh`), B4 (`b4.sh`), and live-infrastructure gates (`live-infra-gates.sh`).
-- **`tests/`** — 112 unit tests passing: `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules`. Plus `tests/integration/` (Supertest and disposable MongoDB): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`.
+- **`tests/`** — **112 unit tests** (all passing, no DB): `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules`. **47 integration tests** (Supertest + disposable MongoDB, all passing): `b0.test.js`, `cookies.test.js`, `financial.test.js` (**replica set**), `routines.test.js`, `support.test.js`; `environment.js` is the shared harness. See README §10 for the per-file matrix and the last verified run.
 
 ---
 
@@ -449,15 +451,20 @@ Schema groups:
 10. ✅ **Consent timestamps** — `termsAcceptedAt`, `privacyAcceptedAt`, `supportContextConsentAt`, `emailNotificationsConsentAt` on `User`.
 11. ✅ **Cache-Control: no-store** on authenticated JSON responses.
 
-### Follow-ups (remaining)
-12. Client admin shell (separate lazy-loaded admin app section reading `/api/admin/*`), plus `.env` docs for `ADMIN_EMAILS` / `ADMIN_PANEL_KEY`.
-13. Cloud receipt storage (S3/R2 signed URLs + AV-scan hook — `Attachment.scanStatus` field already modeled).
-14. Production Mongo replica set to activate real `withTransaction()` atomicity (standalone fallback works for dev).
-15. Live-infrastructure test gates: race drill, restore drill, load test.
-16. Invite-link TTL enforcement via `migrateInviteCodes.js` + `INVITE_DEFAULT_TTL_DAYS` env var.
-17. Redis-backed join-code limiter (currently in-memory Map — single instance only).
+### Follow-ups (remaining — re-verified in this audit)
 
-> **Part B status:** All of Part B (§14–§21) is implemented in code. The phased delivery plan below reflects what has been delivered; remaining items are production-hardening and frontend migration.
+12. ✅ **Client admin shell** — implemented under `src/app/admin/*` (separate layout probing `/api/admin/overview`, 404→`notFound()`): overview, users, groups, audit, support queue + ticket view. `.env` docs for `ADMIN_EMAILS` / `ADMIN_PANEL_KEY` are in README §15.
+13. ✅ **Cloud receipt storage** — `attachmentController` uploads to Cloudinary as an **authenticated** resource and serves 1-hour signed URLs after an authorization check; `scanStatus` is `clean | pending` per the AV hook.
+14. ⏳ **Production Mongo replica set** to activate real `withTransaction()` atomicity (standalone fallback works for dev; `MONGO_REPLICA_SET` is read by `config/db.js`).
+15. ⏳ **Live-infrastructure test gates**: replica-set race drill, restore drill, load test (50 members, multi-year history).
+16. ⏳ **Invite-link TTL / legacy-code retirement** — hashed `InviteCode` is live, but legacy `MessGroup.code` still works (`/api/messgroups/join-by-code`); `scripts/migrateInviteCodes.js` exists and has not been run against production data.
+17. ⏳ **Redis/shared limiter state** — `joinCodeLimiter`, TOTP challenges and invite-lockouts are in-process `Map`s (single-instance only).
+18. ⏳ **`rosterHorizonFn` placeholder** — the scheduled job counts published rosters but extends nothing; horizon extension only happens via `POST /rosters/:rosterId/extend-horizon`.
+19. ⏳ **Unify refresh-token stores** — login/refresh rotate `User.refreshToken` while `/api/sessions` manages `Session` families. Until unified, the device list and revoke-all do not govern the token actually in use.
+20. ⏳ **CAPTCHA provider** — `supportController.verifyCaptcha` is a stub (accepts any token).
+21. ⏳ **Google OAuth + 2FA step-up** — an OAuth user with TOTP enabled is redirected to `/login`; no continuation is implemented.
+
+> **Part B status:** All of Part B (§14–§21) is implemented in code and re-verified in this audit (see README §21 for the per-phase status table and §22 for the bug list). Remaining items are production hardening, the roster-horizon job, and refresh-store unification.
 
 
 ---
@@ -741,19 +748,19 @@ The existing hard rules (CSS variables only, react-icons only, zustand, shared c
 
 ## 21. Phased delivery plan
 
-| Phase | Status | Evidence and remaining gate |
-|---|---|---|
-| B0 inbox and jobs | IMPLEMENTED | Inbox routes, preferences, locks and job-run models exist. Verify deployed delivery separately. |
-| B1 support | PARTIALLY IMPLEMENTED | User and hidden admin APIs, transitions, action tokens and SLA jobs exist. Integration covers ticket transitions. Live provider delivery and CAPTCHA remain open. |
-| B2 group operations | PARTIALLY IMPLEMENTED | Rosters, duties, notes, shopping, kitchen and polls are mounted. Permission and concurrency checks remain. |
-| B3 security | PARTIALLY IMPLEMENTED | Hashed invitations, OTP and AMR exist. Session-family integration and legacy invite retirement remain open. |
-| B4 browser authentication | PARTIALLY IMPLEMENTED | Express cookie login, CSRF and logout pass integration tests. Deployed OAuth and BFF refresh need verification. |
-| B5 frontend | PARTIALLY IMPLEMENTED | Client already contains Next.js, App Router pages and a BFF. The browser refresh path still tries to read an HttpOnly cookie named mm_rt. |
-
-IMPLEMENTED denotes source coverage. PLANNED means future work. DEPRECATED marks replaced interfaces. NEEDS VERIFICATION identifies operational claims without an end-to-end check.
+> Canonical, source-verified status table lives in **README §21**. Summary (updated by this audit):
+> B0 **IMPLEMENTED** · B1 **PARTIALLY** (CAPTCHA stub, live provider untested) · B2 **PARTIALLY** (`rosterHorizonFn`
+> placeholder) · B3 **PARTIALLY** (refresh-token stores not unified) · B4 **IMPLEMENTED (local) / NEEDS VERIFICATION
+> (deployed)** · B5 **PARTIALLY** (builds 20 routes; auth cookie bugs fixed in this audit).
+>
+> Status legend — IMPLEMENTED: verified in source and exercised. PARTIALLY IMPLEMENTED: main path works, a documented
+> sub-behaviour does not. PLANNED: not built. DEPRECATED: replaced. NEEDS VERIFICATION: depends on infrastructure not
+> available in this environment.
 
 
-### 21.1 Tests (same `node --test` harness — 112 unit tests passing)
+### 21.1 Tests (same `node --test` harness — 112 unit + 47 integration passing)
+
+> Full per-file matrix and the last verified run are in **README §10**. This list covers the B0–B3 rule suites only; the financial/ledger suites (`goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `inboxRules`, `retention`) are listed there.
 
 - `supportRules.test.js` — full status × actor × action matrix incl. closed, strict-turn on/off, reopen-window.
 - `rosterGeneration.test.js` — round-robin continuity, skip-absent, departed member, DST-free Dhaka day edges, idempotent regeneration.

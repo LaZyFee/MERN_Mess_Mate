@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { verifyToken } from "@/lib/auth/authHelpers";
 
 /**
- * Google OAuth callback — the backend sets mm_at/mm_rt cookies via the BFF.
+ * Google OAuth callback — the backend sets mm_at / refreshToken / mm_csrf cookies via the BFF.
  * We just verify the session and redirect home.
  */
 export default async function GoogleCallbackPage({ searchParams }) {

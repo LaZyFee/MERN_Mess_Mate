@@ -6,6 +6,8 @@ const BACKEND_API = `${API_BASE_URL}/api`;
 
 // MealMate has no public unauthenticated GET endpoints — every API is
 // group-scoped and requires the mm_at access cookie (§4 privacy model).
+// Public auth routes exist, but they are never fetched through serverApi, so the
+// default ("authenticated, no cross-request cache") is correct.
 function isPublicEndpoint() {
   return false;
 }
@@ -47,27 +49,21 @@ function typedErr(status, data, msg) {
 }
 
 let refreshing = null;
+/**
+ * Server-side refresh is INTENTIONALLY a no-op.
+ *
+ * Why: the backend rotates the refresh token and returns the new one in a
+ * `Set-Cookie` header. A Server Component cannot write cookies — those headers
+ * would be silently dropped, and the rotated refresh token would be lost,
+ * forcing a full logout on the *next* poll cycle. Refresh must therefore happen
+ * in a Route Handler / Server Action (which can call `cookies().set`) or in the
+ * browser through the BFF, both of which relay `Set-Cookie` correctly.
+ *
+ * Callers treat a 401 here as Unauthorized (`err.__sessionExpired = true`) and
+ * the protected layout renders the /login redirect.
+ */
 async function serverRefresh() {
-  if (refreshing) return refreshing;
-  refreshing = (async () => {
-    try {
-      const jar = await cookies();
-      const rt = jar ? jar.get("mm_rt")?.value || null : null;
-      if (!rt) return false;
-      const res = await fetch(`${API_BASE_URL}/api/users/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `mm_rt=${rt}` },
-        credentials: "include",
-      });
-      const d = await res.json().catch(() => ({}));
-      return res.ok && Boolean(d?.accessToken);
-    } catch {
-      return false;
-    } finally {
-      refreshing = null;
-    }
-  })();
-  return refreshing;
+  return false;
 }
 
 async function serverRequest(endpoint, options = {}) {

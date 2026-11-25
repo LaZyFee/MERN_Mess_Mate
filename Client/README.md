@@ -32,9 +32,11 @@ npm run dev                      # http://localhost:5174
 | `SOCKET_ORIGIN` | Comma-separated origin(s) allowed in the CSP `connect-src`. |
 | `ADMIN_PANEL_KEY` | Optional defense-in-depth key for `/admin/*`; must match the backend's `ADMIN_PANEL_KEY`. Empty when unused. |
 
-Auth is **cookie-only**: `mm_at` (access), `mm_rt` (refresh), `mm_csrf`
-(double-submit, readable). No token ever reaches JavaScript, and no auth or user
-data is stored in `localStorage`, `sessionStorage` or IndexedDB.
+Auth is **cookie-only**: `mm_at` (access, HttpOnly, `/`), `refreshToken`
+(refresh, HttpOnly, `/api`), `mm_csrf` (double-submit, readable).
+**There is no `mm_rt` cookie** — anything that looks for one sees a logged-out user.
+No token ever reaches JavaScript, and no auth or user data is stored in
+`localStorage`, `sessionStorage` or IndexedDB.
 
 ## Scripts
 
@@ -110,4 +112,4 @@ exist for them, and no user-facing link points to it. The BFF attaches
 - `TODO.md` — task ledger and decisions (session memory).
 - `COMPONENTS.md` — shared component inventory with props.
 - `FRONTEND_BUILD_PROMPT.md` — build brief.
-- `../Server/API_DOCUMENTATION.md` — backend contract.
+- `../Server/docs/API_DOCUMENTATION.md` — backend contract.
