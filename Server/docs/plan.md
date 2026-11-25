@@ -1,6 +1,8 @@
 # MealMate — Project Plan & Full Backend Architecture Documentation
 
-[API integration reference](Server/docs/API_DOCUMENTATION.md) · [Audit checklist and recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) · [Frontend blueprint](Client/FRONTEND_BUILD_PROMPT.md)
+[Project README (overview & onboarding)](../../README.md) · [API reference](API_DOCUMENTATION.md) · [Improvements & recommendations](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md)
+
+> This document owns the **roadmap, architectural decisions and implementation status**. Endpoint-level contracts live in [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) — §7 below is a router map only; the API reference is authoritative for paths, payloads, guards and responses.
 
 **Project Root:** `MealMate/` — Backend lives in `Server/`
 **Stack:** Express 5 · Mongoose 8 (MongoDB) · Socket.IO 4 · Zod 4 · JWT · Passport (Google OAuth) · ES Modules (`"type": "module"`)
@@ -291,7 +293,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 ---
 
-## 7. Router map (full mounted contracts in Server/docs/API_DOCUMENTATION.md)
+## 7. Router map (full mounted contracts in [API reference](API_DOCUMENTATION.md))
 
 | Router | Key endpoints |
 |---|---|
@@ -316,11 +318,11 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | `inboxRoutes` | GET `/` (list, `?unread=1&cursor=`), GET `/unread-count`, POST `/read` (`{ids[]|all:true}`), GET/PUT `/preferences` |
 | `supportRoutes` | **Public** POST `/actions/:token`, POST `/appeal`; (auth) POST `/tickets` (idempotent), GET `/tickets`, GET `/tickets/:ticketId`, POST `/tickets/:ticketId/messages` (rate-limited), POST `/tickets/:ticketId/resolve|close|reopen|rate` |
 | `supportAdminRoutes` | (auth + `requirePlatformAdmin` + `requireAdminAMR`) GET/POST `/tickets` (work queue), GET/POST/PATCH `/tickets/:ticketId` (reply/internal-note/assign/patch), POST `/tickets/:ticketId/resolve|close|reopen`, POST `/tickets/:ticketId/messages/:messageId/redact`, GET `/stats`, canned-replies CRUD |
-| `routinesRoutes` | (auth + `requireGroupRoleV2`) Rosters: GET/POST `/groups/:groupId/rosters`, GET/PATCH/POST(publish)/POST(extend-horizon) `/groups/:groupId/rosters/:rosterId`; Duties: GET `/groups/:groupId/duties`, POST done/reassign `/groups/:groupId/duties/:assignmentId/…`; Swaps: POST `/groups/:groupId/swaps`, POST respond `/groups/:groupId/swaps/:swapId/respond`; Menu: GET/POST `/groups/:groupId/menu`; Notes: GET/POST/PATCH/DELETE `/groups/:groupId/notes/…`, POST ack/claim/done tasks; GET `/groups/:groupId/board/today`, `/menu/bazar-suggestions`, `/duties/fairness`, `/bazar-spend-rotation`, POST `/emergency-broadcast` |
+| `routinesRoutes` | (auth + `requireGroupRoleV2`) Rosters: GET/POST `/groups/:groupId/rosters`, GET/PATCH/POST(publish)/POST(extend-horizon) `/groups/:groupId/rosters/:rosterId`; Duties: GET `/groups/:groupId/duties`, POST done/reassign `/groups/:groupId/duties/:assignmentId/…`; Swaps: POST `/groups/:groupId/swaps`, POST respond `/groups/:groupId/swaps/:swapId/respond`; Menu: GET/POST `/groups/:groupId/menu`; Notes: GET/POST/PATCH/DELETE `/groups/:groupId/notes/…`, POST ack/claim/done tasks; GET `/groups/:groupId/board/today`, `/menu/bazar-suggestions`, `/duties/fairness`, `/bazar-spend-rotation`, POST `/emergency-broadcast` (owner/manager enforced in controller) |
 | `shoppingListRoutes` | (auth + `requireGroupRoleV2`) GET `/groups/:groupId`, POST items, PATCH/DELETE items/:itemId, POST `/to-expense`, GET `/history` |
 | `kitchenInventoryRoutes` | (auth + `requireGroupRoleV2`) GET/POST `/groups/:groupId`, PATCH/DELETE `/groups/:groupId/:itemId`, POST `/:itemId/refill` |
 | `pollRoutes` | (auth + `requireGroupRoleV2`) GET/POST `/groups/:groupId`, POST `/:pollId/vote`, POST `/:pollId/close`, GET `/:pollId/results` |
-| `totpRoutes` | (auth) POST `/2fa/setup|verify|disable`; (public) POST `/login/2fa-challenge`, `/login/2fa` |
+| `totpRoutes` | Mounted on `/api/users` **before** `userRoutes`: (auth) POST `/2fa/setup|verify|disable`; (public) POST `/login/2fa-challenge`, `/login/2fa` |
 | `inviteRoutes` | (auth) POST `/join-by-code`, POST `/codes`, GET `/codes/:groupId` |
 | `adminRoutes` | (auth + `requirePlatformAdmin` + `requireAdminAMR`) GET `/overview|/traffic|/audit`, GET/PATCH `/users/:userId`, GET `/users` (directory), GET `/jobs`, GET/DELETE `/groups/:groupId` |
 
@@ -464,7 +466,7 @@ Schema groups:
 20. ⏳ **CAPTCHA provider** — `supportController.verifyCaptcha` is a stub (accepts any token).
 21. ⏳ **Google OAuth + 2FA step-up** — an OAuth user with TOTP enabled is redirected to `/login`; no continuation is implemented.
 
-> **Part B status:** All of Part B (§14–§21) is implemented in code and re-verified in this audit (see README §21 for the per-phase status table and §22 for the bug list). Remaining items are production hardening, the roster-horizon job, and refresh-store unification.
+> **Part B status:** All of Part B (§14–§21) is implemented in code and re-verified in this audit (see the [project README](../../README.md#11-delivery-status) delivery-status table for the per-phase status, and §21 below for the phased plan). Remaining items are production hardening and the refresh-store unification listed in [PROJECT_IMPROVEMENT_RECOMMENDATIONS.md](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md).
 
 
 ---

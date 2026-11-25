@@ -18,7 +18,7 @@
 
 ## 0. ROLE & GOAL
 
-You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The audited backend lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Next.js App Router + React). Integrate **only** against `Server/docs/API_DOCUMENTATION.md` (219 verified endpoints) and keep `PROJECT_IMPROVEMENT_RECOMMENDATIONS.md` open for known backend gaps.
+You are a senior React engineer. Build the complete frontend for **MealMate**, a mess (shared-living) meal & cost tracker backed by a real double-entry ledger, versioned month-end statements, and audited financial workflows. The audited backend lives in `/Server` (Express 5 + MongoDB). The frontend lives in `/Client` (Next.js App Router + React). Integrate **only** against `Server/docs/API_DOCUMENTATION.md` (219 verified endpoints) and keep `Server/docs/PROJECT_IMPROVEMENT_RECOMMENDATIONS.md` open for known backend gaps.
 
 **Priorities, in order:** (1) follow the rules below, (2) **mobile responsiveness — top priority for every screen and component**, (3) token efficiency, (4) working code, (5) modern UI polish.
 
@@ -223,7 +223,7 @@ One line per component: `Name · path · props (required*/optional) · use-for`.
 
 ## 4. Backend contract
 
-Integrate from [Server/docs/API_DOCUMENTATION.md](../Server/docs/API_DOCUMENTATION.md) — 219 endpoints, verified route-by-route against the Express router table (0 missing either way). Strip the leading `/api` when the transport supplies it. Keep legacy taka amounts separate from v2 integer poisha.
+Integrate from [Server/docs/API_DOCUMENTATION.md](../../Server/docs/API_DOCUMENTATION.md) — 219 endpoints, verified route-by-route against the Express router table (0 missing either way). Strip the leading `/api` when the transport supplies it. Keep legacy taka amounts separate from v2 integer poisha.
 
 **Enums and shapes that bite (verified in source):**
 

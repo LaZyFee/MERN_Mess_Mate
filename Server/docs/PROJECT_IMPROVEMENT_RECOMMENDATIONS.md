@@ -1,8 +1,10 @@
 # MealMate — Project Improvement Recommendations
 
-> **Status:** independent technical assessment produced by the backend/frontend audit recorded in `README.md` §22.
+> **Status:** independent technical assessment produced by the backend/frontend audit.
 > It is **not** an implementation prompt. Every "current situation" below was verified in source; items that were
-> fixed during the audit are marked ✅ and listed in `README.md` §22 instead of being re-recommended here.
+> fixed during the audit are marked ✅ and listed under "confirmed bugs fixed" in [`Server/docs/plan.md`](plan.md) history and this file's verification record.
+>
+> Related: [project README](../../README.md) · [API reference](API_DOCUMENTATION.md) · [plan & architecture](plan.md)
 
 The API is in good shape for frontend integration: 219 documented endpoints match the router table exactly, 112 unit
 tests and 47 integration tests pass, and the Next.js client builds 20 routes. The release-blocking risks are
@@ -46,7 +48,7 @@ tests and 47 integration tests pass, and the Next.js client builds 20 routes. Th
 | Make contract drift visible in CI | No CI. Before this audit, five backend modules could not parse (so their routes were dead) while `npm test` still passed, because pure rule tests never import the route files | A dead route can ship unnoticed | CI: `node --check` on every file **plus** a module-import smoke test **plus** the route↔doc diff (`Server/scripts/auditRoutes.mjs`) **plus** both test suites on a replica set | Green build means loadable, wired and consistent | High | Low | CI, the audit script |
 | One money-formatting path | V2 uses integer poisha; legacy `MonthlySummary`/`PaymentNote` use floats; some handlers do `(x/100).toFixed(2)` inline | Two rounding conventions | Keep poisha as the only storage type; add `toDecimalString()` at the response boundary | No float drift | Medium | Medium | `summaryController`, `paymentNoteController` |
 | Request correlation IDs | `AuditEvent.requestId` exists but nothing populates it | Hard to join an audit row to a log line | Attach a request id in `index.js`, pass it through `audit()` | Traceable incidents | Medium | Low | `index.js`, `AuditEvent` |
-| Documented API generation | `API_DOCUMENTATION.md` is hand-written but matches 219/219 routes | Drift risk as routes evolve | Generate the route/middleware table from the router files; keep the prose | Always-current reference | Medium | Medium | the audit script |
+| Documented API generation | `API_DOCUMENTATION.md` is hand-written but matches 219/219 routes | Drift risk as routes evolve | Generate the route/middleware table from the router files; keep the prose | Always-current reference | Medium | Medium | `Server/scripts/auditRoutes.mjs` |
 | Type safety | 100% JavaScript, no JSDoc types, large controllers | Refactors are risky in financial code | `// @ts-check` + JSDoc on `services/` and `models/` first, then controllers | Early error detection without a rewrite | Low | Medium | — |
 
 ## 4. Administration and manageability
@@ -88,7 +90,7 @@ tests and 47 integration tests pass, and the Next.js client builds 20 routes. Th
 ## 7. Prioritized roadmap
 
 **Immediate (correctness + security)**
-1. ✅ Bug fixes in `README.md` §22 (five modules that could not even load, stats aggregation, attachment authorization, self-approval, CORS, auditor scope).
+1. ✅ Bug fixes from the repo audit (five modules that could not even load, stats aggregation, attachment authorization, self-approval, CORS, auditor scope).
 2. ✅ Client auth: replace the non-existent `mm_rt` cookie with `mm_at`/`refreshToken` (refresh now works).
 3. Unify refresh-token storage; bind statement finalize to a frozen input set; make idempotency transactional.
 4. Require `payers[]`; validate every cross-group reference.
@@ -139,5 +141,5 @@ Files inspected in this audit (source, not proof of behaviour — every behaviou
 | Module import smoke (all routes/controllers/services/models) | 0 failures |
 | Unit tests `npm test` | **112 pass / 0 fail** |
 | Integration tests `npm run test:integration` | **47 pass / 0 fail** |
-| Route ↔ API doc diff | **219 asserted = 219 documented**, 0 missing each way |
+| Route ↔ API doc diff (`Server/scripts/auditRoutes.mjs` vs `Server/docs/API_DOCUMENTATION.md`) | **219 asserted = 219 documented**, 0 missing each way |
 | `next build` (Client) | **success**, 20 routes |

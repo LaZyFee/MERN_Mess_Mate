@@ -112,4 +112,5 @@ exist for them, and no user-facing link points to it. The BFF attaches
 - `TODO.md` — task ledger and decisions (session memory).
 - `COMPONENTS.md` — shared component inventory with props.
 - `FRONTEND_BUILD_PROMPT.md` — build brief.
-- `../Server/docs/API_DOCUMENTATION.md` — backend contract.
+- [`../Server/docs/API_DOCUMENTATION.md`](../Server/docs/API_DOCUMENTATION.md) — backend API contract (every endpoint).
+- [`../README.md`](../README.md) · [`../Server/docs/plan.md`](../Server/docs/plan.md) · [`../Server/docs/PROJECT_IMPROVEMENT_RECOMMENDATIONS.md`](../Server/docs/PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) — project overview, architecture/plan, and known backend gaps.
