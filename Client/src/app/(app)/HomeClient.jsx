@@ -15,7 +15,9 @@ import Skeleton from "@/components/shared/Skeleton";
 import Badge from "@/components/shared/Badge";
 import Avatar from "@/components/shared/Avatar";
 import { useToast } from "@/components/shared/ToastProvider";
+import Alert from "@/components/shared/Alert";
 import { groupsApi } from "@/lib/api/groups";
+import { useGroupStore } from "@/lib/store/groupStore";
 
 function GroupCard({ group, onClick }) {
   const memberCount = group.memberCount || group.members?.length || 0;
@@ -90,6 +92,9 @@ export default function HomeClient({ initialGroups }) {
   // Seed from server â€” no useEffect re-fetch on mount
   const [groups, setGroups] = useState(initialGroups ?? []);
   const [refreshing, setRefreshing] = useState(false);
+  // Ex-member notice: set by the leave flow; cleared once acknowledged.
+  const leftNotice = useGroupStore((s) => s.leftNotice);
+  const setLeftNotice = useGroupStore((s) => s.setLeftNotice);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -105,6 +110,14 @@ export default function HomeClient({ initialGroups }) {
 
   return (
     <div>
+      {leftNotice?.message && (
+        <div className="mb-4">
+          <Alert status="info" title="History is clamped to your membership window" isDismissible onDismiss={() => setLeftNotice(null)}>
+            {leftNotice.message}
+          </Alert>
+        </div>
+      )}
+
       {/* Header row */}
       <div
         className="flex items-center justify-between mb-5 flex-wrap gap-3"

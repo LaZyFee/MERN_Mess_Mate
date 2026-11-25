@@ -20,23 +20,26 @@ export default function ConfirmationModal({
  confirmText = "Yes, Confirm",
  cancelText = "Cancel",
  isSubmitting = false,
+ isLoading = false,
+ details = null,
 }) {
+ const busy = isSubmitting || isLoading;
  return (
   <Modal
    isOpen={isOpen}
    onClose={onClose}
    size="3xl"
    header={title}
-   hasCloseButton={!isSubmitting}
-   closeOnEsc={!isSubmitting}
-   closeOnOverlayClick={!isSubmitting}
+   hasCloseButton={!busy}
+   closeOnEsc={!busy}
+   closeOnOverlayClick={!busy}
    footer={
     <div className="flex gap-3 justify-end">
      <Button
       variant=""
 
       onClick={onClose}
-      disabled={isSubmitting}
+      disabled={busy}
       className="px-4 py-2 border border-(--bd2) text-xs font-bold text-(--ts) rounded-xl hover:bg-(--pale) transition-colors cursor-pointer disabled:opacity-50"
       leftIcon={<FiX size={14} />}
      >
@@ -46,7 +49,7 @@ export default function ConfirmationModal({
       variant=""
 
       onClick={onConfirm}
-      disabled={isSubmitting}
+      disabled={busy}
       className={`px-4 py-2 text-(--bgs) font-bold text-xs rounded-xl shadow-md transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer ${
        status === "error"
         ? "bg-(--danger)"
@@ -55,7 +58,7 @@ export default function ConfirmationModal({
          : "bg-(--p)"
       }`}
       leftIcon={
-       isSubmitting ? (
+       busy ? (
         <LuLoader size={14} className="animate-spin" />
        ) : status === "error" ? (
         <FiAlertTriangle size={14} />
@@ -66,7 +69,7 @@ export default function ConfirmationModal({
        )
       }
      >
-      {isSubmitting ? "Processing..." : confirmText}
+      {busy ? "Processing..." : confirmText}
      </Button>
     </div>
    }
@@ -77,6 +80,7 @@ export default function ConfirmationModal({
       {message}
      </div>
     </Alert>
+    {details ? <div className="pt-1">{details}</div> : null}
    </div>
   </Modal>
  );

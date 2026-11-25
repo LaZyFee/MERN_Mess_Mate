@@ -1,5 +1,5 @@
 # MealMate Frontend TODO
-Last Session: Fixed build-blocking defects (useGroup import path → GroupShell, missing src/lib/utils/profileUtils, invalid react-icons/lu names, Select.jsx react-phone-number-input/flags import). Build now PASSES (lint 0 errors, color/SVG audits clean). → Next: review remaining P9–P13 tasks
+Last Session: Finished T10.5–T10.7 (admin support queue/stats/ticket view) and T13.4–T13.7 (co-member directory, self-leave, history-clamped notice, hidden admin shell, README). lint 0 errors, color+SVG audits clean, production build passes with all /admin routes. → Next: optional P12/UX polish only (backlog clear).
 
 ## P0 Recon & Foundation (Next.js per §8)
 - [x] T0.1 Recon done; deps installed (next, socket.io-client, chart.js, react-chartjs-2). Icon family: react-icons/lu.
@@ -54,39 +54,43 @@ Last Session: Fixed build-blocking defects (useGroup import path → GroupShell,
 ## P9 Routine & Board (§8.7) T9.1–T9.10
 - [x] T9.1 Board widget on group Overview (SSR boardToday → BoardWidget.jsx; duties, menu, pinned notes, handover banner).
 - [x] T9.2 Duties calendar + mark done + swap request / accept / decline (DutiesClient.jsx implemented: month grid, mark-done, swap offer/respond, fairness card, realtime invalidate; builds cleanly)
-- [ ] T9.3 Rosters admin (manager): create/edit roster, publish, extend horizon
-- [ ] T9.4 Weekly menu: week view + template editor; today's menu card with cook
-- [ ] T9.5 Notice board: feed, create note/announcement/alert, pin, audience, seen receipts, archive
-- [ ] T9.6 Handover composer: absence window + task checklist; claim/done on tasks; active banner
-- [ ] T9.7 Realtime: duty-updated / menu-updated / note-created / shoppingList / kitchenInventory → refresh
-- [ ] T9.8 Shopping list → convert to expense draft
-- [ ] T9.9 Kitchen inventory: staple stock + refills
-- [ ] T9.10 Polls: quick menu decisions with voting
+- [x] T9.3 Rosters admin (manager): create/edit roster, publish, extend horizon — roster panel wired to Board; payload uses backend `title/type/rotation/areas/horizonDays` schema
+- [x] T9.4 Weekly menu: week view + template editor; today's menu card with cook
+- [x] T9.5 Notice board: feed, create note/announcement/alert, pin, audience, seen receipts, archive
+- [x] T9.6 Handover composer: absence window + task checklist; claim/done on tasks; active banner
+- [x] T9.7 Realtime: duty-updated / menu-updated / note-created / shoppingList / kitchenInventory → refresh
+- [x] T9.8 Shopping list → convert to expense draft
+- [x] T9.9 Kitchen inventory: staple stock + refills
+- [x] T9.10 Polls: quick menu decisions with voting
 
 ## P10 Support T10.1–T10.7
-- [ ] T10.1 My tickets list + New ticket form
-- [ ] T10.2 Ticket thread page (composer driven by permissions.canComment)
-- [ ] T10.3 Email-action landing page /support/action/[token]
-- [ ] T10.4 Public appeal page (suspended users)
-- [ ] T10.5 Admin Support queue
-- [ ] T10.6 Admin ticket view (reply / internal note / canned replies / assign / priority / transitions)
-- [ ] T10.7 Admin support stats cards
+- [x] T10.1 My tickets list + New ticket form
+- [x] T10.2 Ticket thread page (composer driven by permissions.canComment)
+- [x] T10.3 Email-action landing page /support/action/[token]
+- [x] T10.4 Public appeal page (suspended users)
+- [x] T10.5 Admin Support queue — `app/(admin)/admin/support/page.jsx` (SSR filters) + AdminSupportClient (status/priority/overdue filters, ticketNo search, SLA chips, unread dot, cursor load-more, stats tiles).
+- [x] T10.6 Admin ticket view — `app/(admin)/admin/support/[ticketId]/` AdminTicketClient (public reply, internal note, canned replies, priority patch, clear assignee, resolve/close/reopen with reason) + TicketContextPanel.
+- [x] T10.7 Admin support stats cards — StatTile row from `GET /admin/support/stats` (open, awaiting_admin, overdue, median first response, CSAT).
 
 ## P11 Inbox T11.1–T11.4
-- [ ] T11.1 TopBar bell + unread badge (inbox-new socket event) + dropdown list
-- [ ] T11.2 Inbox page (cursor list, mark read / all, deep-link)
-- [ ] T11.3 Notification preferences (per type, email toggle, quiet hours) on Profile
-- [ ] T11.4 Admin bell reuses the same component + toast on new support ticket
+- [x] T11.1 TopBar bell + unread badge (inbox-new socket event) + dropdown list
+- [x] T11.2 Inbox page (cursor list, mark read / all, deep-link)
+- [x] T11.3 Notification preferences (per type, email toggle, quiet hours) on Profile
+- [x] T11.4 Admin bell reuses the same component + toast on new support ticket
 
 ## P12 Security UX T12.1–T12.3
-- [ ] T12.1 2FA setup (QR from backend) + login step-up screen
-- [ ] T12.2 Invite code one-time reveal dialog (moved into T9.12 settings work)
-- [ ] T12.3 Sessions page device-family coverage notice
+- [x] T12.1 2FA setup (authenticator secret + verify/disable + login step-up)
+- [x] T12.2 Invite code one-time reveal dialog
+- [x] T12.3 Sessions page device-family coverage notice
 
 ## P13 Polish backlog
 - [x] T13.3 T8.5 color+SVG grep, lint, build (lint 0 errors; color audit clean; SVG audit clean; production build passes)
-- [ ] T13.4 T8.6 co-member directory · T13.5 T8.7 leave/kick · T13.6 T8.8 hidden admin shell · T13.7 T8.9 README
-- [ ] T13.8 Fix remaining implementation defects found in review (invite dialog duplicate state, orphaned notifications panel, server actions param names, missing member roster for routines, socket initializer wiring, Badge warning solid class, BottomNav/TopBar missing, admin detail/audit pages).
+- [x] T13.4 T8.6 co-member directory · T13.5 T8.7 leave/kick · T13.6 T8.8 hidden admin shell · T13.7 T8.9 README
+  → T13.6: `app/(admin)/admin/layout.jsx` probes getAdminOverview → notFound() for non-admins; AdminShell + overview (counters + code-split ChartCanvas traffic line), users (search/cursor/suspend/verify), groups (archive w/ reason), audit feed, support. `lib/api/admin.js` (adminApi + adminSupportApi), `lib/actions/platform.js` rewritten, BFF attaches X-Admin-Key when ADMIN_PANEL_KEY set, middleware CSP connect-src from SOCKET_ORIGIN.
+  → T13.4/13.5: CoMemberDirectory in Members tab (SSR via getGroupMembers), self-leave via `DELETE /messgroups/remove-member/:groupId/:userId`, groupStore.leftNotice → HomeClient dismissible Alert.
+  → T13.7: Client/README.md rewritten for Next.js BFF.
+- [x] T13.8 Fixed password meter/build-blocking placeholders and roster payload wiring; remaining hidden-admin route and co-member/leave-directory polish.
+  → Follow-up in this session: ConfirmationModal gained `details` + `isLoading` alias (prop is `confirmText`); inline `bg-(--${tone})` dynamic classes replaced with static maps; ChartCanvas moved to `components/charts/ChartCanvas.jsx` (shared by Charts tab + admin; Turbopack cannot resolve `(app)`/`[groupId]` in import paths).
 
 ## Notes & Decisions
 - Mandatory UI implementation rule: use Tailwind `className` utilities for layout and presentation. `style={{ ... }}` is prohibited for JSX components; dynamic CSS values use a CSS custom property such as `style={{ "--progress": value }}` only when no Tailwind arbitrary-value form is practical. All colors remain CSS-variable based.
@@ -100,3 +104,5 @@ Last Session: Fixed build-blocking defects (useGroup import path → GroupShell,
 - Backend response shapes used by new P9–P12 code: inbox → `{notifications, nextCursor, hasMore}`, unread → `{count}`, prefs → `{preferences:{types,quietHours}}`; support → `{tickets,...}`, thread → `{ticket, messages, permissions:{canComment,reason,code,canResolve,canClose,canReopen}, slaStage}`; shopping → `{list}`; inventory → items array/`{items}`; polls → `{polls}`; routines board → `{date,duties,menu,pinnedNotes,activeHandovers}`, duties → `{duties}` with `{localDate,status,membershipId,taskKey,...}`, notes → `{notes}`.
 - Build defects fixed this session: (1) MembersClient.jsx & PolicyClient.jsx imported `useGroup` from `../layout` (Server Component, no export) → changed to `../GroupShell` (exports `useGroup` via GroupContext). (2) Created `src/lib/utils/profileUtils.js` (`getAvatarUrl`) and repointed Avatar.jsx / ProfileAvatarUpload.js imports from `@/utils/profileUtils` → `@/lib/utils/profileUtils`. (3) Replaced invalid react-icons/lu names: GroupShell.jsx `LuBarChart2`→`LuLayoutDashboard`, `LuMoreHorizontal`→`LuMenu`; ChartsClient.jsx `LuBarChart3`→`LuChartBar`. (4) Select.jsx removed `import flags from "react-phone-number-input/flags"` (pkg not installed) → CountryFlag now renders ISO text chip.
 - Verification: `npm run lint` → 0 errors; `audit:colors` → clean; `audit:svg` → clean; `npm run build` → PASSES (compiled successfully, all routes render). Dev-server warnings removed: `@custom-variant dark` dropped from globals.css (unused; codebase uses explicit `[data-theme="dark"]` classes) and obsolete `eslint` key dropped from next.config.js.
+- Admin plane gotcha: /admin pages must NEVER be linked from user UI; guard is server-side probe only. `ADMIN_PANEL_KEY` is optional (backend `requirePlatformAdmin` also enforces the `amr: otp` claim). Empty `.env` value = header not sent. Symlinked trees (Turbopack) resolve `@/app/...` fine but NOT relative `../(app)/[groupId]/...` imports — put shared code in `src/components`.
+- Env additions: `SOCKET_ORIGIN` (CSP connect-src, comma-separated), `ADMIN_PANEL_KEY` (server-only, never NEXT_PUBLIC_).

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LuSave, LuShieldCheck } from "react-icons/lu";
+import { LuSave, LuShieldCheck, LuShieldOff } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Checkbox from "@/components/shared/Checkbox";
@@ -33,6 +33,12 @@ export default function ProfileClient({ initialProfile, notificationPrefsSlot = 
 
   const [consent, setConsent] = useState(Boolean(profile.whatsappConsent));
   const [savingConsent, setSavingConsent] = useState(false);
+  const [twoFactorSetup, setTwoFactorSetup] = useState(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState([]);
+  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableCode, setDisableCode] = useState("");
 
   const saveProfile = async () => {
     setSavingProfile(true);
@@ -102,6 +108,56 @@ export default function ProfileClient({ initialProfile, notificationPrefsSlot = 
     }
   };
 
+  const setupTwoFactor = async () => {
+    setTwoFactorBusy(true);
+    try {
+      const data = await authApi.setupTwoFactor();
+      setTwoFactorSetup({ secret: data?.secret, otpauthUrl: data?.otpauthUrl });
+      setTwoFactorRecoveryCodes([]);
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not start 2FA setup", description: ex?.data?.msg || ex?.message });
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const verifyTwoFactor = async () => {
+    if (!/^\d{6}$/.test(twoFactorCode)) {
+      showToast({ status: "warning", title: "Enter the 6-digit authenticator code" });
+      return;
+    }
+    setTwoFactorBusy(true);
+    try {
+      const data = await authApi.verifyTwoFactor(twoFactorCode);
+      setTwoFactorRecoveryCodes(data?.recoveryCodes || []);
+      setTwoFactorSetup(null);
+      setTwoFactorCode("");
+      showToast({ status: "success", title: "2FA enabled" });
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not verify 2FA", description: ex?.data?.msg || ex?.message });
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const disableTwoFactor = async () => {
+    if (!disablePassword || !disableCode.trim()) {
+      showToast({ status: "warning", title: "Password and 2FA code are required" });
+      return;
+    }
+    setTwoFactorBusy(true);
+    try {
+      await authApi.disableTwoFactor({ password: disablePassword, code: disableCode.trim() });
+      setDisablePassword("");
+      setDisableCode("");
+      showToast({ status: "success", title: "2FA disabled" });
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not disable 2FA", description: ex?.data?.msg || ex?.message });
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {notificationPrefsSlot}
@@ -154,6 +210,68 @@ export default function ProfileClient({ initialProfile, notificationPrefsSlot = 
           isDisabled={savingConsent}
           onChange={toggleConsent}
         />
+      </Card>
+
+      <Card padding="md" className="min-w-0">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-bold text-(--tp)">
+          <LuShieldCheck size={16} className="text-(--p)" /> Two-factor authentication
+        </h2>
+        {twoFactorSetup ? (
+          <div className="space-y-3">
+            <p className="text-xs text-(--tm)">Add this secret to your authenticator app, then enter the 6-digit code.</p>
+            <div className="rounded-lg border border-(--bd) bg-(--bgm) px-3 py-2 font-mono text-sm text-(--tp)">
+              {twoFactorSetup.secret}
+            </div>
+            <Input
+              size="lg"
+              label="Authenticator code"
+              value={twoFactorCode}
+              inputMode="numeric"
+              maxLength={6}
+              autoComplete="one-time-code"
+              onChange={(event) => setTwoFactorCode(event.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setTwoFactorSetup(null)} isDisabled={twoFactorBusy}>Cancel</Button>
+              <Button className="flex-1" isLoading={twoFactorBusy} isDisabled={twoFactorBusy} onClick={verifyTwoFactor}>Enable 2FA</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {twoFactorRecoveryCodes.length > 0 && (
+              <div className="rounded-lg border border-(--warning) bg-(--warning-bg) p-3">
+                <p className="mb-2 text-xs font-bold text-(--warning)">Save these recovery codes now</p>
+                <code className="block whitespace-pre-wrap text-xs text-(--tp)">
+                  {twoFactorRecoveryCodes.join("\n")}
+                </code>
+              </div>
+            )}
+            <Button size="md" leftIcon={<LuShieldCheck size={14} />} isLoading={twoFactorBusy} onClick={setupTwoFactor}>
+              Set up authenticator app
+            </Button>
+            <div className="grid gap-2 border-t border-(--bd) pt-3 sm:grid-cols-2">
+              <Input
+                size="lg"
+                type="password"
+                label="Password"
+                value={disablePassword}
+                onChange={(event) => setDisablePassword(event.target.value)}
+                autoComplete="current-password"
+              />
+              <Input
+                size="lg"
+                label="Authenticator code"
+                value={disableCode}
+                inputMode="text"
+                maxLength={8}
+                onChange={(event) => setDisableCode(event.target.value)}
+              />
+            </div>
+            <Button size="md" variant="danger" leftIcon={<LuShieldOff size={14} />} isLoading={twoFactorBusy} onClick={disableTwoFactor}>
+              Disable 2FA
+            </Button>
+          </div>
+        )}
       </Card>
 
       <Card padding="md" className="min-w-0">

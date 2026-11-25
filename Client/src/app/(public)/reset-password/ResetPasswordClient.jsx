@@ -65,7 +65,7 @@ function ResetForm({ token }) {
   if (done) {
     return (
       <Alert status="success" title="Password updated">
-        Taking you to sign in…
+        Taking you to sign inâ€¦
       </Alert>
     );
   }

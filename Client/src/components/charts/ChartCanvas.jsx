@@ -33,8 +33,9 @@ function withAlpha(color) {
 }
 
 /**
- * Canvas-only chart wrapper. Colors are read from CSS variables at runtime and
- * passed in via `palette` so both themes stay in sync without literals.
+ * Canvas-only chart wrapper (shared by Charts tab and the admin overview).
+ * Colors are read from CSS variables at runtime and passed in via `palette` so
+ * both themes stay in sync without literals.
  */
 export default function ChartCanvas({ type, labels, datasets, palette = [], tooltipPrefix = "" }) {
   const textColor = palette[0] || undefined;

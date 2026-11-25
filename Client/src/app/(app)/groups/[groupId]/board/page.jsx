@@ -6,6 +6,7 @@ import {
   getDuties,
   getMenuPlans,
   getNotes,
+  getRosters,
   getShoppingList,
   getKitchenInventory,
   getPolls,
@@ -23,11 +24,12 @@ export default async function BoardPage({ params }) {
     const canManage = ["owner", "manager"].includes(role);
     const canConvert = ["owner", "manager", "treasurer"].includes(role);
 
-    const [board, duties, menus, notes, shopping, inventory, polls] = await Promise.all([
+    const [board, duties, menus, notes, rosters, shopping, inventory, polls] = await Promise.all([
       getBoardToday(groupId),
       getDuties(groupId).catch(() => []),
       getMenuPlans(groupId),
       getNotes(groupId),
+      getRosters(groupId),
       getShoppingList(groupId),
       getKitchenInventory(groupId),
       getPolls(groupId),
@@ -44,6 +46,7 @@ export default async function BoardPage({ params }) {
         initialDuties={duties}
         initialMenus={menus}
         initialNotes={notes}
+        initialRosters={rosters}
         initialShopping={shopping}
         initialInventory={inventory}
         initialPolls={polls}

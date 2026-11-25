@@ -10,6 +10,7 @@ import {
   LuChefHat,
   LuListChecks,
   LuPackage,
+  LuSlidersHorizontal,
   LuStickyNote,
   LuUsers,
   LuVote,
@@ -21,9 +22,11 @@ import HandoverComposer from "./HandoverComposer";
 import ShoppingListPanel from "./ShoppingListPanel";
 import KitchenInventoryPanel from "./KitchenInventoryPanel";
 import PollsPanel from "./PollsPanel";
+import RosterPanel from "./RosterPanel";
 
 const SECTIONS = [
   { key: "duties", label: "Duties", icon: LuCalendarCheck },
+  { key: "rosters", label: "Rosters", icon: LuSlidersHorizontal },
   { key: "menu", label: "Menu", icon: LuChefHat },
   { key: "notices", label: "Notices", icon: LuStickyNote },
   { key: "handover", label: "Hand-over", icon: LuUsers },
@@ -41,6 +44,7 @@ export default function BoardClient({
   initialBoard,
   initialMenus = [],
   initialNotes = [],
+  initialRosters = [],
   initialShopping = null,
   initialInventory = [],
   initialPolls = [],
@@ -69,6 +73,9 @@ export default function BoardClient({
       </div>
 
       {section === "duties" && <DutiesClient groupId={groupId} memberships={memberships} />}
+      {section === "rosters" && canManage && (
+        <RosterPanel groupId={groupId} memberships={memberships} initialRosters={initialRosters} />
+      )}
       {section === "menu" && (
         <MenuClient
           groupId={groupId}

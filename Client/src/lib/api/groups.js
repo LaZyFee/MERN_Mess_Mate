@@ -23,6 +23,7 @@ export const groupsApi = {
   updateMembership: (membershipId, body) => apiClient.patch(`/memberships/${membershipId}`, body),
   departMembership: (membershipId, body) => apiClient.post(`/memberships/${membershipId}/depart`, body),
   getMembers: (groupId) => apiClient.get(`/users/groups/${groupId}/members`),
+  leaveGroup: (groupId, userId) => apiClient.delete(`/messgroups/remove-member/${groupId}/${userId}`),
   getPolicy: (groupId) => apiClient.get(`/policies/groups/${groupId}/policies`),
   createPolicy: (groupId, body) => apiClient.post(`/policies/groups/${groupId}/policies`, body),
   getRecurring: (groupId) => apiClient.get(`/recurring/groups/${groupId}/recurring`),

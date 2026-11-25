@@ -15,7 +15,6 @@ import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
 import { routinesApi } from "@/lib/api/routines";
-import { formatDay } from "@/lib/utils/format";
 import { memberLabel, ROSTER_TYPES, ROTATION_MODES } from "./boardHelpers";
 
 const STATUS_BADGE = {
@@ -26,12 +25,11 @@ const STATUS_BADGE = {
 
 function emptyRoster(memberships) {
   return {
-    name: "",
+    title: "",
     type: "bazar",
     rotationMode: "round_robin",
-    startDate: new Date().toISOString().slice(0, 10),
-    area: "kitchen",
-    slotsPerTurn: 1,
+    areas: ["kitchen"],
+    horizonDays: 30,
     order: memberships.map((m) => m._id),
   };
 }
@@ -66,19 +64,20 @@ export default function RosterPanel({ groupId, memberships = [], initialRosters 
   };
 
   const save = async () => {
-    if (!editing?.name?.trim()) {
+    if (!editing?.title?.trim()) {
       showToast({ status: "warning", title: "Give the roster a name" });
       return;
     }
     setBusy("save");
     const payload = {
-      name: editing.name.trim(),
+      title: editing.title.trim(),
       type: editing.type,
-      rotationMode: editing.rotationMode,
-      startDate: editing.startDate,
-      area: editing.area,
-      slotsPerTurn: Number(editing.slotsPerTurn) || 1,
-      membershipOrder: editing.order,
+      areas: editing.areas?.filter(Boolean) || [],
+      rotation: {
+        mode: editing.rotationMode,
+        memberOrder: editing.order || [],
+      },
+      horizonDays: Number(editing.horizonDays) || 30,
     };
     try {
       if (editing._id) await routinesApi.updateRoster(groupId, editing._id, payload);
@@ -109,7 +108,7 @@ export default function RosterPanel({ groupId, memberships = [], initialRosters 
   const extend = async (roster) => {
     setBusy(`extend-${roster._id}`);
     try {
-      await routinesApi.extendRoster(groupId, roster._id);
+      await routinesApi.extendRoster(groupId, roster._id, 30);
       showToast({ status: "success", title: "Horizon extended" });
       load();
     } catch (ex) {
@@ -144,21 +143,24 @@ export default function RosterPanel({ groupId, memberships = [], initialRosters 
             <li key={roster._id} className="rounded-lg border border-(--bd) p-2">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-(--tp)">{roster.name}</p>
+                  <p className="truncate text-sm font-semibold text-(--tp)">{roster.title || roster.name}</p>
                   <p className="text-[11px] text-(--tm)">
-                    {roster.type} · {roster.rotationMode} · starts {roster.startDate ? formatDay(roster.startDate) : "—"}
-                    {roster.horizonEndDate ? ` → ${formatDay(roster.horizonEndDate)}` : ""}
+                    {roster.type} · {roster.rotation?.mode || roster.rotationMode || "round_robin"}
+                    {roster.horizonDays ? ` · ${roster.horizonDays} day horizon` : ""}
                   </p>
                 </div>
-                <Badge variant={STATUS_BADGE[roster.status]?.variant || "subtle"}>
-                  {STATUS_BADGE[roster.status]?.label || roster.status || "draft"}
+                <Badge variant={STATUS_BADGE[roster.state || roster.status]?.variant || "subtle"}>
+                  {STATUS_BADGE[roster.state || roster.status]?.label || roster.state || roster.status || "Draft"}
                 </Badge>
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 <Button size="sm" variant="outline" onClick={() => setEditing({
                   ...emptyRoster(memberships),
                   ...roster,
-                  order: roster.membershipOrder || roster.order || memberships.map((m) => m._id),
+                  title: roster.title || roster.name || "",
+                  areas: roster.areas || [],
+                  rotationMode: roster.rotation?.mode || roster.rotationMode || "round_robin",
+                  order: roster.rotation?.memberOrder || roster.membershipOrder || roster.order || memberships.map((m) => m._id),
                 })}>
                   Edit
                 </Button>
@@ -187,16 +189,15 @@ export default function RosterPanel({ groupId, memberships = [], initialRosters 
       >
         {editing && (
           <div className="space-y-3">
-            <Input size="lg" label="Name" isRequired value={editing.name} onChange={(event) => setEditing((prev) => ({ ...prev, name: event.target.value }))} />
+            <Input size="lg" label="Title" isRequired value={editing.title} onChange={(event) => setEditing((prev) => ({ ...prev, title: event.target.value }))} />
             <div className="grid grid-cols-2 gap-2">
               <Select size="lg" label="Type" options={ROSTER_TYPES} value={editing.type} onChange={(event) => setEditing((prev) => ({ ...prev, type: event.target.value }))} />
               <Select size="lg" label="Rotation" options={ROTATION_MODES} value={editing.rotationMode} onChange={(event) => setEditing((prev) => ({ ...prev, rotationMode: event.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Input size="lg" type="date" label="Start" value={editing.startDate} onChange={(event) => setEditing((prev) => ({ ...prev, startDate: event.target.value }))} />
-              <Input size="lg" label="Area" value={editing.area || ""} onChange={(event) => setEditing((prev) => ({ ...prev, area: event.target.value }))} />
+              <Input size="lg" label="Areas" value={(editing.areas || []).join(", ")} onChange={(event) => setEditing((prev) => ({ ...prev, areas: event.target.value.split(",").map((area) => area.trim()).filter(Boolean) }))} />
+              <Input size="lg" label="Horizon days" inputMode="numeric" value={editing.horizonDays ?? 30} onChange={(event) => setEditing((prev) => ({ ...prev, horizonDays: event.target.value }))} />
             </div>
-            <Input size="lg" label="Slots per turn" inputMode="numeric" value={editing.slotsPerTurn ?? 1} onChange={(event) => setEditing((prev) => ({ ...prev, slotsPerTurn: event.target.value }))} />
 
             <div>
               <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-(--tm)">Member order</p>

@@ -46,8 +46,11 @@ export const routinesApi = {
     apiClient.request(`${base(groupId)}/rosters/${rosterId}`, { method: "PATCH", body: payload }),
   publishRoster: (groupId, rosterId) =>
     apiClient.request(`${base(groupId)}/rosters/${rosterId}/publish`, { method: "POST", body: {} }),
-  extendRoster: (groupId, rosterId) =>
-    apiClient.request(`${base(groupId)}/rosters/${rosterId}/extend-horizon`, { method: "POST", body: {} }),
+  extendRoster: (groupId, rosterId, additionalDays = 30) =>
+    apiClient.request(`${base(groupId)}/rosters/${rosterId}/extend-horizon`, {
+      method: "POST",
+      body: { additionalDays },
+    }),
   emergencyBroadcast: (groupId, payload) =>
     apiClient.request(`${base(groupId)}/emergency-broadcast`, { method: "POST", body: payload }),
 };

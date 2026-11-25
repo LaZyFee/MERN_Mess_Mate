@@ -75,6 +75,9 @@ export default function SessionsPanel({ initialSessions = [] }) {
 
   return (
     <div>
+      <p className="mb-3 rounded-lg border border-(--bd) bg-(--bgm) px-3 py-2 text-xs text-(--tm)">
+        Session coverage is grouped by device family. New-device history is hidden until a user-scoped device endpoint is available.
+      </p>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-bold [color:var(--tp)]">Active Sessions</h2>
         <div className="flex gap-2">

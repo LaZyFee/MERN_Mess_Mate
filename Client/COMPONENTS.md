@@ -37,7 +37,7 @@
 - ScrollReveal · shared/ScrollReveal.js · children,animation,delay,threshold · scroll-in animation
 - Sectionheader · shared/Sectionheader.js · rotatedLabel,eyebrow,headingLines[],ctaLabel,ctaHref,description,accentFrom/To · marketing/section headers
 - BlockedFormOverlay · shared/BlockedFormOverlay.js · isBlocked,title,description,uploadHref,uploadButtonText · lock forms on prerequisites
-- ThemeToggle · shared/ThemeToggle.js · className,scrolled,topbar · light/dark toggle (currently uses @/context/ThemeContext — refactor to uiStore/mm_theme cookie in T0.7)
+- ThemeToggle · shared/ThemeToggle.js · className,scrolled,topbar · light/dark toggle (uses uiStore + mm_theme cookie)
 - RateLimitCatcher · shared/RateLimitCatcher.jsx · error,reset,onRetry,onClose,isOverlay · 429 full-screen UI (PREFERRED)
 - RateLimitListener · shared/RateLimitListener.jsx · (duplicate — prefer RateLimitCatcher)
 - Toast · shared/Toast.jsx · toast rendering incl. success/error/warning/loading [FLAG SVG]
@@ -45,13 +45,22 @@
 
 ## modals/
 - Modal · modals/Modal.jsx · isOpen*,onClose*,header,footer,size(3xl…),isCentered,closeOnOverlayClick,closeOnEsc,hasCloseButton,scrollBehavior · ALL dialogs; already bottom-sheet on mobile (rounded top, items-end). T0.8: 90dvh + safe-area
-- ConfirmationModal · modals/ConfirmationModal.jsx · isOpen,onClose,onConfirm,title,message,details,isLoading,confirmLabel… + feature/action gating · destructive confirms (PREFERRED)
+- ConfirmationModal · modals/ConfirmationModal.jsx · isOpen,onClose,onConfirm,title,message,status,confirmText,cancelText,isSubmitting | also accepts isLoading (alias) and details (ReactNode rendered below the alert, e.g. a reason Input) · destructive confirms (PREFERRED — NOTE prop is `confirmText`, not confirmLabel)
 - DeleteConfirmationModal · modals/DeleteConfirmationModal.js · isOpen,onClose,onConfirm,title,itemName,details,isLoading · (duplicate — prefer ConfirmationModal)
 - Dropdown · modals/Dropdown.jsx · trigger,items,placement,size · menus
 - Tooltip · modals/Tooltip.jsx · hover tooltip — T0.8: make tap-friendly
 
 ## guards/
 - PermissionGuard · guards/PermissionGuard.js · feature,action,requiredPermissions[],requiredAnyPermission[],permission('x.y'),fallback,showLoading · role-gated UI (re-wire to 5-tier mealmate roles via groupStore in T0.7/T0.12)
+
+## charts/
+- ChartCanvas · components/charts/ChartCanvas.jsx ("use client", shared) · type(bar|line|doughnut),labels,datasets[{label,data,colorIndex,multiColor,fill}],palette(string[] from CSS vars),tooltipPrefix · ALL Chart.js canvases (Charts tab + admin overview). `tooltipPrefix="৳"` treats data as poisha. Load via dynamic(..., {ssr:false}).
+
+## feature components (app routes, not shared)
+- CoMemberDirectory · app/(app)/groups/[groupId]/members/CoMemberDirectory.jsx · groupId*, initialMembers? · T8.6 co-member cards (username + optional wa.me link) + self leave with history-cutoff confirm.
+- AdminShell · app/(admin)/admin/AdminShell.jsx · initialOverview* · hidden admin chrome + ToastProvider.
+- Admin Overview/Users/Groups/Audit/Support/Ticket clients · app/(admin)/admin/** · initial* props from SSR pages · platform-admin plane (probe 404s for non-admins).
+- TicketContextPanel · app/(admin)/admin/support/[ticketId]/ · owner,memberships,ticket,busy,onPriority,onClearAssignee · admin ticket sidebar.
 
 ## layouts/ & socket/
 - ProtectedLayout · layouts/ProtectedLayout.js · auth-gated layout shell (Next.js — keep, wire to (app) layout)

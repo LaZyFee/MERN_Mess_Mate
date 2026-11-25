@@ -11,7 +11,7 @@ import { useToast } from "@/components/shared/ToastProvider";
 import { statsApi } from "@/lib/api/stats";
 import { formatMonth, formatPoisha, toMonthString } from "@/lib/utils/format";
 
-const ChartShell = dynamic(() => import("./ChartCanvas"), {
+const ChartShell = dynamic(() => import("@/components/charts/ChartCanvas"), {
   ssr: false,
   loading: () => <Skeleton variant="rect" height={220} />,
 });

@@ -66,6 +66,16 @@ function filterRequestHeaders(headers) {
   return out;
 }
 
+// Optional defense-in-depth for the hidden admin plane: the backend only checks
+// X-Admin-Key when ADMIN_PANEL_KEY is set, so the key is attached here (server
+// env only — never NEXT_PUBLIC_*) and only for admin paths.
+const ADMIN_PANEL_KEY = process.env.ADMIN_PANEL_KEY || "";
+
+function withAdminKey(headers, isAdminPath) {
+  if (isAdminPath && ADMIN_PANEL_KEY) headers.set("X-Admin-Key", ADMIN_PANEL_KEY);
+  return headers;
+}
+
 function filterResponseHeaders(headers) {
   const out = new Headers();
   for (const [key, value] of headers.entries()) {
@@ -100,7 +110,7 @@ async function handler(request, { params }) {
 
   const res = await fetch(target, {
     method,
-    headers: filterRequestHeaders(request.headers),
+    headers: withAdminKey(filterRequestHeaders(request.headers), first === "admin"),
     body,
     credentials: "include",
     redirect: "manual",

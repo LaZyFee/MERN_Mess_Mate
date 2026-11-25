@@ -1,14 +1,14 @@
 import "./globals.css";
 
 // Next.js config exports (not React components)
-// eslint-disable-next-line react-refresh/only-export-components
+ 
 export const metadata = {
   title: "MealMate — Meal & Cost Tracker",
   description:
     "Meal, expense and money tracking for shared living, backed by a real double-entry ledger.",
 };
 
-// eslint-disable-next-line react-refresh/only-export-components
+ 
 export const viewport = {
   width: "device-width",
   initialScale: 1,

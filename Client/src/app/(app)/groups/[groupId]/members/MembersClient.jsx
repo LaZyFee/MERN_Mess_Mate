@@ -19,6 +19,7 @@ import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import { useToast } from "@/components/shared/ToastProvider";
 import { useGroupStore } from "@/lib/store/groupStore";
+import CoMemberDirectory from "./CoMemberDirectory";
 
 const ROLE_OPTIONS = [
   { value: "member", label: "Member" },
@@ -68,7 +69,7 @@ function MemberRow({ m, canEdit, onEdit, onDepart }) {
   );
 }
 
-export default function MembersClient({ initialMembers = [] }) {
+export default function MembersClient({ initialMembers = [], initialDirectory = null }) {
   const { groupId } = useGroup() || {};
   const myRole = useGroupStore((s) => s.myRole);
   const { showToast } = useToast();
@@ -242,9 +243,13 @@ export default function MembersClient({ initialMembers = [] }) {
         onConfirm={confirmDepart}
         title="Remove Member"
         message={`Remove ${departing?.displayName || "this member"} from the group? Their historical data remains.`}
-        confirmLabel="Remove"
-        isLoading={saving}
+        confirmText="Remove"
+        isSubmitting={saving}
       />
+
+      <div className="mt-5">
+        <CoMemberDirectory groupId={groupId} initialMembers={initialDirectory} />
+      </div>
     </div>
   );
 }
