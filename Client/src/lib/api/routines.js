@@ -18,7 +18,7 @@ export const routinesApi = {
   duties: (groupId, filters = {}) => apiClient.get(`${base(groupId)}/duties${qs(filters)}`),
   markDutyDone: (groupId, assignmentId) =>
     apiClient.request(`${base(groupId)}/duties/${assignmentId}/done`, { method: "POST", body: {} }),
-  dutyFairness: (groupId) => apiClient.get(`${base(groupId)}/duties/fairness`),
+  dutyFairness: (groupId, month) => apiClient.get(`${base(groupId)}/duties/fairness${qs({ month })}`),
   swaps: (groupId, payload) => apiClient.request(`${base(groupId)}/swaps`, { method: "POST", body: payload }),
   respondSwap: (groupId, swapId, accept) =>
     apiClient.request(`${base(groupId)}/swaps/${swapId}/respond`, { method: "POST", body: { accept } }),
@@ -26,6 +26,7 @@ export const routinesApi = {
   setMenu: (groupId, payload) => apiClient.request(`${base(groupId)}/menu`, { method: "POST", body: payload }),
   bazarSuggestions: (groupId, weekStart) =>
     apiClient.get(`${base(groupId)}/menu/bazar-suggestions${qs({ weekStart })}`),
+  bazarForecast: (groupId, days = 7) => apiClient.get(`/meals/${groupId}/bazar-forecast${qs({ days })}`),
   notes: (groupId, filters = {}) => apiClient.get(`${base(groupId)}/notes${qs(filters)}`),
   createNote: (groupId, payload) => apiClient.request(`${base(groupId)}/notes`, { method: "POST", body: payload }),
   updateNote: (groupId, noteId, payload) =>
@@ -79,7 +80,7 @@ export const inventoryApi = {
 };
 
 export const pollsApi = {
-  list: (groupId) => apiClient.get(`/polls/groups/${groupId}`),
+  list: (groupId, filters = {}) => apiClient.get(`/polls/groups/${groupId}${qs(filters)}`),
   create: (groupId, payload) => apiClient.request(`/polls/groups/${groupId}`, { method: "POST", body: payload }),
   vote: (groupId, pollId, optionIndex) =>
     apiClient.request(`/polls/groups/${groupId}/${pollId}/vote`, { method: "POST", body: { optionIndex } }),

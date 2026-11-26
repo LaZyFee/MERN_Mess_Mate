@@ -7,6 +7,7 @@ import Card from "@/components/shared/Card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatMonth, formatPoisha } from "@/lib/utils/format";
 import BoardWidget from "./BoardWidget";
+import BazarForecastCard from "./BazarForecastCard";
 
 function MoneyStat({ icon: Icon, label, value, hint }) {
   return (
@@ -88,6 +89,8 @@ export default function GroupOverviewClient({ initialDash, groupId, initialBoard
       </div>
 
       <BoardWidget groupId={groupId} initialBoard={initialBoard} />
+
+      <BazarForecastCard groupId={groupId} />
 
       <Card padding="md" className="min-w-0">
         <div className="flex items-center justify-between gap-2">

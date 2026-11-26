@@ -27,6 +27,8 @@ import { SPLIT_MODES } from "@/lib/utils/money";
 import NotificationsPanel from "./NotificationsPanel";
 import DisputesPanel from "./DisputesPanel";
 import ReconciliationPanel from "./ReconciliationPanel";
+import AssetsPanel from "./AssetsPanel";
+import BudgetsPanel from "./BudgetsPanel";
 
 // ── Invite Code Section ───────────────────────────────────────────────────────
 function InviteSection({ groupId, initialMeta }) {
@@ -299,9 +301,11 @@ export default function GroupMoreClient({ initialInviteMeta = null, initialCateg
       <h2 className="text-base font-bold [color:var(--tp)]">Group Settings</h2>
       {isAdmin && <InviteSection groupId={groupId} initialMeta={initialInviteMeta} />}
       {isAdmin && <CategoriesSection groupId={groupId} initialCategories={initialCategories} />}
+      <BudgetsPanel groupId={groupId} categories={initialCategories} canEdit={isTreasurer} />
       {isManager && <NotificationsPanel groupId={groupId} />}
       <DisputesPanel groupId={groupId} canManage={isManager} />
       {isTreasurer && <ReconciliationPanel groupId={groupId} />}
+      <AssetsPanel groupId={groupId} canManage={isTreasurer} />
       {!isAdmin && (
         <p className="[color:var(--tm)] text-sm">Settings are only available to managers and owners.</p>
       )}

@@ -7,6 +7,7 @@ import Button from "@/components/shared/Button";
 import { useToast } from "@/components/shared/ToastProvider";
 import { useAuthStore } from "@/lib/store/authStore";
 import { authApi } from "@/lib/api/auth";
+import { useT } from "@/lib/i18n/LangProvider";
 
 // 2FA step 
 function TwoFAStep({ challengeToken, onBack }) {
@@ -64,6 +65,7 @@ function TwoFAStep({ challengeToken, onBack }) {
 
 // Main login form
 export default function LoginForm() {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
@@ -119,7 +121,7 @@ export default function LoginForm() {
     <form onSubmit={handleSubmit} noValidate>
       <div className="flex flex-col gap-4">
         <Input
-          label="Email"
+          label={t("auth.login.email")}
           type="email"
           isRequired
           value={form.email}
@@ -130,7 +132,7 @@ export default function LoginForm() {
           inputMode="email"
         />
         <Input
-          label="Password"
+          label={t("auth.login.password")}
           type="password"
           isRequired
           value={form.password}
@@ -144,11 +146,11 @@ export default function LoginForm() {
             href="/forgot-password"
             className="[font-size:0.8125rem] [color:var(--p)] font-medium"
           >
-            Forgot password?
+            {t("auth.login.forgot")}
           </a>
         </div>
         <Button type="submit" variant="primary" isFullWidth isLoading={loading} isDisabled={loading}>
-          Sign In
+          {t("auth.login.submit")}
         </Button>
         <Button
           as="a"
@@ -156,7 +158,7 @@ export default function LoginForm() {
           variant="outline"
           isFullWidth
         >
-          Continue with Google
+          {t("auth.login.google")}
         </Button>
       </div>
     </form>

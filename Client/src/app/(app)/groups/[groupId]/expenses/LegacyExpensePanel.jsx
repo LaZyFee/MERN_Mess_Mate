@@ -23,6 +23,21 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
   const [categoryId, setCategoryId] = useState("");
   const [saving, setSaving] = useState(false);
   const [entryId, setEntryId] = useState("");
+  const [retired, setRetired] = useState(false);
+
+  // D4 sunset: once the backend answers 410 the legacy path is gone for good.
+  const handleRetired = (ex) => {
+    if (ex?.status === 410) {
+      setRetired(true);
+      showToast({
+        status: "warning",
+        title: "Legacy entries were retired",
+        description: "Use the Expense draft tab instead — every new expense goes through the approved workflow.",
+      });
+      return true;
+    }
+    return false;
+  };
 
   const categoryOptions = activeCategories(categories).map((category) => ({
     value: category._id,
@@ -48,7 +63,7 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
       setDescription("");
       onChanged?.();
     } catch (ex) {
-      showToast({ status: "error", title: "Could not save", description: ex?.data?.msg || ex?.message });
+      if (!handleRetired(ex)) showToast({ status: "error", title: "Could not save", description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -63,7 +78,7 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
       setEntryId("");
       onChanged?.();
     } catch (ex) {
-      showToast({ status: "error", title: "Could not delete", description: ex?.data?.msg || ex?.message });
+      if (!handleRetired(ex)) showToast({ status: "error", title: "Could not delete", description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -83,6 +98,12 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
 
       {open && (
         <div className="space-y-3 border-t border-(--bd) p-3">
+          {retired ? (
+            <p className="rounded-lg border border-(--warning) bg-(--warning-bg) p-3 text-xs text-(--ts)">
+              Legacy direct-entry endpoints have passed their sunset date. Create expenses in the <strong>Expense draft</strong> tab — they are reviewed and approved before they reach the ledger.
+            </p>
+          ) : (
+          <>
           <p className="text-[11px] text-(--tm)">
             Legacy entries post directly without approval. Use only to fix pre-ledger data.
           </p>
@@ -136,6 +157,8 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
               Delete
             </Button>
           </div>
+          </>
+          )}
         </div>
       )}
     </div>

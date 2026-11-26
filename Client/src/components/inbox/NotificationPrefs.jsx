@@ -17,6 +17,7 @@ const KNOWN_TYPES = [
   { key: "support.ticket_closed", label: "Support updates" },
   { key: "statement.finalized", label: "Statements finalized" },
   { key: "expense.approved", label: "Expense approvals" },
+  { key: "payment_reminder", label: "Payment reminders (you owe)" },
   { key: "money.confirmed", label: "Money confirmations" },
   { key: "duty.reminder", label: "Duty reminders" },
   { key: "emergency.broadcast", label: "Emergency broadcasts" },

@@ -43,12 +43,13 @@ export function middleware(request) {
 
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: res.cloudinary.com",
-    "connect-src 'self' wss: ws:",
+    "connect-src 'self' wss: ws: https://challenges.cloudflare.com",
     SOCKET_ORIGINS,
     "font-src 'self' data:",
+    "frame-src 'self' https://challenges.cloudflare.com",
     "frame-ancestors 'none'",
   ].join("; ");
 

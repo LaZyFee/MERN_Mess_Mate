@@ -10,6 +10,7 @@ import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
 import Modal from "@/components/modals/Modal";
+import Progress from "@/components/shared/Progress";
 import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -247,11 +248,32 @@ export default function DutiesClient({ groupId, memberships = [] }) {
 
       {fairness && (
         <Card padding="md" header={<h2 className="text-sm font-bold text-(--tp)">Fairness</h2>}>
+          {fairness.fairness && (
+            <p className="mb-2 text-[11px] text-(--tm)">
+              Spread: <strong className="text-(--ts)">{String(fairness.fairness.level || "balanced").replace(/_/g, " ")}</strong>
+              {" · Gini "}
+              <span className="tabular-nums">{Number(fairness.fairness.gini ?? 0).toFixed(2)}</span>
+              {" · "}
+              {fairness.totalUnits ?? 0} weighted units
+            </p>
+          )}
           <ul className="list-none grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {(fairness.members || fairness.rows || []).map((row, index) => (
-              <li key={row.membershipId || index} className="flex items-center justify-between rounded-md bg-(--bgm) px-2 py-1 text-xs">
-                <span className="min-w-0 truncate text-(--ts)">{memberLabel(row)}</span>
-                <span className="shrink-0 font-bold tabular-nums text-(--tp)">{row.count ?? row.duties ?? 0}</span>
+            {(fairness.board || fairness.members || fairness.rows || []).map((row, index) => (
+              <li key={row.membershipId || index} className="rounded-md bg-(--bgm) px-2 py-1 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-(--ts)">{memberLabel(row)}</span>
+                  <span className="shrink-0 font-bold tabular-nums text-(--tp)">
+                    {row.weightedUnits != null ? `${row.weightedUnits} u` : row.count ?? row.duties ?? 0}
+                  </span>
+                </div>
+                {row.sharePct != null && (
+                  <div className="mt-1">
+                    <Progress value={Math.min(100, row.sharePct)} colorScheme={row.balance < 0 ? "warning" : "primary"} size="sm" />
+                    <p className="mt-0.5 text-[10px] text-(--tm)">
+                      {row.sharePct}% of duties (fair share {row.fairSharePct}%)
+                    </p>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

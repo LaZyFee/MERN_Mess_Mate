@@ -12,7 +12,7 @@ import { expensesApi } from "@/lib/api/expenses";
 import ExpenseLineEditor from "./ExpenseLineEditor";
 import { EMPTY_LINE, memberKey, memberName } from "./expenseHelpers";
 
-function emptyDraft() {
+function emptyDraft(myMembershipId = "") {
   const today = dhakaToday();
   return {
     supplierName: "",
@@ -22,7 +22,7 @@ function emptyDraft() {
     isPayable: false,
     receiptReference: "",
     lines: [{ ...EMPTY_LINE, fixedAmounts: {}, weights: {}, usageQuantities: {} }],
-    payerId: "",
+    payerId: myMembershipId, // payers[] is required — default to me
   };
 }
 
@@ -59,11 +59,12 @@ function validate(draft) {
   if (lines.some((line) => line.splitMode === "fixed_amounts" && !line.fixedAmounts.length)) {
     return "Fixed-amount lines need at least one member amount.";
   }
+  if (!draft.payerId) return "Select who paid — the payer is required.";
   return null;
 }
 
-export default function ExpenseDraftForm({ groupId, categories, memberships, onCreated }) {
-  const [draft, setDraft] = useState(emptyDraft);
+export default function ExpenseDraftForm({ groupId, categories, memberships, myMembershipId = "", onCreated }) {
+  const [draft, setDraft] = useState(() => emptyDraft(myMembershipId));
   const [saving, setSaving] = useState(false);
   const [warnings, setWarnings] = useState([]);
   const { showToast } = useToast();
@@ -72,7 +73,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, onC
 
   const update = (patch) => setDraft((current) => ({ ...current, ...patch }));
 
-  const togglePayer = (key) => update({ payerId: draft.payerId === key ? "" : key });
+  const togglePayer = (key) => update({ payerId: key });
 
   const submit = async () => {
     const error = validate(draft);
@@ -90,10 +91,8 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, onC
       isPayable: draft.isPayable,
       receiptReference: draft.receiptReference.trim() || undefined,
       lines,
+      payers: [{ memberId: draft.payerId, amount: total, fundAccountId: null }],
     };
-    if (draft.payerId) {
-      payload.payers = [{ memberId: draft.payerId, amount: total, fundAccountId: null }];
-    }
 
     setSaving(true);
     setWarnings([]);
@@ -101,7 +100,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, onC
       const res = await expensesApi.createDraft(groupId, payload);
       showToast({ status: "success", title: res?.msg || "Expense draft created" });
       setWarnings(res?.duplicateWarnings || []);
-      setDraft(emptyDraft());
+      setDraft(emptyDraft(myMembershipId));
       onCreated?.(res?.expense);
     } catch (ex) {
       const fieldErrors = ex?.data?.errors;
@@ -176,7 +175,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, onC
 
       <div className="rounded-lg border border-(--bd) bg-(--bgm) p-3">
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">
-          <LuTriangleAlert size={13} /> Paid by
+          <LuTriangleAlert size={13} /> Paid by <span className="text-(--danger)">*</span>
         </p>
         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
           {payerOptions.map((option) => (
@@ -190,7 +189,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, onC
           ))}
         </div>
         <p className="mt-2 text-[11px] text-(--tm)">
-          Leave empty to record the payer on approval (treasurer selects the personal pocket).
+          Required. The full amount is recorded against this member's pocket; for payable expenses it becomes a supplier debt.
         </p>
       </div>
 
@@ -208,7 +207,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, onC
       />
 
       <div className="sticky bottom-0 -mx-4 border-t border-(--bd) bg-(--bgs)/95 px-4 py-3 backdrop-blur-sm md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:backdrop-blur-none">
-        <Button size="lg" isFullWidth isLoading={saving} isDisabled={saving} onClick={submit}>
+        <Button size="lg" isFullWidth isLoading={saving} isDisabled={saving || !draft.payerId} onClick={submit}>
           Save draft
         </Button>
       </div>

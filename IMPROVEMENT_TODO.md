@@ -1,5 +1,5 @@
 # MealMate Improvement TODO
-Last Session: S5.D → T14.0
+Last Session: T14.5 → T14.11
 
 > Source: `Server/docs/PROJECT_IMPROVEMENT_RECOMMENDATIONS.md` (PIR). Order = PIR §7 roadmap. **Backend (Server) first, then frontend (Client).**
 > Markers: `[ ]` todo · `[~]` in progress (add what's left) · `[x]` done · `[!]` blocked (reason) · `[-]` deferred (needs measured trigger / human infra)
@@ -77,17 +77,17 @@ Last Session: S5.D → T14.0
 - [x] S5.D Docs sync (API new endpoints + TOC; plan §3 Budget model, §14/§20; PIR §5 ✅; README §2/§15; route count).
 
 ## C Client (start only after S1–S5 for that feature are `[x]`)
-- [ ] T14.0 Read `AGENTS.md` + relevant `node_modules/next/dist/docs/` page once; note in Notes. Re-read `FRONTEND_BUILD_PROMPT.md` §1 + §8.9 once; note in Notes.
-- [ ] T14.1 Sessions page: remove "informational" notice; revoke-one/all now authoritative (needs S1).
-- [ ] T14.2 Expense draft: `payers[]` required (default = me); remove fallback reliance (needs S2.1).
-- [ ] T14.3 Receipts: `scanStatus: pending` placeholder + disabled download (needs S2.4).
-- [ ] T14.4 Turnstile widget on support/appeal forms; `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; CSP allow-list (needs S2.6).
-- [ ] T14.5 Load-more: members, guest meals, disputes (needs S4.2).
-- [ ] T14.6 Load-more: outbox, polls, assets (needs S4.3).
-- [ ] T14.7 Handle legacy `410` in `LegacyExpensePanel` + legacy meal calls: toast + steer to V2 flow (needs S2.3).
-- [ ] T14.8 Admin health panel (`/admin` overview section) (needs S3.4).
-- [ ] T14.9 Group "Activity" tab from `getGroupAuditLog` with action/actor filters; add to GroupShell TABS (existing API).
-- [ ] T14.10 Bazar forecast card on Overview/Board (needs S5.1).
+- [x] T14.0 Read `AGENTS.md` + relevant `node_modules/next/dist/docs/` page once; note in Notes. Re-read `FRONTEND_BUILD_PROMPT.md` §1 + §8.9 once; note in Notes.
+- [x] T14.1 Sessions page: remove "informational" notice; revoke-one/all now authoritative (needs S1).
+- [x] T14.2 Expense draft: `payers[]` required (default = me); remove fallback reliance (needs S2.1).
+- [x] T14.3 Receipts: `scanStatus: pending` placeholder + disabled download (needs S2.4).
+- [x] T14.4 Turnstile widget on support/appeal forms; `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; CSP allow-list (needs S2.6).
+- [x] T14.5 Load-more: members, guest meals, disputes (needs S4.2).
+- [x] T14.6 Load-more: outbox, polls, assets (needs S4.3).
+- [x] T14.7 Handle legacy `410` in `LegacyExpensePanel` + legacy meal calls: toast + steer to V2 flow (needs S2.3).
+- [x] T14.8 Admin health panel (`/admin` overview section) (needs S3.4).
+- [x] T14.9 Group "Activity" tab from `getGroupAuditLog` with action/actor filters; add to GroupShell TABS (existing API).
+- [x] T14.10 Bazar forecast card on Overview/Board (needs S5.1).
 - [ ] T14.11 Budgets panel: per-category variance with `Progress` (needs S5.2).
 - [ ] T14.12 Duty fairness: weighted share display in DutiesClient (needs S5.4).
 - [ ] T14.13 ReconciliationPanel: suggestion list (needs S5.5).

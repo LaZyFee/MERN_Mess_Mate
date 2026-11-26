@@ -18,6 +18,7 @@ import { useToast } from "@/components/shared/ToastProvider";
 import Alert from "@/components/shared/Alert";
 import { groupsApi } from "@/lib/api/groups";
 import { useGroupStore } from "@/lib/store/groupStore";
+import { useT } from "@/lib/i18n/LangProvider";
 
 function GroupCard({ group, onClick }) {
   const memberCount = group.memberCount || group.members?.length || 0;
@@ -55,26 +56,26 @@ function GroupCard({ group, onClick }) {
   );
 }
 
-function EmptyState({ onCreate, onJoin }) {
+function EmptyState({ onCreate, onJoin, t }) {
   return (
     <div
       className="text-center [padding:var(--space-8)_var(--space-4)] flex flex-col items-center gap-4"
     >
       <LuUtensilsCrossed size={56} className="[color:var(--tl)]" />
       <div>
-        <p className="font-bold text-lg [color:var(--tp)]">No groups yet</p>
+        <p className="font-bold text-lg [color:var(--tp)]">{t("home.empty")}</p>
         <p className="[color:var(--tm)] text-sm mt-1">
-          Create a mess group or join one with an invite code.
+          {t("home.create")} / {t("home.join")}
         </p>
       </div>
       <div
         className="flex gap-3 flex-wrap justify-center"
       >
         <Button leftIcon={<LuPlus size={16} />} onClick={onCreate}>
-          Create Group
+          {t("home.create")}
         </Button>
         <Button variant="outline" leftIcon={<LuLogIn size={16} />} onClick={onJoin}>
-          Join with Code
+          {t("home.join")}
         </Button>
       </div>
     </div>
@@ -86,6 +87,7 @@ function EmptyState({ onCreate, onJoin }) {
  * Receives initialGroups from SSR page; uses browserApi for refresh.
  */
 export default function HomeClient({ initialGroups }) {
+  const t = useT();
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -122,7 +124,7 @@ export default function HomeClient({ initialGroups }) {
       <div
         className="flex items-center justify-between mb-5 flex-wrap gap-3"
       >
-        <h2 className="text-lg font-extrabold [color:var(--tp)]">My Groups</h2>
+        <h2 className="text-lg font-extrabold [color:var(--tp)]">{t("home.title")}</h2>
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" leftIcon={<LuRefreshCw size={15} />} onClick={refresh} isLoading={refreshing}>
             Refresh
@@ -146,6 +148,7 @@ export default function HomeClient({ initialGroups }) {
         </div>
       ) : groups.length === 0 ? (
         <EmptyState
+          t={t}
           onCreate={() => router.push("/groups/create")}
           onJoin={() => router.push("/join")}
         />

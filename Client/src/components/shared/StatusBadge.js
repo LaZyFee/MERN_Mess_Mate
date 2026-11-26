@@ -131,13 +131,21 @@ const STATUS_CONFIGS = {
   resolved: { variant: "success", label: "Resolved", icon: FiCheckCircle },
   closed: { variant: "secondary", label: "Closed", icon: FiXCircle },
  },
+
+ // MealMate — deposit asset lifecycle
+ asset: {
+  active: { variant: "success", label: "Active", icon: FiCheckCircle },
+  partially_refunded: { variant: "warning", label: "Partly refunded", icon: FiClock },
+  fully_refunded: { variant: "secondary", label: "Fully refunded", icon: FiCheckCircle },
+  written_off: { variant: "danger", label: "Written off", icon: FiXCircle },
+ },
 };
 
 // UNIFIED STATUS BADGE COMPONENT
 
 export const StatusBadge = ({
  status,
- type = "driver", // 'driver' | 'document' | 'boolean' | 'online' | 'availability' | 'payment' | 'booking' | 'expense' | 'money' | 'period' | 'statement_item' | 'outbox' | 'ticket'
+ type = "driver", // 'driver' | 'document' | 'boolean' | 'online' | 'availability' | 'payment' | 'booking' | 'expense' | 'money' | 'period' | 'statement_item' | 'outbox' | 'ticket' | 'asset'
  config: customConfig,
  size = "sm",
  colorScheme = "subtle",

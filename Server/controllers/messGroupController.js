@@ -488,6 +488,8 @@ export const getGroupAuditLog = async (req, res, next) => {
         }
 
         const filter = { groupId };
+        if (req.query.action) filter.action = String(req.query.action);
+        if (req.query.actorId && /^[0-9a-fA-F]{24}$/.test(String(req.query.actorId))) filter.actorId = String(req.query.actorId);
         const sort = { createdAt: -1 };
         const l = Math.min(parseInt(limit, 10) || 50, 100);
 

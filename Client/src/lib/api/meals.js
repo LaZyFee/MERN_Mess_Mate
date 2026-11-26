@@ -7,10 +7,10 @@ export const mealsApi = {
   getMonth: (groupId, month) =>
     apiClient.get(`/meals/${groupId}?month=${encodeURIComponent(month)}`),
   createGuest: (groupId, body) => apiClient.post(`/meals/${groupId}/guests`, body),
-  getGuests: (groupId, from, to) =>
-    apiClient.get(
-      `/meals/${groupId}/guests?${new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString()}`,
-    ),
+  getGuests: (groupId, from, to, cursor) => {
+    const params = new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}), ...(cursor ? { cursor, limit: "50" } : {}) });
+    return apiClient.get(`/meals/${groupId}/guests?${params.toString()}`);
+  },
   previewBulk: (groupId, entries) =>
     apiClient.post(`/meals/${groupId}/bulk/preview`, { entries }),
   applyBulk: (groupId, entries) =>

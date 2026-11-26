@@ -5,7 +5,7 @@ import apiClient from "@/lib/api/browserApi";
 export const notificationsApi = {
   outbox: (groupId, filters = {}) => {
     const params = new URLSearchParams();
-    ["statementId", "state"].forEach((key) => {
+    ["statementId", "state", "cursor", "limit"].forEach((key) => {
       if (filters[key]) params.set(key, filters[key]);
     });
     const qs = params.toString();
@@ -26,8 +26,13 @@ export const notificationsApi = {
 };
 
 export const disputesApi = {
-  list: (groupId, status) =>
-    apiClient.get(`/disputes/groups/${groupId}/disputes${status ? `?status=${status}` : ""}`),
+  list: (groupId, status, cursor) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (cursor) params.set("cursor", cursor);
+    const qs = params.toString();
+    return apiClient.get(`/disputes/groups/${groupId}/disputes${qs ? `?${qs}` : ""}`);
+  },
   open: (groupId, payload) =>
     apiClient.request(`/disputes/groups/${groupId}/disputes`, { method: "POST", body: payload }),
   respond: (groupId, disputeId, text) =>
@@ -45,6 +50,8 @@ export const disputesApi = {
 export const reconciliationApi = {
   list: (groupId) => apiClient.get(`/reconciliation/groups/${groupId}/reconciliations`),
   equation: (groupId) => apiClient.get(`/reconciliation/groups/${groupId}/reconciliations/equation`),
+  suggestions: (groupId, month) =>
+    apiClient.get(`/reconciliation/groups/${groupId}/reconciliations/suggestions${month ? `?month=${month}` : ""}`),
   create: (groupId, payload) =>
     apiClient.request(`/reconciliation/groups/${groupId}/reconciliations`, { method: "POST", body: payload }),
   resolve: (groupId, recId, payload) =>

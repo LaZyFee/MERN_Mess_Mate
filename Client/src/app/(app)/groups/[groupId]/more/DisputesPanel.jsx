@@ -143,6 +143,8 @@ export default function DisputesPanel({ groupId, canManage }) {
   const [disputes, setDisputes] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [moreCursor, setMoreCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [status, setStatus] = useState("");
   const [creating, setCreating] = useState(false);
   const [targetType, setTargetType] = useState("expense");
@@ -155,6 +157,7 @@ export default function DisputesPanel({ groupId, canManage }) {
     try {
       const data = await disputesApi.list(groupId, status);
       setDisputes(data?.disputes || []);
+      setMoreCursor(data?.nextCursor || null);
       setLoaded(true);
     } catch (ex) {
       showToast({ status: "error", title: "Could not load disputes", description: ex?.message });
@@ -162,6 +165,24 @@ export default function DisputesPanel({ groupId, canManage }) {
       setLoading(false);
     }
   }, [groupId, status, showToast]);
+
+  const loadMore = async () => {
+    if (!moreCursor) return;
+    setLoadingMore(true);
+    try {
+      const data = await disputesApi.list(groupId, status, moreCursor);
+      const next = data?.disputes || [];
+      setDisputes((current) => {
+        const seen = new Set(current.map((d) => d._id));
+        return [...current, ...next.filter((d) => !seen.has(d._id))];
+      });
+      setMoreCursor(data?.nextCursor || null);
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not load more disputes", description: ex?.message });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const create = async () => {
     if (!/^[0-9a-fA-F]{24}$/.test(targetId) || !reason.trim()) {
@@ -242,6 +263,11 @@ export default function DisputesPanel({ groupId, canManage }) {
               onChanged={load}
             />
           ))
+        )}
+        {!loading && moreCursor && (
+          <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
+            Load more disputes
+          </Button>
         )}
       </div>
     </Card>

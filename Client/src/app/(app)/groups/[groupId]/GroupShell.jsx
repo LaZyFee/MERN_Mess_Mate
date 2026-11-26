@@ -15,12 +15,15 @@ import {
   LuCalendarCheck,
   LuUsers,
   LuMenu,
+  LuHistory,
   LuArrowLeft,
 } from "react-icons/lu";
 import { useGroupStore } from "@/lib/store/groupStore";
 import { useAuthStore } from "@/lib/store/authStore";
 import { groupsApi } from "@/lib/api/groups";
 import ThemeToggle from "@/components/shared/ThemeToggle";
+import LanguageToggle from "@/components/shared/LanguageToggle";
+import { useT, useLang } from "@/lib/i18n/LangProvider";
 
 export const GroupContext = createContext(null);
 export const useGroup = () => useContext(GroupContext);
@@ -34,10 +37,12 @@ const TABS = [
   { key: "board", label: "Board", icon: LuCalendarCheck, path: "/board" },
   { key: "charts", label: "Charts", icon: LuLayoutDashboard, path: "/charts" },
   { key: "members", label: "Members", icon: LuUsers, path: "/members" },
+  { key: "activity", label: "Activity", icon: LuHistory, path: "/activity" },
   { key: "more", label: "More", icon: LuMenu, path: "/more" },
 ];
 
 export default function GroupShell({ initialGroup, groupId, children }) {
+  const { t } = useLang();
   const router = useRouter();
   const pathname = usePathname();
   const setGroup = useGroupStore((s) => s.setGroup);
@@ -111,6 +116,7 @@ export default function GroupShell({ initialGroup, groupId, children }) {
             </div>
           </div>
           <ThemeToggle />
+          <LanguageToggle />
         </div>
 
         {/* Tab nav — horizontally scrollable, no horizontal page scroll */}
@@ -120,6 +126,8 @@ export default function GroupShell({ initialGroup, groupId, children }) {
           {TABS.map(({ key, label, icon: Icon, path }) => {
             const href = base + path;
             const isActive = activeTab === key;
+            const translated = t(`group.tab.${key}`);
+            const tabLabel = translated === `group.tab.${key}` ? label : translated;
             return (
               <a
                 key={key}
@@ -127,7 +135,7 @@ export default function GroupShell({ initialGroup, groupId, children }) {
                 className={`flex flex-col items-center gap-0.5 p-3 whitespace-nowrap text-xs ${isActive ? "font-bold" : "font-medium"} ${isActive ? "[color:var(--p)]" : "[color:var(--tm)]"} ${isActive ? "[border-bottom:2px_solid_var(--p)]" : "[border-bottom:2px_solid_transparent]"} [text-decoration:none] [transition:var(--transition)] [min-width:60px] [min-height:48px] justify-center`}
               >
                 <Icon size={18} />
-                <span className="flex-1">{label}</span>
+                <span className="flex-1">{tabLabel}</span>
               </a>
             );
           })}

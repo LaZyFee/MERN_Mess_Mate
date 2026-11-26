@@ -33,6 +33,13 @@ export const listDisputes = async (req, res, next) => {
                 .sort({ createdAt: -1 }).lean();
             return res.json({ disputes, nextCursor: null, hasMore: false });
         }
+        // optional pagination; plain GET returns the full list (back-compat, S4.2)
+        if (!q.cursor && !q.limit) {
+            const disputes = await Dispute.find(filter)
+                .populate('raisedBy', MEMBER_VISIBLE_FIELDS)
+                .sort({ createdAt: -1 }).lean();
+            return res.json({ disputes, nextCursor: null, hasMore: false });
+        }
         const page = await paginateQuery({
             model: Dispute, filter,
             cursor: q.cursor || null, limit: q.limit || 50,

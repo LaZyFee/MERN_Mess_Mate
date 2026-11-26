@@ -22,6 +22,7 @@ export const adminApi = {
   audit: (filters = {}) => apiClient.get(`/admin/audit${qs(filters)}`),
   users: (filters = {}) => apiClient.get(`/admin/users${qs(filters)}`),
   user: (userId) => apiClient.get(`/admin/users/${userId}`),
+  health: () => apiClient.get("/admin/health"),
   updateUser: (userId, payload) =>
     apiClient.request(`/admin/users/${userId}`, { method: "PATCH", body: payload }),
   groups: (filters = {}) => apiClient.get(`/admin/groups${qs(filters)}`),

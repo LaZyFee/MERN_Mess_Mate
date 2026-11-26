@@ -244,6 +244,22 @@ class APIClient {
         throw error;
       }
 
+      // 410 Gone — a legacy endpoint passed its sunset date (D4). Surface it once
+      // per session so the user is steered to the V2 flow instead of retrying.
+      if (response.status === 410) {
+        const error = {
+          status: 410,
+          code: "LEGACY_RETIRED",
+          message: data?.msg || "This older feature has been retired. Use the new workflow instead.",
+          data,
+        };
+        if (typeof window !== "undefined" && !window.__mmLegacy410Shown) {
+          window.__mmLegacy410Shown = true;
+          window.dispatchEvent(new CustomEvent("mealmate:legacy-retired", { detail: error }));
+        }
+        throw error;
+      }
+
       const error = {
         status: response.status,
         message: data?.message || "Request failed",

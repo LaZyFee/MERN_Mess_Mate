@@ -76,6 +76,8 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
 
   const [members, setMembers] = useState(initialMembers);
   const [loading, setLoading] = useState(false);
+  const [moreCursor, setMoreCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [editing, setEditing] = useState(null);
   const [departing, setDeparting] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -88,12 +90,31 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
     try {
       const data = await groupsApi.getMemberships(groupId);
       setMembers(data?.memberships || data || []);
+      setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
       showToast({ status: "error", title: "Could not load members", description: ex?.message });
     } finally {
       setLoading(false);
     }
   }, [groupId, showToast]);
+
+  const loadMore = async () => {
+    if (!groupId || !moreCursor) return;
+    setLoadingMore(true);
+    try {
+      const data = await groupsApi.getMemberships(groupId, moreCursor);
+      const next = data?.memberships || [];
+      setMembers((current) => {
+        const seen = new Set(current.map((m) => m._id));
+        return [...current, ...next.filter((m) => !seen.has(m._id))];
+      });
+      setMoreCursor(data?.nextCursor || null);
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not load more members", description: ex?.message });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // Edit form state
   const [editRole, setEditRole] = useState("");
@@ -191,6 +212,11 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
               onDepart={setDeparting}
             />
           ))}
+          {moreCursor && (
+            <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
+              Load more members
+            </Button>
+          )}
         </div>
       )}
 

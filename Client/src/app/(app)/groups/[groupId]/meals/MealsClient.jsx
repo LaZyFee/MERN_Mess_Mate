@@ -187,8 +187,10 @@ export default function MealsClient({
       setToast({ type: "success", message: "Meal entry deleted" });
     } catch (error) {
       setToast({
-        type: "error",
-        message: error?.message || "Could not delete meal entry",
+        type: error?.status === 410 ? "warning" : "error",
+        message: error?.status === 410
+          ? "This entry can no longer be deleted — use the current meal grid to adjust today's meals instead."
+          : error?.message || "Could not delete meal entry",
       });
     } finally {
       setDeleting(false);

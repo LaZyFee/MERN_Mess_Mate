@@ -7,10 +7,18 @@ const bdTaka = new Intl.NumberFormat("en-BD", {
   maximumFractionDigits: 2,
 });
 
-/** integer poisha → "৳ 1,234.56" */
-export function formatPoisha(poisha) {
-  if (poisha == null || Number.isNaN(Number(poisha))) return bdTaka.format(0);
-  return bdTaka.format(Number(poisha) / 100);
+const BN_DIGITS = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
+
+/** Latin digits → Bengali digits (locale-aware number rendering, T14.17a). */
+export function toBengaliDigits(value) {
+  return String(value).replace(/\d/g, (d) => BN_DIGITS[Number(d)]);
+}
+
+/** integer poisha → "৳ ১,২৩৪.৫৬" when lang is 'bn', else "৳1,234.56". */
+export function formatPoisha(poisha, lang = "en") {
+  if (poisha == null || Number.isNaN(Number(poisha))) return lang === "bn" ? "৳ ০.০০" : bdTaka.format(0);
+  const formatted = bdTaka.format(Number(poisha) / 100);
+  return lang === "bn" ? toBengaliDigits(formatted) : formatted;
 }
 
 /** plain number string for amount display without symbol */

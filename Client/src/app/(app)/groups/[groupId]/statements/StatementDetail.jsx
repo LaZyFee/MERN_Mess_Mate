@@ -1,8 +1,11 @@
 "use client";
 
-import { LuChevronDown } from "react-icons/lu";
+import { useState } from "react";
+import { LuChevronDown, LuReceiptText } from "react-icons/lu";
+import Button from "@/components/shared/Button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDay, formatPoisha } from "@/lib/utils/format";
+import ExplainBillDrawer from "./ExplainBillDrawer";
 
 const COLUMNS = [
   { key: "mealUnits", label: "Meals", numeric: true },
@@ -26,7 +29,8 @@ function closingTone(item) {
   return "text-(--p)";
 }
 
-export default function StatementDetail({ statement, versions = [], activeVersionId, onSelectVersion }) {
+export default function StatementDetail({ statement, versions = [], activeVersionId, onSelectVersion, groupId }) {
+  const [explain, setExplain] = useState(null); // { membershipId, displayName }
   if (!statement) {
     return (
       <p className="rounded-lg border border-(--bd) bg-(--bgs) p-4 text-sm text-(--tm)">
@@ -96,6 +100,7 @@ export default function StatementDetail({ statement, versions = [], activeVersio
                 </th>
               ))}
               <th className="px-3 py-2 text-right">Status</th>
+              <th className="px-3 py-2 text-right">Bill</th>
             </tr>
           </thead>
           <tbody>
@@ -115,6 +120,11 @@ export default function StatementDetail({ statement, versions = [], activeVersio
                 ))}
                 <td className="px-3 py-2 text-right">
                   <StatusBadge type="statement_item" status={item.status} />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <Button size="sm" variant="ghost" leftIcon={<LuReceiptText size={12} />} onClick={() => setExplain(item)}>
+                    Explain
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -143,6 +153,13 @@ export default function StatementDetail({ statement, versions = [], activeVersio
                 <span className="text-(--tm)">Status</span>
                 <StatusBadge type="statement_item" status={item.status} />
               </div>
+              <button
+                type="button"
+                onClick={() => setExplain(item)}
+                className="col-span-2 mt-1 flex min-h-11 items-center justify-center gap-1 rounded-md border border-(--bd) text-xs font-semibold text-(--p)"
+              >
+                <LuReceiptText size={13} /> Explain my bill
+              </button>
             </div>
           </details>
         ))}
@@ -163,6 +180,16 @@ export default function StatementDetail({ statement, versions = [], activeVersio
         Finalized {statement.finalizedAt ? formatDay(String(statement.finalizedAt).slice(0, 10)) : "—"} · version{" "}
         {statement.version}
       </p>
+
+      {explain && (
+        <ExplainBillDrawer
+          groupId={groupId}
+          month={statement.month}
+          membershipId={explain.membershipId}
+          displayName={explain.displayName}
+          onClose={() => setExplain(null)}
+        />
+      )}
     </div>
   );
 }

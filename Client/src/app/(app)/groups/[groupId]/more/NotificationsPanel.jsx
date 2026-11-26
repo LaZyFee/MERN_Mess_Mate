@@ -25,6 +25,8 @@ export default function NotificationsPanel({ groupId }) {
   const [state, setState] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [moreCursor, setMoreCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [links, setLinks] = useState({});
   const [busy, setBusy] = useState(null);
 
@@ -33,12 +35,31 @@ export default function NotificationsPanel({ groupId }) {
     try {
       const data = await notificationsApi.outbox(groupId, { state });
       setMessages(data?.messages || []);
+      setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
       showToast({ status: "error", title: "Could not load outbox", description: ex?.message });
     } finally {
       setLoading(false);
     }
   }, [groupId, state, showToast]);
+
+  const loadMore = async () => {
+    if (!moreCursor) return;
+    setLoadingMore(true);
+    try {
+      const data = await notificationsApi.outbox(groupId, { state, cursor: moreCursor });
+      const next = data?.messages || [];
+      setMessages((current) => {
+        const seen = new Set(current.map((m) => m._id));
+        return [...current, ...next.filter((m) => !seen.has(m._id))];
+      });
+      setMoreCursor(data?.nextCursor || null);
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not load more messages", description: ex?.message });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -136,6 +157,11 @@ export default function NotificationsPanel({ groupId }) {
               </div>
             </div>
           ))
+        )}
+        {!loading && moreCursor && (
+          <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
+            Load more messages
+          </Button>
         )}
       </div>
     </Card>

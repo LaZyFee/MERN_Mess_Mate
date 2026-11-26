@@ -28,6 +28,7 @@ export default function ReconciliationPanel({ groupId }) {
   const [funds, setFunds] = useState([]);
   const [reconciliations, setReconciliations] = useState([]);
   const [equation, setEquation] = useState(null);
+  const [suggestions, setSuggestions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [accountId, setAccountId] = useState("");
   const [asOf, setAsOf] = useState("");
@@ -38,14 +39,16 @@ export default function ReconciliationPanel({ groupId }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [fundRes, recRes, eqRes] = await Promise.all([
+      const [fundRes, recRes, eqRes, sugRes] = await Promise.all([
         moneyApi.funds(groupId).catch(() => null),
         reconciliationApi.list(groupId).catch(() => null),
         reconciliationApi.equation(groupId).catch(() => null),
+        reconciliationApi.suggestions(groupId).catch(() => null),
       ]);
       setFunds(fundRes?.funds || []);
       setReconciliations(recRes?.reconciliations || []);
       setEquation(eqRes || null);
+      setSuggestions(sugRes || null);
     } finally {
       setLoading(false);
     }
@@ -121,6 +124,39 @@ export default function ReconciliationPanel({ groupId }) {
           <p className="mt-0.5 text-[11px] text-(--tm)">
             Debits {formatPoisha(equation.totalDebits)} · Credits {formatPoisha(equation.totalCredits)}
           </p>
+        </div>
+      )}
+
+      {suggestions && (
+        <div className="mt-3 rounded-lg border border-(--bd) bg-(--bgs) p-3">
+          <p className="mb-1 flex items-center justify-between gap-2 text-xs font-bold text-(--ts)">
+            <span>Suggested checks</span>
+            {suggestions.summary && (
+              <span className="text-[10px] font-semibold text-(--tm)">
+                {suggestions.summary.total} item(s)
+                {suggestions.summary.atRiskPoisha > 0 ? ` · ${formatPoisha(suggestions.summary.atRiskPoisha)} at risk` : ""}
+              </span>
+            )}
+          </p>
+          {(suggestions.suggestions || []).length === 0 ? (
+            <p className="text-[11px] text-(--tm)">Nothing looks off — no unconfirmed payments, underpaid bills or missing receipts.</p>
+          ) : (
+            <ul className="space-y-1">
+              {(suggestions.suggestions || []).slice(0, 10).map((item, index) => (
+                <li
+                  key={`${item.kind}-${item.expenseId || item.transactionId || index}`}
+                  className="rounded-md border-l-2 border-(--bd) bg-(--bgm) px-2 py-1"
+                >
+                  <p className="text-[11px] font-semibold text-(--ts)">{item.title}</p>
+                  <p className="text-[10px] text-(--tm)">
+                    {item.detail}
+                    {item.amountPoisha ? ` · ${formatPoisha(item.amountPoisha)}` : ""}
+                    {item.action ? ` · ${item.action}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

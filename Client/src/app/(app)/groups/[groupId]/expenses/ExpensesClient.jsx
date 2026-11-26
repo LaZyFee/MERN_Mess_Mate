@@ -6,6 +6,7 @@ import {
   LuPlus,
   LuReceipt,
   LuRefreshCw,
+  LuFileSpreadsheet,
   LuX,
 } from "react-icons/lu";
 import Button from "@/components/shared/Button";
@@ -21,6 +22,7 @@ import { expensesApi } from "@/lib/api/expenses";
 import ExpenseCard from "./ExpenseCard";
 import ExpenseDraftForm from "./ExpenseDraftForm";
 import LegacyExpensePanel from "./LegacyExpensePanel";
+import ExpenseImportWizard from "./ExpenseImportWizard";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -65,6 +67,7 @@ export default function ExpensesClient({
   const [payable, setPayable] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const filters = useMemo(
     () => ({ status, costPeriod, payable: payable === "true" ? true : "", limit: 30 }),
@@ -218,16 +221,23 @@ export default function ExpensesClient({
                 >
                   Refresh
                 </Button>
-                {hasMore && (
-                  <Button
-                    variant="outline"
-                    size="md"
-                    isLoading={loadingMore}
-                    onClick={() => load(false)}
-                  >
-                    Load more
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {canTreasurer && (
+                    <Button variant="outline" size="sm" leftIcon={<LuFileSpreadsheet size={13} />} onClick={() => setImportOpen(true)}>
+                      Import
+                    </Button>
+                  )}
+                  {hasMore && (
+                    <Button
+                      variant="outline"
+                      size="md"
+                      isLoading={loadingMore}
+                      onClick={() => load(false)}
+                    >
+                      Load more
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </TabPanel>
@@ -239,6 +249,7 @@ export default function ExpensesClient({
                 groupId={groupId}
                 categories={initialCategories}
                 memberships={initialMemberships}
+                myMembershipId={myMembership?._id || ""}
                 onCreated={afterCreate}
               />
             </Card>
@@ -255,6 +266,13 @@ export default function ExpensesClient({
           )}
         </TabPanels>
       </Tabs>
+
+      <ExpenseImportWizard
+        isOpen={importOpen}
+        onClose={() => setImportOpen(false)}
+        groupId={groupId}
+        onImported={() => load(true)}
+      />
     </div>
   );
 }

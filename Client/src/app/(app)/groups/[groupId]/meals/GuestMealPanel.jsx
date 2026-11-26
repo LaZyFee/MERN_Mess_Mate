@@ -33,6 +33,8 @@ export default function GuestMealPanel({
 }) {
   const [guests, setGuests] = useState(initialGuests ?? []);
   const [saving, setSaving] = useState(false);
+  const [moreCursor, setMoreCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [toast, setToast] = useState(null);
   const [form, setForm] = useState({
     guestName: "",
@@ -65,6 +67,31 @@ export default function GuestMealPanel({
     const to = `${monthValue}-${String(last.getDate()).padStart(2, "0")}`;
     const data = await mealsApi.getGuests(groupId, from, to);
     setGuests(Array.isArray(data) ? data : data?.guests || []);
+    setMoreCursor(Array.isArray(data) ? null : data?.nextCursor || null);
+  };
+
+  const monthBounds = (monthValue) => {
+    const { last } = monthRange(monthValue);
+    return { from: `${monthValue}-01`, to: `${monthValue}-${String(last.getDate()).padStart(2, "0")}` };
+  };
+
+  const loadMore = async () => {
+    if (!moreCursor) return;
+    setLoadingMore(true);
+    try {
+      const { from, to } = monthBounds(month);
+      const data = await mealsApi.getGuests(groupId, from, to, moreCursor);
+      const next = data?.guests || [];
+      setGuests((current) => {
+        const seen = new Set(current.map((g) => g._id));
+        return [...current, ...next.filter((g) => !seen.has(g._id))];
+      });
+      setMoreCursor(data?.nextCursor || null);
+    } catch (ex) {
+      setToast({ status: "error", title: "Could not load more guest meals", description: ex?.message });
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   const submit = async () => {
@@ -207,6 +234,11 @@ export default function GuestMealPanel({
                 </span>
               </div>
             ))}
+            {moreCursor && (
+              <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
+                Load more guest meals
+              </Button>
+            )}
           </div>
         )}
       </Card>

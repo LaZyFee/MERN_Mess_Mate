@@ -15,6 +15,7 @@ import {
   LuEarth,
 } from "react-icons/lu";
 import ThemeToggle from "@/components/shared/ThemeToggle";
+import LanguageToggle from "@/components/shared/LanguageToggle";
 import InboxBell from "@/components/inbox/InboxBell";
 
 const NAV = [
@@ -67,6 +68,7 @@ export default function AppChrome({ children }) {
           <div className="flex items-center gap-1">
             <InboxBell />
             <ThemeToggle />
+            <LanguageToggle />
           </div>
         </div>
       </header>
@@ -75,6 +77,7 @@ export default function AppChrome({ children }) {
         <div className="sticky top-0 z-30 flex h-12 items-center justify-end gap-1 border-b border-(--bd) bg-(--bgs)/95 px-2 backdrop-blur-sm">
           <InboxBell />
           <ThemeToggle />
+          <LanguageToggle />
         </div>
       </div>
 

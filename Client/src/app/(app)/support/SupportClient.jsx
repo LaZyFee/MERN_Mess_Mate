@@ -14,6 +14,7 @@ import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import Textarea from "@/components/shared/Textarea";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import TurnstileWidget, { TURNSTILE_SITE_KEY } from "@/components/shared/TurnstileWidget";
 import { useToast } from "@/components/shared/ToastProvider";
 import { supportApi } from "@/lib/api/platform";
 import { formatDay } from "@/lib/utils/format";
@@ -40,6 +41,7 @@ const STATUS_FILTERS = [
 function NewTicketModal({ isOpen, onClose, groups, onCreated }) {
   const { showToast } = useToast();
   const [form, setForm] = useState({ category: "other", subject: "", body: "", groupId: "", attachContext: false });
+  const [captchaToken, setCaptchaToken] = useState("");
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -55,9 +57,11 @@ function NewTicketModal({ isOpen, onClose, groups, onCreated }) {
         body: form.body.trim(),
         groupId: form.groupId || undefined,
         attachContext: form.attachContext && Boolean(form.groupId),
+        captchaToken: captchaToken || undefined,
       });
       showToast({ status: "success", title: `Ticket ${res?.ticket?.ticketNo || ""} created` });
       setForm({ category: "other", subject: "", body: "", groupId: "", attachContext: false });
+      setCaptchaToken("");
       onCreated?.();
       onClose();
     } catch (ex) {
@@ -75,7 +79,7 @@ function NewTicketModal({ isOpen, onClose, groups, onCreated }) {
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} isDisabled={saving}>Cancel</Button>
-          <Button onClick={submit} isLoading={saving} isDisabled={saving}>Create ticket</Button>
+          <Button onClick={submit} isLoading={saving} isDisabled={saving || (Boolean(TURNSTILE_SITE_KEY) && !captchaToken)}>Create ticket</Button>
         </div>
       }
     >
@@ -83,6 +87,7 @@ function NewTicketModal({ isOpen, onClose, groups, onCreated }) {
         <Select size="lg" label="Category" options={TICKET_CATEGORIES} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} />
         <Input size="lg" label="Subject" isRequired value={form.subject} maxLength={120} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} />
         <Textarea label="What happened?" rows={5} value={form.body} maxLength={2000} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} />
+        <TurnstileWidget onToken={setCaptchaToken} isRequired={Boolean(TURNSTILE_SITE_KEY)} />
         {groups.length > 0 && (
           <>
             <Select

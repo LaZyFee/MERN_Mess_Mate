@@ -13,7 +13,9 @@ export const listMemberships = async (req, res, next) => {
     try {
         const { groupId } = req.params;
         const q = req.validated?.query || {};
-        if (q.all === 'true') {
+        // no cursor/limit ⇒ return every membership (SSR screens and clients that
+        // render the whole roster keep working); paginate only when asked (S4.2)
+        if (q.all === 'true' || (!q.cursor && !q.limit)) {
             const rows = await Membership.find({ groupId }).sort({ startDate: -1 }).lean();
             const active = rows.filter(m => !m.endDate || new Date(m.endDate) > new Date());
             return res.json({ memberships: rows, active, hasMore: false, nextCursor: null });

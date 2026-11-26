@@ -51,7 +51,7 @@ export default function SessionsPanel({ initialSessions = [] }) {
     try {
       await authApi.revokeSession(familyId);
       setSessions((s) => s.filter((x) => x.familyId !== familyId));
-      showToast({ status: "success", title: "Session revoked" });
+      showToast({ status: "success", title: "Session revoked", description: "That device is signed out now." });
     } catch (ex) {
       showToast({ status: "error", title: "Error", description: ex?.message });
     } finally {
@@ -65,7 +65,7 @@ export default function SessionsPanel({ initialSessions = [] }) {
     try {
       await authApi.revokeAllSessions();
       setSessions([]);
-      showToast({ status: "success", title: "All other sessions revoked" });
+      showToast({ status: "success", title: "All other sessions revoked", description: "Those devices are signed out now." });
     } catch (ex) {
       showToast({ status: "error", title: "Error", description: ex?.message });
     } finally {
@@ -76,7 +76,7 @@ export default function SessionsPanel({ initialSessions = [] }) {
   return (
     <div>
       <p className="mb-3 rounded-lg border border-(--bd) bg-(--bgm) px-3 py-2 text-xs text-(--tm)">
-        Session coverage is grouped by device family. New-device history is hidden until a user-scoped device endpoint is available.
+        Revoking a session signs that device out immediately — its refresh token stops working.
       </p>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-base font-bold [color:var(--tp)]">Active Sessions</h2>
@@ -143,7 +143,7 @@ export default function SessionsPanel({ initialSessions = [] }) {
         onClose={() => setConfirmAll(false)}
         onConfirm={revokeAll}
         title="Revoke All Other Sessions"
-        message="This will log you out from all other devices. Your current session will stay active."
+        message="This signs out every other device immediately. Your current session stays active."
         confirmLabel="Revoke All"
       />
     </div>

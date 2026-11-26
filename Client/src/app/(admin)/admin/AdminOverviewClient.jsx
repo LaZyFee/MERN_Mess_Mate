@@ -9,6 +9,7 @@ import dynamic from "next/dynamic";
 import { LuUsers, LuBoxes, LuUserCheck, LuFileText, LuActivity, LuShieldCheck } from "react-icons/lu";
 import Card from "@/components/shared/Card";
 import Skeleton from "@/components/shared/Skeleton";
+import AdminHealthPanel from "./AdminHealthPanel";
 
 const ChartCanvas = dynamic(() => import("@/components/charts/ChartCanvas"), {
   ssr: false,
@@ -103,6 +104,8 @@ export default function AdminOverviewClient({ initialOverview, initialTraffic })
           <ChartCanvas type="line" labels={labels} datasets={datasets} palette={palette} />
         )}
       </Card>
+
+      <AdminHealthPanel />
     </div>
   );
 }

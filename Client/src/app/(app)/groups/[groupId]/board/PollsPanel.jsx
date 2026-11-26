@@ -132,6 +132,8 @@ export default function PollsPanel({ groupId, initialPolls = [], canManage = fal
   const { showToast } = useToast();
   const [polls, setPolls] = useState(initialPolls || []);
   const [loading, setLoading] = useState(false);
+  const [moreCursor, setMoreCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
@@ -142,12 +144,31 @@ export default function PollsPanel({ groupId, initialPolls = [], canManage = fal
     try {
       const data = await pollsApi.list(groupId);
       setPolls(data?.polls || []);
+      setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
       showToast({ status: "error", title: "Could not load polls", description: ex?.data?.msg || ex?.message });
     } finally {
       setLoading(false);
     }
   }, [groupId, showToast]);
+
+  const loadMore = async () => {
+    if (!moreCursor) return;
+    setLoadingMore(true);
+    try {
+      const data = await pollsApi.list(groupId, { cursor: moreCursor });
+      const next = data?.polls || [];
+      setPolls((current) => {
+        const seen = new Set(current.map((p) => p._id));
+        return [...current, ...next.filter((p) => !seen.has(p._id))];
+      });
+      setMoreCursor(data?.nextCursor || null);
+    } catch (ex) {
+      showToast({ status: "error", title: "Could not load more polls", description: ex?.data?.msg || ex?.message });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const create = async () => {
     const cleaned = options.map((option) => option.trim()).filter(Boolean);
@@ -196,6 +217,11 @@ export default function PollsPanel({ groupId, initialPolls = [], canManage = fal
           {polls.map((poll) => (
             <PollCard key={poll._id} groupId={groupId} poll={poll} canManage={canManage} onChanged={load} />
           ))}
+          {moreCursor && (
+            <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
+              Load more polls
+            </Button>
+          )}
         </div>
       )}
 

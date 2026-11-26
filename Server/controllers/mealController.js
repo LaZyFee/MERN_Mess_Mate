@@ -136,7 +136,7 @@ export const listGuestMeals = async (req, res, next) => {
             if (req.query.from) query.localDate.$gte = String(req.query.from);
             if (req.query.to) query.localDate.$lte = String(req.query.to);
         }
-        if (req.query.all === 'true') {
+        if (req.query.all === 'true' || (!req.query.cursor && !req.query.limit)) {
             const guests = await GuestMeal.find(query).populate('hostUserId', MEMBER_VISIBLE_FIELDS).sort({ localDate: 1, slot: 1 }).lean();
             return res.json(guests);
         }

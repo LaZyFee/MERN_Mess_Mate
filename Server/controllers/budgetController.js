@@ -35,9 +35,14 @@ export const listBudgets = async (req, res, next) => {
         ]);
         const catMap = new Map(categories.map(c => [String(c._id), c]));
         const variance = computeVariance({ budgets, actualByCategory: spent });
+        const idByCategory = new Map(budgets.map(b => [(b.categoryId ? String(b.categoryId) : "__total__"), b._id]));
         res.json({
             groupId, month,
-            budgets: variance.lines.map(l => ({ ...l, category: l.categoryId ? catMap.get(String(l.categoryId)) || null : null })),
+            budgets: variance.lines.map(l => ({
+                ...l,
+                _id: idByCategory.get(l.categoryId ? String(l.categoryId) : "__total__") || null,
+                category: l.categoryId ? catMap.get(String(l.categoryId)) || null : null,
+            })),
             plannedTotalPoisha: variance.plannedTotalPoisha,
             actualTotalPoisha: variance.actualTotalPoisha,
             remainingTotalPoisha: variance.remainingTotalPoisha,

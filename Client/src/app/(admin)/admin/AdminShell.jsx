@@ -18,6 +18,7 @@ import {
   LuChevronRight,
 } from "react-icons/lu";
 import ThemeToggle from "@/components/shared/ThemeToggle";
+import LanguageToggle from "@/components/shared/LanguageToggle";
 import { ToastProvider } from "@/components/shared/ToastProvider";
 
 const NAV = [
@@ -61,6 +62,7 @@ export default function AdminShell({ initialOverview, children }) {
                 <LuArrowLeft size={13} /> App
               </Link>
               <ThemeToggle />
+              <LanguageToggle />
             </div>
           </div>
 

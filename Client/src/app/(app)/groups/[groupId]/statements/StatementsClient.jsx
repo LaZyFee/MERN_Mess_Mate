@@ -87,6 +87,7 @@ export default function StatementsClient({ groupId, initialGroup, initialData })
                 />
                 <div className="min-w-0">
                   <StatementDetail
+                    groupId={groupId}
                     statement={activeStatement}
                     versions={versions}
                     activeVersionId={activeVersionId}

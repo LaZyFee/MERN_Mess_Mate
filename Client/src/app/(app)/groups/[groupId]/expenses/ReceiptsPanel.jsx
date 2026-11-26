@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LuChevronDown, LuChevronUp, LuUpload } from "react-icons/lu";
+import { LuChevronDown, LuChevronUp, LuUpload, LuShieldAlert } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import FileInput from "@/components/shared/FileInput";
 import { useToast } from "@/components/shared/ToastProvider";
@@ -59,20 +59,33 @@ export default function ReceiptsPanel({ groupId, expense, onUploaded }) {
             <p className="text-xs text-(--tm)">No receipt attached yet.</p>
           ) : (
             <ul className="space-y-1">
-              {items.map((attachment) => (
-                <li key={attachment._id || attachment.id}>
-                  <a
-                    href={`/api/bff/attachments/groups/${groupId}/${attachment._id || attachment.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-(--p) hover:bg-(--pale) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
-                  >
-                    <span className="truncate">
-                      {attachment.originalName || attachment.filename || "Receipt"}
-                    </span>
-                  </a>
-                </li>
-              ))}
+              {items.map((attachment) => {
+                const pending = attachment.scanStatus === "pending";
+                return (
+                  <li key={attachment._id || attachment.id}>
+                    {pending ? (
+                      <div className="flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-(--tm)">
+                        <LuShieldAlert size={14} className="shrink-0" />
+                        <span className="truncate">{attachment.originalName || attachment.filename || "Receipt"}</span>
+                        <span className="ml-auto shrink-0 rounded-full bg-(--bgm) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          Virus scan pending
+                        </span>
+                      </div>
+                    ) : (
+                      <a
+                        href={`/api/bff/attachments/groups/${groupId}/${attachment._id || attachment.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-(--p) hover:bg-(--pale) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
+                      >
+                        <span className="truncate">
+                          {attachment.originalName || attachment.filename || "Receipt"}
+                        </span>
+                      </a>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
