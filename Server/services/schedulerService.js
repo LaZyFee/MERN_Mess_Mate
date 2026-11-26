@@ -15,6 +15,9 @@ import User from '../models/User.js';
 import DutyAssignment from '../models/DutyAssignment.js';
 import Statement from '../models/Statement.js';
 import { runAnomalySweep } from './securityService.js';
+import { getAccountingEquation } from './ledgerService.js';
+import Attachment from '../models/Attachment.js';
+import { scanForViruses } from '../middleware/receiptUpload.js';
 
 // Scheduler service — automated background tasks (Doc §9, §12, §13)
 // 1. Recurring expense draft generation for the new month
@@ -189,7 +192,57 @@ export const cleanupExpiredIdempotency = async () => {
     }
 };
 
+/**
+ * Nightly integrity check (S3.3): recompute the accounting equation for every
+ * group and alert the admin inbox when a group's books do not balance.
+ */
+export const runAccountingEquationCheck = async () => {
+    const groups = await MessGroup.find({}).select('_id name').lean();
+    const unbalanced = [];
+    let failed = 0;
+    for (const group of groups) {
+        try {
+            const equation = await getAccountingEquation({ groupId: group._id });
+            if (!equation.balanced) {
+                unbalanced.push({
+                    groupId: String(group._id),
+                    name: group.name,
+                    fundAssets: equation.fundAssets,
+                    supplierPayable: equation.supplierPayable,
+                    totalMemberCredits: equation.totalMemberCredits,
+                });
+            }
+        } catch {
+            failed++;
+        }
+    }
+    if (unbalanced.length) {
+        const sample = unbalanced.slice(0, 10)
+            .map(g => `${g.name || g.groupId} (Δ ${g.fundAssets - g.supplierPayable - g.totalMemberCredits} poisha)`)
+            .join('; ');
+        await notifyAdmins({
+            type: 'security.accounting_mismatch',
+            scope: 'admin',
+            title: `Accounting equation failed for ${unbalanced.length} group(s)`,
+            body: sample,
+            dedupeKey: `accounting:unbalanced:${new Date().toISOString().slice(0, 10)}`,
+        }).catch(() => { });
+    }
+    return { processed: groups.length - failed, failed, unbalanced };
+};
+
+export const runAccountingEquationCheckJob = async () => {
+    const { processed, failed, unbalanced } = await runAccountingEquationCheck();
+    return { processed, failed, unbalancedCount: unbalanced.length };
+};
+
 let schedulerTimer = null;
+let lastSchedulerTickAt = null;
+export const markSchedulerTick = (at = new Date()) => { lastSchedulerTickAt = at; };
+export const getSchedulerHeartbeat = () => ({
+    running: Boolean(schedulerTimer),
+    lastTickAt: lastSchedulerTickAt,
+});
 
 export const startScheduler = (intervalMs = 60 * 60 * 1000) => { // default 1 hour
     if (schedulerTimer) return;
@@ -199,6 +252,7 @@ export const startScheduler = (intervalMs = 60 * 60 * 1000) => { // default 1 ho
     setTimeout(async () => {
         try {
             await runAllJobs();
+            markSchedulerTick();
         } catch (e) {
             console.error('[scheduler] warmup error:', e.message);
         }
@@ -207,6 +261,7 @@ export const startScheduler = (intervalMs = 60 * 60 * 1000) => { // default 1 ho
     schedulerTimer = setInterval(async () => {
         try {
             await runAllJobs();
+            markSchedulerTick();
         } catch (e) {
             console.error('[scheduler] interval error:', e.message);
         }
@@ -249,6 +304,42 @@ export const jobDeadlineReminders = async () => {
 export const jobIdempotencyCleanup = async () => {
     const deleted = await cleanupExpiredIdempotency();
     return { processed: deleted, failed: 0 };
+};
+
+/**
+ * Reclaim expired idempotency leases (leaseUntil in the past).
+ * Sets leaseUntil back to null so the record can be retried.
+ */
+export const reclaimExpiredIdempotencyLeases = async () => {
+    const now = new Date();
+    const res = await IdempotencyRecord.updateMany(
+        { leaseUntil: { $ne: null, $lt: now } },
+        { $set: { leaseUntil: null } }
+    );
+    return { processed: res.modifiedCount, failed: 0 };
+};
+
+export const rescanPendingAttachments = async () => {
+    const pending = await Attachment.find({ scanStatus: 'pending', provider: 'cloudinary', secureUrl: { $ne: '' } }).limit(100).lean();
+    let processed = 0;
+    let failed = 0;
+    for (const attachment of pending) {
+        try {
+            const response = await fetch(attachment.secureUrl);
+            if (!response.ok) { failed++; continue; }
+            const buffer = Buffer.from(await response.arrayBuffer());
+            const scan = await scanForViruses(buffer);
+            if (!scan.scanned) continue;
+            await Attachment.updateOne(
+                { _id: attachment._id, scanStatus: 'pending' },
+                { $set: { scanStatus: scan.verdict.startsWith('infected') ? 'rejected' : 'clean' } }
+            );
+            processed++;
+        } catch {
+            failed++;
+        }
+    }
+    return { processed, failed };
 };
 
 /**
@@ -326,6 +417,7 @@ export const ALL_JOBS = [
     ['defaultMeals', jobDefaultMeals],
     ['deadlineReminders', jobDeadlineReminders],
     ['idempotencyCleanup', jobIdempotencyCleanup],
+    ['idempotencyLeaseReclaim', async () => reclaimExpiredIdempotencyLeases()],
     ['weeklyDigest', runWeeklyDigest],
     ['supportSlaWatcher', async () => (await import('./supportJobs.js')).supportSlaWatcherFn()],
     ['supportAutoClose', async () => (await import('./supportJobs.js')).supportAutoCloseFn()],
@@ -335,6 +427,8 @@ export const ALL_JOBS = [
     ['noteExpiry', async () => (await import('./routineJobs.js')).noteExpiryFn()],
     ['rosterHorizon', async () => (await import('./routineJobs.js')).rosterHorizonFn()],
     ['anomalySweep', async () => runAnomalySweep()],
+    ['receiptRescan', async () => rescanPendingAttachments()],
+    ['accountingEquation', async () => runAccountingEquationCheckJob()],
 ];
 
 export const runAllJobs = async (now = new Date()) => {

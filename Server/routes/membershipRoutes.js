@@ -7,7 +7,7 @@ import {
     listMemberships, createMembership, updateMembership, departMembership, listActive, listForMonth,
 } from '../controllers/membershipController.js';
 import {
-    groupIdParam, monthParam, createMembershipSchema, updateMembershipSchema, departSchema,
+    groupIdParam, monthParam, createMembershipSchema, updateMembershipSchema, departSchema, cursorListQuery,
 } from '../validation/schemas.js';
 
 const router = express.Router();
@@ -16,7 +16,7 @@ const router = express.Router();
 router.use(auth);
 
 // ---------- Memberships ----------
-router.get('/groups/:groupId/memberships', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), listMemberships);
+router.get('/groups/:groupId/memberships', validate(groupIdParam, 'params'), validate(cursorListQuery, 'query'), requireGroupRoleV2('member'), listMemberships);
 router.get('/groups/:groupId/memberships/active', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), listActive);
 router.get('/groups/:groupId/memberships/month/:month', validate(monthParam, 'params'), requireGroupRoleV2('member'), listForMonth);
 router.post('/groups/:groupId/memberships', validate(groupIdParam, 'params'), requireGroupRoleV2('manager'), validate(createMembershipSchema), idempotent('membership.create'), createMembership);

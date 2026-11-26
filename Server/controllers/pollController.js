@@ -1,26 +1,23 @@
 import Poll from '../models/Poll.js';
 import { audit } from '../models/AuditEvent.js';
-import { z } from 'zod';
+import { pollCreateSchema, pollVoteSchema as voteSchema } from '../validation/featureSchemas.js';
+import { paginateQuery } from '../utils/pagination.js';
 
-const pollCreateSchema = z.object({
-    question: z.string().trim().min(1).max(200),
-    options: z.array(z.string().trim().min(1).max(120)).min(2).max(6),
-    expiresAt: z.string().datetime(),
-    relatedMenuItem: z.string().trim().max(120).optional().default(''),
-});
-
-// Upper bound is the model's 6-option limit; the actual option count is
-// checked in votePoll so an out-of-range index returns a clear 400.
-const voteSchema = z.object({
-    optionIndex: z.number().int().min(0).max(5),
-});
-
-// GET /api/polls/groups/:groupId — list polls (open + recently closed)
+// GET /api/polls/groups/:groupId — list polls (open + recently closed; cursor)
 export const listPolls = async (req, res, next) => {
     try {
         const { groupId } = req.params;
-        const polls = await Poll.find({ groupId }).sort({ createdAt: -1 }).limit(50).lean();
-        res.json({ polls });
+        const q = req.validated?.query || {};
+        if (q.all === 'true') {
+            const polls = await Poll.find({ groupId }).sort({ createdAt: -1 }).lean();
+            return res.json({ polls, nextCursor: null, hasMore: false });
+        }
+        const page = await paginateQuery({
+            model: Poll, filter: { groupId },
+            cursor: q.cursor || null, limit: q.limit || 50,
+            sortField: 'createdAt', sortOrder: -1,
+        });
+        res.json({ polls: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore });
     } catch (err) { next(err); }
 };
 

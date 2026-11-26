@@ -17,6 +17,7 @@ import {
 } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
+import { resolveGroupRefs } from '../services/crossGroupRefs.js';
 
 const monthOf = (date) => {
     const d = new Date(date);
@@ -60,7 +61,7 @@ export const createExpense = async (req, res, next) => {
         const {
             supplierName = '', description = '', date, costPeriod,
             serviceStart = null, serviceEnd = null,
-            lines = [], isPayable = false, receiptReference = '',
+            lines = [], isPayable = false, receiptReference = '', payers = [],
         } = req.body;
 
         if (!Array.isArray(lines) || lines.length === 0) {
@@ -72,6 +73,21 @@ export const createExpense = async (req, res, next) => {
                 return res.status(422).json({ msg: 'fixed_amounts lines require fixedAmounts[]' });
             }
         }
+        await resolveGroupRefs({
+            groupId,
+            membershipIds: [
+                ...payers.map(p => p.memberId),
+                ...lines.flatMap(l => [
+                    ...(l.beneficiaries || []),
+                    ...(l.fixedAmounts || []).map(f => f.membershipId),
+                    ...(l.weights || []).map(w => w.membershipId),
+                    ...(l.usageQuantities || []).map(u => u.membershipId),
+                ]),
+            ],
+            categoryIds: lines.map(l => l.categoryId),
+            accountIds: payers.map(p => p.fundAccountId),
+            effectiveDate: date,
+        });
         const total = lines.reduce((s, l) => s + Number(l.amount), 0);
         if (total <= 0) return res.status(422).json({ msg: 'Expense total must be positive' });
 
@@ -91,6 +107,7 @@ export const createExpense = async (req, res, next) => {
             month: periodMonth, // legacy field kept in sync
             amount: total,
             lines,
+            payers,
             isPayable,
             paidTotal: 0,
             receiptReference,
@@ -119,7 +136,7 @@ export const createExpense = async (req, res, next) => {
             duplicateWarnings: duplicateCheck.hasWarnings ? duplicateCheck.warnings : undefined,
         });
     } catch (err) {
-        if (err.status === 409 || err.status === 400) return res.status(err.status).json({ msg: err.message });
+        if ([400, 422, 409].includes(err.status)) return res.status(err.status).json({ msg: err.message });
         next(err);
     }
 };
@@ -394,8 +411,9 @@ export const updateExpense = [
         try {
             const expense = await Expense.findOne({ _id: req.params.id, userId: req.user.id });
             if (!expense) return res.status(404).json({ msg: 'Expense not found' });
-
             const updates = { ...req.body };
+            const effectiveDate = updates.date ? new Date(updates.date) : expense.date;
+            await ensureOpen({ groupId: expense.groupId, month: monthOf(effectiveDate) });
             if (updates.categoryId) {
                 const cat = await ExpenseCategory.findOne({ _id: updates.categoryId, groupId: expense.groupId });
                 if (!cat) return res.status(400).json({ msg: 'Invalid categoryId for this group' });
@@ -425,6 +443,20 @@ export const getExpenses = [
                     ...(req.historyFrom ? { $gte: req.historyFrom } : {}),
                     ...(req.historyTo ? { $lte: req.historyTo } : {}),
                 };
+            }
+
+            // Opt-in cursor paging (S4.4): without `cursor` the legacy array answer is unchanged.
+            if (req.validated?.query?.cursor) {
+                const page = await paginateQuery({
+                    model: Expense, filter, cursor: req.validated.query.cursor,
+                    limit: req.validated.query.limit || 100,
+                    sortField: '_id', sortOrder: 1,
+                    populate: [
+                        { path: 'userId', select: MEMBER_VISIBLE_FIELDS },
+                        { path: 'categoryId', select: 'name icon splitMode' },
+                    ],
+                });
+                return res.json({ expenses: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore });
             }
 
             const expenses = await Expense.find(filter)
@@ -461,6 +493,7 @@ export const deleteExpense = [
         try {
             const expense = await Expense.findById(req.params.id);
             if (!expense) return res.status(404).json({ msg: 'Expense not found' });
+            await ensureOpen({ groupId: expense.groupId, month: expense.month || monthOf(expense.date) });
 
             if (!expense.userId.equals(req.user.id) && !req.canEditOthers) {
                 return res.status(403).json({ msg: 'Not allowed to delete this expense' });

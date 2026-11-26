@@ -2,13 +2,14 @@ import express from 'express';
 import {
     addMeal, updateMeal, deleteMeal, getMeals, getMealsByMonth,
     createGuestMeal, listGuestMeals, previewBulkMeals, applyBulkMeals,
-    previewAbsence, applyAbsence, getTomorrowHeadcount,
+    previewAbsence, applyAbsence, getTomorrowHeadcount, getBazarForecast,
 } from '../controllers/mealController.js';
 import auth from '../middleware/auth.js';
 import { requireGroupRole, allowSelfOrAdmin } from '../middleware/roles.js';
 import { resolveHistoryWindow } from '../middleware/privacy.js';
-import { idParamSchema, monthParamSchema, objectIdParamSchema, mealFilterQuerySchema, headcountQuerySchema } from '../validation/schemas.js';
+import { idParamSchema, monthParamSchema, objectIdParamSchema, mealFilterQuerySchema, headcountQuerySchema, bazarForecastQuerySchema, cursorListQuery } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
+import { deprecate } from '../middleware/deprecate.js';
 
 const router = express.Router();
 router.use(auth);
@@ -16,17 +17,20 @@ router.use(auth);
 // Daily meal slot entry uses explicit state and integer portion subunits.
 router.post('/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), addMeal);
 router.post('/:groupId/guests', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), createGuestMeal);
-router.get('/:groupId/guests', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), listGuestMeals);
+router.get('/:groupId/guests', validate(objectIdParamSchema, 'params'), validate(cursorListQuery, 'query'), requireGroupRole('member'), listGuestMeals);
 router.post('/:groupId/bulk/preview', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), previewBulkMeals);
 router.post('/:groupId/bulk/apply', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), applyBulkMeals);
 router.post('/:groupId/absence/preview', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), previewAbsence);
 router.post('/:groupId/absence/apply', validate(objectIdParamSchema, 'params'), requireGroupRole('admin'), applyAbsence);
 
 // PUT /api/meals/entry/:id — edit own entry
-router.put('/entry/:id', validate(idParamSchema, 'params'), updateMeal);
+router.put('/entry/:id', deprecate({ successor: '/api/meals/:groupId', sunsetDate: process.env.LEGACY_SUNSET_DATE }), validate(idParamSchema, 'params'), updateMeal);
 
 // GET /api/meals/:groupId?month=&from=&to=&userId= — filtered (ex-members clamped)
 router.get('/:groupId', validate(mealFilterQuerySchema, 'query'), requireGroupRole('member'), resolveHistoryWindow, getMeals);
+
+// GET /api/meals/:groupId/bazar-forecast?days=7&date=YYYY-MM-DD — bazar budget forecast (S5.1)
+router.get('/:groupId/bazar-forecast', validate(bazarForecastQuerySchema, 'query'), requireGroupRole('member'), getBazarForecast);
 
 // GET /api/meals/:groupId/headcount/tomorrow?date=YYYY-MM-DD&includeGuests=true
 router.get('/:groupId/headcount/tomorrow', validate(headcountQuerySchema, 'query'), requireGroupRole('member'), getTomorrowHeadcount);
@@ -35,6 +39,6 @@ router.get('/:groupId/headcount/tomorrow', validate(headcountQuerySchema, 'query
 router.get('/:groupId/:month', validate(monthParamSchema, 'params'), requireGroupRole('member'), getMealsByMonth);
 
 // DELETE /api/meals/entry/:id — own entry or group admin
-router.delete('/entry/:id', validate(idParamSchema, 'params'), requireGroupRole('member'), allowSelfOrAdmin, deleteMeal);
+router.delete('/entry/:id', deprecate({ successor: '/api/meals/:groupId', sunsetDate: process.env.LEGACY_SUNSET_DATE }), validate(idParamSchema, 'params'), requireGroupRole('member'), allowSelfOrAdmin, deleteMeal);
 
 export default router;

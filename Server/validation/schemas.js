@@ -165,6 +165,14 @@ export const objectIdAndIdParamSchema = z.object({
     categoryId: objectIdSchema,
 });
 
+// ---------- Bazar forecast (S5.1) ----------
+// The group comes from the path, so unlike headcountQuerySchema this schema does
+// not require `groupId` in the query string.
+export const bazarForecastQuerySchema = z.object({
+    days: z.coerce.number().int().min(1).max(60).optional(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').optional(),
+});
+
 export const objectIdAndExtraParamSchema = objectIdAndIdParamSchema;
 
 export const inviteSchema = z.object({
@@ -227,6 +235,9 @@ export const mealFilterQuerySchema = z.object({
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
     userId: objectIdSchema.optional(),
+    // opt-in cursor paging (S4.4)
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
 }).refine(
     d => !(d.from && d.to && d.from > d.to),
     { message: 'from must be before to' }
@@ -242,6 +253,9 @@ export const expenseFilterQuerySchema = z.object({
     userId: objectIdSchema.optional(),
     categoryId: objectIdSchema.optional(),
     category: z.string().trim().max(50).optional(), // free-text legacy filter
+    // opt-in cursor paging (S4.4)
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
 }).refine(
     d => !(d.from && d.to && d.from > d.to),
     { message: 'from must be before to' }
@@ -353,6 +367,11 @@ export const createExpenseSchema = z.object({
     serviceEnd: z.string().nullable().optional(),
     isPayable: z.boolean().optional(),
     receiptReference: z.string().max(100).optional(),
+    payers: z.array(z.object({
+        memberId: objectId,
+        amount: poisha,
+        fundAccountId: objectId.nullable().optional(),
+    })).nonempty({ message: 'payers[] is required (at least one payer)' }),
     lines: z.array(z.object({
         description: z.string().max(200).optional(),
         categoryId: objectId,
@@ -454,12 +473,28 @@ export const disputeResolveSchema = z.object({
     note: z.string().max(500).optional(),
     correctionJournalId: objectId.optional(),
 });
-export const disputeListQuery = z.object({ status: z.enum(['open', 'resolved', 'rejected']).optional() });
+export const disputeListQuery = z.object({
+    status: z.enum(['open', 'resolved', 'rejected']).optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    all: z.enum(['true', 'false']).optional(),
+});
+
+// Cursor list controls shared by the remaining list endpoints (S4.2/S4.3)
+export const cursorListQuery = z.object({
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    all: z.enum(['true', 'false']).optional(),
+});
 
 // ---- notifications ----
 export const outboxQuery = z.object({
     statementId: objectId.optional(),
-    state: z.enum(['pending', 'processing', 'sent', 'failed', 'skipped', 'not_configured']).optional(),
+    // `processing` is an internal worker lease state and is not exposed to clients (S3.2)
+    state: z.enum(['pending', 'sent', 'delivered', 'read', 'failed', 'skipped', 'not_configured']).optional(),
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    all: z.enum(['true', 'false']).optional(),
 });
 export const messageIdParam = z.object({ groupId: objectId, messageId: objectId });
 export const manualShareSchema = z.object({ statementId: objectId.optional() });

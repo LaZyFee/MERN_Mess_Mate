@@ -12,11 +12,17 @@ export const monthOf = (date) => {
 };
 
 /** Get or lazily create the open Period for a group+month. */
-export const getOrCreatePeriod = async ({ groupId, month, userId }) => {
-    let period = await Period.findOne({ groupId, month });
+export const getOrCreatePeriod = async ({ groupId, month, userId, session = null }) => {
+    const findOpts = session ? { session } : {};
+    let period = await Period.findOne({ groupId, month }, null, findOpts);
     if (!period) {
-        const policy = await PolicyVersion.findOne({ groupId }).sort({ effectiveFrom: -1, version: -1 });
-        period = await Period.create({ groupId, month, state: 'open', openedBy: userId, policyVersion: policy?._id || null });
+        const policyQuery = PolicyVersion.findOne({ groupId }).sort({ effectiveFrom: -1, version: -1 });
+        if (session) policyQuery.session(session);
+        const policy = await policyQuery;
+        const created = await Period.create([{
+            groupId, month, state: 'open', openedBy: userId, policyVersion: policy?._id || null,
+        }], findOpts);
+        period = Array.isArray(created) ? created[0] : created;
     }
     return period;
 };
@@ -83,21 +89,38 @@ export const returnToOpen = async ({ groupId, month, userId, reason = '' }) => {
  * Finalize with expected revision: one caller wins, concurrent finalize gets
  * the already-finalized period back (idempotent) or a conflict on stale revision.
  */
-export const finalizeGuard = async ({ groupId, month, expectedRevision }) => {
+export const finalizeGuard = async ({ groupId, month, expectedRevision, session = null }) => {
     const filter = { groupId, month };
     if (typeof expectedRevision === 'number') filter.revision = expectedRevision;
-    const period = await Period.findOne(filter);
+    const q = Period.findOne(filter);
+    if (session) q.session(session);
+    const period = await q;
     if (!period) throw Object.assign(new Error('Stale revision: data changed during finalization. Refetch and retry.'), { status: 409 });
-    return period;
+    // expose the observed revision so the finalize write can CAS on it
+    return Object.assign(period, { revisionObserved: period.revision });
 };
 
-/** Mark finalized after the statement has been persisted. */
-export const markFinalized = async ({ periodId, statementId, userId }) => {
-    const period = await Period.findByIdAndUpdate(
-        periodId,
+/**
+ * Mark finalized after the statement has been persisted.
+ *
+ * Compare-and-set on `revision` (S4.5): a cost mutation that bumped the revision
+ * after the draft was built makes this write fail with 409 instead of freezing a
+ * statement that disagrees with the journals it summarises.
+ */
+export const markFinalized = async ({ periodId, statementId, userId, expectedRevision = null, session = null }) => {
+    const filter = { _id: periodId };
+    if (typeof expectedRevision === 'number') filter.revision = expectedRevision;
+    const period = await Period.findOneAndUpdate(
+        filter,
         { $set: { state: 'finalized', finalizedAt: new Date(), finalizedBy: userId, statement: statementId } },
-        { new: true }
+        { new: true, ...(session ? { session } : {}) }
     );
+    if (!period) {
+        throw Object.assign(
+            new Error('Stale revision: the month changed during finalization. Refetch and retry.'),
+            { status: 409 }
+        );
+    }
     await audit({ groupId: period.groupId, actorId: userId, action: 'period.finalized', targetType: 'period', targetId: period._id, after: { statementId } });
     return period;
 };

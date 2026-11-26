@@ -10,7 +10,7 @@ export const REFRESH_TTL_DAYS = 7;
 
 const hash = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
-/** Create a new session (device login). Returns the raw refresh token. */
+/** Create a new session (device login). Returns { rawToken, familyId, session }. */
 export const createSession = async ({ user, deviceId = 'unknown', userAgent = '', ip = '' }) => {
     const familyId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + REFRESH_TTL_DAYS * 86400000);
@@ -19,12 +19,12 @@ export const createSession = async ({ user, deviceId = 'unknown', userAgent = ''
         process.env.JWT_REFRESH_SECRET,
         { expiresIn: `${REFRESH_TTL_DAYS}d` }
     );
-    await Session.create({
+    const session = await Session.create({
         userId: user.id, familyId, deviceId, userAgent, ip,
         currentTokenHash: hash(rawToken),
         expiresAt,
     });
-    return rawToken;
+    return { rawToken, familyId, session };
 };
 
 /**

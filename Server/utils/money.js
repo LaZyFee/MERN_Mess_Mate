@@ -28,6 +28,18 @@ export const toDecimalString = (poisha) => {
     return `${sign}${Math.floor(abs / POISHA_PER_TAKA)}.${String(abs % POISHA_PER_TAKA).padStart(2, '0')}`;
 };
 
+/**
+ * Response-boundary bridge for LEGACY takas values (S3.8).
+ * The legacy summary/payment-note controllers compute in takas (floats); this
+ * rounds a taka amount to integer poisha and renders the canonical string, so
+ * the wire format never carries a raw float. Returns null when not a number.
+ * Do NOT use this for ledger figures — those are already integer poisha.
+ */
+export const legacyTakaToDecimalString = (taka) => {
+    if (taka === null || taka === undefined || !Number.isFinite(Number(taka))) return null;
+    return toDecimalString(Math.round(Number(taka) * POISHA_PER_TAKA));
+};
+
 /** Sum a list of integer poisha amounts (exact). */
 export const sumPoisha = (list) => {
     let t = 0;

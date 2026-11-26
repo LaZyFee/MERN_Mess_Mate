@@ -5,8 +5,29 @@ import ExpenseCategory from '../models/ExpenseCategory.js';
 import { monthParamSchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import { buildWaSummaryLinks, sendWaDirect } from '../utils/whatsapp.js';
+import { legacyTakaToDecimalString } from '../utils/money.js';
 
 const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * Response-boundary projection (S3.8): keep every computed number for existing
+ * clients, but also expose `*Decimal` strings so no client has to do float maths.
+ */
+const withDecimalStrings = (summary) => ({
+    ...summary,
+    totalMealExpensesDecimal: legacyTakaToDecimalString(summary.totalMealExpenses),
+    mealRateDecimal: legacyTakaToDecimalString(summary.mealRate),
+    fixedExpensesTotalDecimal: legacyTakaToDecimalString(summary.fixedExpensesTotal),
+    totalExpensesDecimal: legacyTakaToDecimalString(summary.totalExpenses),
+    userSummaries: (summary.userSummaries || []).map(u => ({
+        ...u,
+        mealCostDecimal: legacyTakaToDecimalString(u.mealCost),
+        otherCostDecimal: legacyTakaToDecimalString(u.otherCost),
+        totalDueDecimal: legacyTakaToDecimalString(u.totalDue),
+        mealExpensesDecimal: legacyTakaToDecimalString(u.mealExpenses),
+        balanceDecimal: legacyTakaToDecimalString(u.balance),
+    })),
+});
 
 /**
  * Core monthly computation with category-wise splitting.
@@ -204,11 +225,11 @@ export const getSummary = [
 
             const existing = await MonthlySummary.findOne({ groupId: group._id, month });
             if (existing?.isFinalized) {
-                return res.json({ ...existing.toObject(), frozen: true });
+                return res.json({ ...withDecimalStrings(existing.toObject()), frozen: true });
             }
 
             const summary = await computeSummary(group, month);
-            res.json({ ...summary, isFinalized: existing?.isFinalized || false, frozen: false });
+            res.json({ ...withDecimalStrings(summary), isFinalized: existing?.isFinalized || false, frozen: false });
         } catch (err) {
             next(err);
         }

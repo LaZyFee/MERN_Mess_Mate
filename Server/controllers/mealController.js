@@ -4,11 +4,17 @@ import Membership from '../models/Membership.js';
 import MessGroup from '../models/MessGroup.js';
 import DutyAssignment from '../models/DutyAssignment.js';
 import Note from '../models/Note.js';
-import { mealEntrySchema, guestMealSchema, mealBulkSchema, absenceRangeSchema, idParamSchema, monthParamSchema, mealFilterQuerySchema, headcountQuerySchema } from '../validation/schemas.js';
+import { mealEntrySchema, guestMealSchema, mealBulkSchema, absenceRangeSchema, idParamSchema, monthParamSchema, mealFilterQuerySchema, headcountQuerySchema, bazarForecastQuerySchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import { ensureOpen, bumpRevision } from '../services/periodService.js';
 import { audit } from '../models/AuditEvent.js';
 import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
+import { paginateQuery } from '../utils/pagination.js';
+import Expense from '../models/Expense.js';
+import ExpenseCategory from '../models/ExpenseCategory.js';
+import {
+    buildBazarForecast, clampDays, historyWindow, DEFAULT_FORECAST_DAYS, DEFAULT_HISTORY_DAYS,
+} from '../services/bazarForecastRules.js';
 
 const SLOT_NAMES = ['breakfast', 'lunch', 'snacks', 'dinner'];
 
@@ -121,7 +127,7 @@ export const createGuestMeal = [
     },
 ];
 
-// GET /api/meals/:groupId/guests?from=&to= — active guest meals
+// GET /api/meals/:groupId/guests?from=&to=&cursor= — active guest meals (cursor list)
 export const listGuestMeals = async (req, res, next) => {
     try {
         const query = { groupId: req.params.groupId, status: 'active' };
@@ -130,8 +136,17 @@ export const listGuestMeals = async (req, res, next) => {
             if (req.query.from) query.localDate.$gte = String(req.query.from);
             if (req.query.to) query.localDate.$lte = String(req.query.to);
         }
-        const guests = await GuestMeal.find(query).populate('hostUserId', MEMBER_VISIBLE_FIELDS).sort({ localDate: 1, slot: 1 }).lean();
-        res.json(guests);
+        if (req.query.all === 'true') {
+            const guests = await GuestMeal.find(query).populate('hostUserId', MEMBER_VISIBLE_FIELDS).sort({ localDate: 1, slot: 1 }).lean();
+            return res.json(guests);
+        }
+        const page = await paginateQuery({
+            model: GuestMeal, filter: query,
+            cursor: req.query.cursor || null, limit: req.query.limit || 50,
+            sortField: 'createdAt', sortOrder: -1,
+            populate: { path: 'hostUserId', select: MEMBER_VISIBLE_FIELDS },
+        });
+        res.json({ guests: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore });
     } catch (err) { next(err); }
 };
 
@@ -301,6 +316,16 @@ export const getMealsByMonth = [
             }
             if (q.userId) filter.userId = q.userId;
 
+            // Opt-in cursor paging (S4.4): legacy clients keep the bare array answer.
+            if (q.cursor) {
+                const page = await paginateQuery({
+                    model: Meal, filter, cursor: q.cursor, limit: q.limit || 100,
+                    sortField: '_id', sortOrder: 1,
+                    populate: { path: 'userId', select: MEMBER_VISIBLE_FIELDS },
+                });
+                return res.json({ meals: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore });
+            }
+
             const meals = await Meal.find(filter)
                 .populate('userId', MEMBER_VISIBLE_FIELDS)
                 .sort({ date: 1 })
@@ -318,6 +343,7 @@ export const deleteMeal = [
         try {
             const meal = await Meal.findById(req.params.id);
             if (!meal) return res.status(404).json({ msg: 'Meal entry not found' });
+            await assertPeriodOpen({ groupId: meal.groupId, day: dayString(meal.date) });
 
             if (!meal.userId.equals(req.user.id) && !req.canEditOthers) {
                 return res.status(403).json({ msg: 'Not allowed to delete this entry' });
@@ -445,3 +471,82 @@ const addDays = (date, n) => {
     d.setUTCDate(d.getUTCDate() + n);
     return d;
 };
+
+// GET /api/meals/:groupId/bazar-forecast?days=7
+// Forecast the next N days of bazar spend: portions per day × trailing-30-day
+// median price per category, with a quartile confidence band (S5.1).
+// Pure rules live in services/bazarForecastRules.js (unit-tested without a DB).
+export const getBazarForecast = [
+    validate(bazarForecastQuerySchema, 'query'),
+    async (req, res, next) => {
+        try {
+            const groupId = req.params.groupId;
+            const q = req.validated?.query || {};
+            const days = clampDays(q.days, DEFAULT_FORECAST_DAYS);
+            const targetDate = q.date || dayString(addDays(new Date(), 1));
+            const { from, to } = historyWindow({ days: DEFAULT_HISTORY_DAYS });
+
+            // ---- headcount for the target day (member meals + universal guests) ----
+            const meals = await Meal.find({ groupId, date: dateAtDay(targetDate) }).lean();
+            const headcount = { breakfast: 0, lunch: 0, snacks: 0, dinner: 0 };
+            for (const m of meals) {
+                for (const slot of SLOT_NAMES) {
+                    const s = m[slot];
+                    if (s && s.state === 'consumed' && s.portionSubunits) headcount[slot] += s.portionSubunits;
+                }
+            }
+            const guests = await GuestMeal.find({
+                groupId, localDate: targetDate, status: 'active', poolMode: 'universal',
+            }).lean();
+            for (const g of guests) {
+                if (headcount[g.slot] !== undefined) headcount[g.slot] += g.portionSubunits || 0;
+            }
+
+            // ---- trailing history: approved food expenses grouped by category ----
+            // Units per expense = the meal units actually allocated in that window,
+            // approximated by the group's consumed portions over the same window
+            // (one shared denominator keeps the price per portion comparable).
+            const historyMeals = await Meal.find({
+                groupId, date: { $gte: from, $lte: to },
+            }).lean();
+            let windowUnits = 0;
+            for (const m of historyMeals) {
+                for (const slot of SLOT_NAMES) {
+                    const s = m[slot];
+                    if (s && s.state === 'consumed' && s.portionSubunits) windowUnits += s.portionSubunits;
+                }
+            }
+
+            const expenses = await Expense.find({
+                groupId, status: 'approved', isReversal: { $ne: true },
+                date: { $gte: from, $lte: to },
+            }).lean();
+            const foodCategoryIds = [...new Set(expenses.flatMap(e => (e.lines || []).map(l => l.categoryId).concat(e.categoryId || [])))];
+            const categories = await ExpenseCategory.find({ _id: { $in: foodCategoryIds } }).lean();
+            const categoryById = new Map(categories.map(c => [String(c._id), c]));
+
+            const byCategory = new Map();
+            for (const expense of expenses) {
+                const lines = expense.lines?.length ? expense.lines : [{ categoryId: expense.categoryId, amount: expense.amount }];
+                for (const line of lines) {
+                    const cat = categoryById.get(String(line.categoryId));
+                    if (!cat || (cat.kind && cat.kind !== 'meal' && cat.splitMode !== 'meal')) continue;
+                    const key = String(cat._id);
+                    if (!byCategory.has(key)) byCategory.set(key, { categoryId: cat._id, name: cat.name, amount: 0 });
+                    byCategory.get(key).amount += Number(line.amount) || 0;
+                }
+            }
+            const history = [...byCategory.values()].map(c => ({ ...c, units: windowUnits }));
+
+            const forecast = buildBazarForecast({ headcount, history, days });
+            res.json({
+                groupId,
+                targetDate,
+                window: { from, to, days: DEFAULT_HISTORY_DAYS, observedUnits: windowUnits },
+                headcount,
+                ...forecast,
+                generatedAt: new Date(),
+            });
+        } catch (err) { next(err); }
+    },
+];

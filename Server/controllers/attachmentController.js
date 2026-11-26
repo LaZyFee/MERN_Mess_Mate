@@ -151,6 +151,10 @@ export const downloadAttachment = async (req, res, next) => {
         // enough: the uploader, a treasurer+ role, or the expense's creator may read it.
         await assertCanReadAttachment({ req, attachment, groupId });
 
+        if (attachment.scanStatus === 'pending') {
+            return res.status(200).json({ scanStatus: 'pending' });
+        }
+
         if (attachment.provider === 'cloudinary' && attachment.publicId) {
             const resourceType =
                 attachment.resourceType ||
@@ -177,4 +181,3 @@ export const downloadAttachment = async (req, res, next) => {
         next(err);
     }
 };
-

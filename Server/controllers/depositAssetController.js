@@ -2,15 +2,25 @@ import DepositAsset from '../models/DepositAsset.js';
 import Membership from '../models/Membership.js';
 import { audit } from '../models/AuditEvent.js';
 import { sumPoisha } from '../utils/money.js';
+import { paginateQuery } from '../utils/pagination.js';
 
 // DepositAsset controller (Doc §6, §16: landlord deposits, kitchen assets)
 
-/** GET /api/assets/groups/:groupId */
+/** GET /api/assets/groups/:groupId?cursor= */
 export const listAssets = async (req, res, next) => {
     try {
         const { groupId } = req.params;
-        const assets = await DepositAsset.find({ groupId }).sort({ createdAt: -1 }).lean();
-        res.json({ assets });
+        const q = req.validated?.query || {};
+        if (q.all === 'true') {
+            const assets = await DepositAsset.find({ groupId }).sort({ createdAt: -1 }).lean();
+            return res.json({ assets, nextCursor: null, hasMore: false });
+        }
+        const page = await paginateQuery({
+            model: DepositAsset, filter: { groupId },
+            cursor: q.cursor || null, limit: q.limit || 50,
+            sortField: 'createdAt', sortOrder: -1,
+        });
+        res.json({ assets: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore });
     } catch (err) { next(err); }
 };
 

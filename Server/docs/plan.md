@@ -382,7 +382,9 @@ Schema groups:
 - **`scripts/migrateInviteCodes.js`** — B3.1: hashes existing `MessGroup.code` values into `InviteCode` collection. Idempotent. Run: `node scripts/migrateInviteCodes.js`.
 - **`scripts/checkIndexes.js`** — asserts every expected index (including TTL indexes) exists across all collections. Run: `node scripts/checkIndexes.js`.
 - **`scripts/smoke/*.sh`** — smoke test scripts for B0 (`b0.sh`), B2 (`b2.sh`), B3 (`b3.sh`), B4 (`b4.sh`), and live-infrastructure gates (`live-infra-gates.sh`).
-- **`tests/`** — **112 unit tests** (all passing, no DB): `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules`. **47 integration tests** (Supertest + disposable MongoDB, all passing): `b0.test.js`, `cookies.test.js`, `financial.test.js` (**replica set**), `routines.test.js`, `support.test.js`; `environment.js` is the shared harness. See README §10 for the per-file matrix and the last verified run.
+- **`tests/`** — **176 unit tests** (all passing, no DB): `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules` plus the session/statement/outbox/idempotency/refs/export/schema guards added by the P11 hardening pass. **53 integration tests** (Supertest + disposable MongoDB, all passing): `b0.test.js`, `cookies.test.js`, `financial.test.js` (**replica set**), `routines.test.js`, `support.test.js`, `health.test.js`, `requestId.test.js`; `environment.js` is the shared harness. See README §10 for the per-file matrix and the last verified run.
+- **`scripts/importSmoke.mjs`** — imports every route/controller/service/model (also covered by `tests/moduleGuards.test.js`) so a file that cannot parse can never ship unnoticed. **`scripts/auditRoutes.mjs --write-table`** regenerates the generated route table block of `API_DOCUMENTATION.md`; `--check` fails on drift.
+- **CI** — `.github/workflows/ci.yml`: `node --check` on every file, import smoke, route/doc audit, unit suite and integration suite.
 
 ---
 
@@ -462,7 +464,7 @@ Schema groups:
 16. ⏳ **Invite-link TTL / legacy-code retirement** — hashed `InviteCode` is live, but legacy `MessGroup.code` still works (`/api/messgroups/join-by-code`); `scripts/migrateInviteCodes.js` exists and has not been run against production data.
 17. ⏳ **Redis/shared limiter state** — `joinCodeLimiter`, TOTP challenges and invite-lockouts are in-process `Map`s (single-instance only).
 18. ⏳ **`rosterHorizonFn` placeholder** — the scheduled job counts published rosters but extends nothing; horizon extension only happens via `POST /rosters/:rosterId/extend-horizon`.
-19. ⏳ **Unify refresh-token stores** — login/refresh rotate `User.refreshToken` while `/api/sessions` manages `Session` families. Until unified, the device list and revoke-all do not govern the token actually in use.
+19. ✅ **Unify refresh-token stores** — login/refresh now issue a `Session` family and the refresh cookie carries `familyId:rawToken`. Legacy `User.refreshToken` is accepted only until `LEGACY_REFRESH_SUNSET`, then rejected. Revocation, device management and reuse detection are now truthful through the `Session` family.
 20. ⏳ **CAPTCHA provider** — `supportController.verifyCaptcha` is a stub (accepts any token).
 21. ⏳ **Google OAuth + 2FA step-up** — an OAuth user with TOTP enabled is redirected to `/login`; no continuation is implemented.
 
@@ -669,6 +671,9 @@ The original extension called for a user-facing inbox. InboxNotification and inb
 | ✅ default meals | daily 00:30 | Fill yesterday's `unknown` slots |
 | ✅ deadline reminders | daily 09:00 | Cutoff / month-end nudges |
 | ✅ idempotency cleanup | hourly | Expired records |
+| ✅ outbox lease recovery | every worker tick (30 s) | Reclaim expired `leasedUntil` rows back to `pending`; `state: processing` is internal only |
+| ✅ receipt rescan | hourly | Re-scan attachments stuck in `scanStatus: pending` |
+| ✅ accounting equation | nightly | Recompute the accounting equation per group; alert the admin inbox when `balanced === false` |
 | 🆕 roster horizon | daily 01:00 | Keep every published roster generated N days ahead |
 | 🆕 duty reminders | 20:00 (eve) and 07:00 (day) | `duty.reminder` inbox + outbox |
 | 🆕 mark missed | daily 00:10 | Yesterday's `scheduled` → `missed`, notify manager |
@@ -760,7 +765,7 @@ The existing hard rules (CSS variables only, react-icons only, zustand, shared c
 > available in this environment.
 
 
-### 21.1 Tests (same `node --test` harness — 112 unit + 47 integration passing)
+### 21.1 Tests (same `node --test` harness — 176 unit + 53 integration passing)
 
 > Full per-file matrix and the last verified run are in **README §10**. This list covers the B0–B3 rule suites only; the financial/ledger suites (`goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `inboxRules`, `retention`) are listed there.
 
@@ -776,4 +781,5 @@ The existing hard rules (CSS variables only, react-icons only, zustand, shared c
 - `legacyMealMigration.test.js` — legacy 2-slot float meal migration to 4-slot state form.
 - `retention.test.js` — ticket anonymisation and audit retention cutoffs.
 - `inboxRules.test.js` — inbox dedupe and expiry helpers.
-- Integration tests (`tests/integration/`, needs live server): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`.
+- Integration tests (`tests/integration/`, needs live server): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`, `health.test.js` (readiness probe), `requestId.test.js` (correlation ids).
+- Hardening suites (P11, server): `sessionFamily`, `statementFrozenInputs`, `outboxTxn`, `outboxLease`, `idempotencyLease`, `shoppingListConversion`, `crossGroupRefs`, `accountingEquationJob`, `adminHealth`, `exportService`, `moneyBoundary`, `featureSchemas`, `moduleGuards`.

@@ -1,12 +1,14 @@
 import Statement from '../models/Statement.js';
 import Period from '../models/Period.js';
 import Expense from '../models/Expense.js';
+import ExpenseCategory from '../models/ExpenseCategory.js';
 import MoneyTransaction from '../models/MoneyTransaction.js';
 import Membership from '../models/Membership.js';
 import PolicyVersion from '../models/PolicyVersion.js';
 import MessGroup from '../models/MessGroup.js';
 import GuestMeal from '../models/GuestMeal.js';
 import Meal from '../models/Meal.js';
+import NotificationOutbox from '../models/NotificationOutbox.js';
 import { membershipsInMonth } from './membershipService.js';
 import { allocateExpense, sumAllocationsFor } from './allocationService.js';
 import { getOrCreatePeriod, finalizeGuard, markFinalized } from './periodService.js';
@@ -20,17 +22,40 @@ import crypto from 'crypto';
 /**
  * Compute the live statement draft for a month (does not persist).
  */
-export const buildStatementDraft = async ({ groupId, month }) => {
-    const memberships = await membershipsInMonth({ groupId, month });
+export const buildStatementDraft = async ({ groupId, month, session }) => {
+    const memberships = await membershipsInMonth({ groupId, month, session });
     const expenses = await Expense.find({
         groupId, status: 'approved', costPeriod: month, isReversal: { $ne: true },
-    }).lean();
+    }).session(session).lean();
     const transactions = await MoneyTransaction.find({
         groupId, status: 'confirmed',
         $or: [{ paidAt: { $gte: new Date(`${month}-01`), $lt: new Date(new Date(`${month}-01T00:00:00Z`).setUTCMonth(new Date(`${month}-01T00:00:00Z`).getUTCMonth() + 1)) } }],
-    }).populate('fromMember toMember', 'displayName').lean();
+    }).populate('fromMember toMember', 'displayName').session(session).lean();
 
-    // allocate all approved expenses
+    const start = new Date(`${month}-01T00:00:00.000Z`);
+    const end = new Date(start); end.setUTCMonth(end.getUTCMonth() + 1);
+
+    // ---- batch preloads (S4.5): one query per input set instead of N+1 ----
+    const group = await MessGroup.findById(groupId).session(session).lean();
+    const policy = await PolicyVersion.findOne({ groupId, effectiveFrom: { $lte: month } }).sort({ effectiveFrom: -1, version: -1 }).session(session).lean();
+    const categories = await ExpenseCategory.find({
+        _id: { $in: [...new Set(expenses.flatMap(e => (e.lines || []).map(l => l.categoryId).concat(e.categoryId || [])))] },
+    }).session(session).lean();
+    const categoryById = new Map(categories.map(c => [String(c._id), c]));
+
+    // one query for every prior current statement below this month
+    const priorStatements = await Statement.find({
+        groupId, state: 'current', month: { $lt: month },
+    }).sort({ month: -1, version: -1 }).session(session).lean();
+    const openingByMember = new Map();
+    for (const stmt of priorStatements) {
+        for (const item of stmt.items || []) {
+            const key = String(item.membershipId);
+            if (!openingByMember.has(key)) openingByMember.set(key, item.closingCredit || 0); // latest month first
+        }
+    }
+
+    // allocate all approved expenses (categories + meal units are shared across expenses)
     let mealExpenses = 0;
     let otherExpenses = 0;
     const perMember = new Map(); // membershipId -> { mealCost, otherCost }
@@ -41,12 +66,15 @@ export const buildStatementDraft = async ({ groupId, month }) => {
     };
     for (const m of memberships) ensure(m._id, m.displayName);
 
+    const allocationCtx = { categoryById, skipRefCheck: true };
     for (const expense of expenses) {
         const allocations = await allocateExpense({
             groupId, expense,
             memberships,
             userId: expense.approvedBy,
             persist: false,
+            session,
+            ctx: allocationCtx,
         });
         for (const alloc of allocations) {
             const isFood = alloc.poolKind === 'meal_units';
@@ -61,10 +89,7 @@ export const buildStatementDraft = async ({ groupId, month }) => {
 
     // Validate all expected member/slot records. Missing records are unknown,
     // never an implicit zero, and must be resolved before a statement can close.
-    const group = await MessGroup.findById(groupId).lean();
-    const start = new Date(`${month}-01T00:00:00.000Z`);
-    const end = new Date(start); end.setUTCMonth(end.getUTCMonth() + 1);
-    const mealDocs = await Meal.find({ groupId, date: { $gte: start, $lt: end } }).lean();
+    const mealDocs = await Meal.find({ groupId, date: { $gte: start, $lt: end } }).session(session).lean();
     const mealByKey = new Map(mealDocs.map(m => [`${m.userId}:${m.date.toISOString().slice(0, 10)}`, m]));
     const enabledSlots = group?.mealSlots?.length ? group.mealSlots : ['breakfast', 'lunch', 'dinner'];
     const slotNames = ['breakfast', 'lunch', 'snacks', 'dinner'];
@@ -80,7 +105,7 @@ export const buildStatementDraft = async ({ groupId, month }) => {
             }
         }
     }
-    const policy = await PolicyVersion.findOne({ groupId, effectiveFrom: { $lte: month } }).sort({ effectiveFrom: -1, version: -1 }).lean();
+    const policyClosure = policy; // policy preloaded above
     const unitsByUser = new Map();
     let universalGuestUnits = 0;
     const addUnits = (key, slot, portionSubunits) => {
@@ -92,7 +117,7 @@ export const buildStatementDraft = async ({ groupId, month }) => {
     for (const meal of mealDocs) for (const slot of enabledSlots) {
         if (meal[slot]?.state === 'consumed') addUnits(String(meal.userId), slot, meal[slot].portionSubunits || 0);
     }
-    const guests = await GuestMeal.find({ groupId, localDate: { $gte: `${month}-01`, $lt: end.toISOString().slice(0, 10) }, status: 'active' }).lean();
+    const guests = await GuestMeal.find({ groupId, localDate: { $gte: `${month}-01`, $lt: end.toISOString().slice(0, 10) }, status: 'active' }).session(session).lean();
     for (const guest of guests) {
         const units = addUnits(guest.poolMode === 'individual' ? String(guest.hostUserId) : null, guest.slot, guest.portionSubunits);
         if (guest.poolMode === 'universal') universalGuestUnits += units;
@@ -101,14 +126,8 @@ export const buildStatementDraft = async ({ groupId, month }) => {
     const openingCredits = new Map();
     for (const m of memberships) {
         // opening = closing of the latest prior statement for this membership
-        const prior = await Statement.findOne({
-            groupId,
-            state: 'current',
-            month: { $lt: month },
-            'items.membershipId': m._id,
-        }).sort({ month: -1, version: -1 }).lean();
-        const priorItem = prior?.items?.find(i => String(i.membershipId) === String(m._id));
-        openingCredits.set(String(m._id), priorItem?.closingCredit || 0);
+        // (priorStatements was preloaded above, newest month first)
+        openingCredits.set(String(m._id), openingByMember.get(String(m._id)) || 0);
     }
 
     const items = memberships.map(m => {
@@ -166,13 +185,13 @@ export const buildStatementDraft = async ({ groupId, month }) => {
  */
 export const finalizeStatement = async ({ groupId, month, expectedRevision, userId, reason = '' }) => {
     return await withTransaction(async (session) => {
-        const period = await getOrCreatePeriod({ groupId, month, userId });
-        const guarded = await finalizeGuard({ groupId, month, expectedRevision });
+        const period = await getOrCreatePeriod({ groupId, month, userId, session });
+        const guarded = await finalizeGuard({ groupId, month, expectedRevision, session });
         if (guarded.state === 'finalized' && !reason) {
             throw Object.assign(new Error('Period already finalized; use the correction process'), { status: 409 });
         }
 
-        const draft = await buildStatementDraft({ groupId, month });
+        const draft = await buildStatementDraft({ groupId, month, session });
         if (draft.items.length === 0) {
             throw Object.assign(new Error('No active memberships in this month — nothing to finalize'), { status: 422 });
         }
@@ -212,7 +231,33 @@ export const finalizeStatement = async ({ groupId, month, expectedRevision, user
             await Statement.findByIdAndUpdate(latest._id, { state: 'superseded', supersededBy: statement._id }, { session });
         }
 
-        await markFinalized({ periodId: period._id, statementId: statement._id, userId });
+        await markFinalized({
+            periodId: period._id,
+            statementId: statement._id,
+            userId,
+            // compare-and-set on the revision observed by finalizeGuard (S4.5)
+            expectedRevision: typeof guarded.revisionObserved === 'number' ? guarded.revisionObserved : undefined,
+            session,
+        });
+
+        // Write outbox rows inside the same transaction (dedupeKey per statement+member)
+        const outboxRows = draft.memberships.map(m => ({
+            groupId,
+            statementId: statement._id,
+            membershipId: m._id,
+            userId: m.user,
+            channel: 'in_app',
+            purpose: 'statement',
+            dedupeKey: `stmt:${groupId}:${month}:${m._id}`,
+            recipientEmail: '',
+            recipientWa: '',
+            payload: { statementId: String(statement._id), month, displayName: m.displayName },
+            state: 'pending',
+        }));
+        if (outboxRows.length) {
+            await NotificationOutbox.insertMany(outboxRows, { session });
+        }
+
         return statement;
     });
 };

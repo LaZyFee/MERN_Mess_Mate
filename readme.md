@@ -142,7 +142,7 @@ MealMate/
 │   ├── controllers/               # 31 controllers (one per domain)
 │   ├── middleware/                # auth, roles, csrf, idempotency, privacy, uploads, deprecation
 │   ├── models/                        # 38 Mongoose models
-│   ├── routes/                        # 28 routers
+│   ├── routes/                        # 29 routers
 │   ├── services/                  # ledger, allocation, statement, scheduler, outbox, support rules…
 │   ├── utils/                     # money, tokens, totp, pagination, dhaka time, whatsapp…
 │   ├── validation/                # Zod schemas + validate middleware
@@ -306,7 +306,7 @@ npm run test:integration   # integration suite (mongodb-memory-server + supertes
 * The first integration run needs the `mongod` binary (or a populated `mongodb-memory-server` cache).
 * No provider credentials are needed: SMTP/WhatsApp/ClamAV/CAPTCHA paths run their no-op branches.
 
-**Last recorded run (repo audit):** 112 unit tests pass, 47 integration tests pass, 0 failures. Re-run both suites after any change — the numbers in this line are a snapshot, not a guarantee.
+**Last recorded run (P11/S3 phase gate):** 176 unit tests pass, 53 integration tests pass, 0 failures. Re-run both suites after any change — the numbers in this line are a snapshot, not a guarantee.
 
 **Route ↔ documentation check**
 
@@ -314,7 +314,7 @@ npm run test:integration   # integration suite (mongodb-memory-server + supertes
 node scripts/auditRoutes.mjs
 ```
 
-compares the documented endpoints in `Server/docs/API_DOCUMENTATION.md` with the actual router table and prints anything missing on either side (expected output: `ACTUAL: 219 DOCUMENTED: 219`).
+compares the documented endpoints in `Server/docs/API_DOCUMENTATION.md` with the actual router table and prints anything missing on either side (expected output: `ACTUAL: 221 DOCUMENTED: 221`). `node scripts/auditRoutes.mjs --write-table` regenerates the generated route table block in the API doc (prose untouched); `--write-table --check` fails when it is stale. `node scripts/importSmoke.mjs` loads every route/controller/service/model to prove nothing is unreachable. CI (`.github/workflows/ci.yml`) runs all of these plus both suites.
 
 **Not covered automatically:** live OAuth/2FA through a deployed BFF, real SMTP/WhatsApp delivery, ClamAV, CAPTCHA, replica-set recovery drills and load tests. See [Roadmap](#15-roadmap).
 
@@ -326,12 +326,13 @@ Legend: **IMPLEMENTED** (verified in source and exercised by tests/build) · **P
 
 | Area | Status | Notes |
 |---|---|---|
-| Backend API (all modules) | IMPLEMENTED | 219 routes across 28 routers, documented 1:1 in `Server/docs/API_DOCUMENTATION.md`. |
+| Backend API (all modules) | IMPLEMENTED | 221 routes across 29 routers, documented 1:1 in `Server/docs/API_DOCUMENTATION.md`. |
 | Financial core (ledger, allocation, statements) | IMPLEMENTED | Atomic on a replica set; standalone dev falls back to non-transactional. |
 | Inbox & background jobs | IMPLEMENTED | Inbox, preferences, job locks/run logs. Delivery depends on provider config. |
-| Support desk | PARTIALLY IMPLEMENTED | User + admin APIs, SLA jobs, turn-taking. CAPTCHA is a stub. |
+| Support desk | PARTIALLY IMPLEMENTED | User + admin APIs, SLA jobs, turn-taking. Real Turnstile CAPTCHA wired (needs `TURNSTILE_SECRET`; `CAPTCHA_DEV_BYPASS` for dev/test). |
+| Operations & observability | IMPLEMENTED | `GET /api/health` readiness probe, admin `GET /api/admin/health` exception view, outbox lease recovery, nightly accounting-equation check, `X-Request-Id` correlation on responses and audit rows. |
 | Household ops (routines/shopping/kitchen/polls) | PARTIALLY IMPLEMENTED | Rule level tested; roster horizon auto-extension is a placeholder (explicit endpoint works). |
-| Security hardening | PARTIALLY IMPLEMENTED | Two refresh-token stores are not unified: the device list does not control the token in use. |
+| Security hardening | IMPLEMENTED | Session families are authoritative for refresh tokens; revoke-one/revoke-all/password-change/suspend revoke families; legacy `User.refreshToken` accepted until `LEGACY_REFRESH_SUNSET`. |
 | Browser authentication (BFF) | IMPLEMENTED locally / NEEDS VERIFICATION deployed | Cookie login, CSRF, logout, BFF relay tested locally; Google OAuth + 2FA through a deployed BFF untested. |
 | Frontend | PARTIALLY IMPLEMENTED | Next.js App Router client builds all routes; see roadmap for open items. |
 
@@ -352,9 +353,11 @@ Known issues, inconsistencies and product questions are tracked in [`PROJECT_IMP
 
 ### Operational checks
 
-* `GET /` returns `Meal Mate Server is running` (HTTP liveness only — there is no data-aware health endpoint yet).
-* `GET /api/admin/overview` and `GET /api/admin/jobs` (platform admin, 2FA) show counts and last job runs.
-* Outbox health: `GET /api/notifications/groups/:groupId/notifications?state=failed`.
+* `GET /api/health` — unauthenticated readiness probe: DB ping + scheduler heartbeat (`200`/`503`, no tenant data).
+* `GET /` returns `Meal Mate Server is running` (plain HTTP liveness).
+* `GET /api/admin/health`, `GET /api/admin/overview` and `GET /api/admin/jobs` (platform admin, 2FA) show what is stuck: job age/failures, outbox depth and oldest pending, reconciliation variance, receipt `scanStatus` counts, job-lock holders.
+* Outbox health: `GET /api/notifications/groups/:groupId/notifications?state=failed` (`processing` is an internal lease state and is not exposed).
+* Request correlation: every response carries `X-Request-Id`; audit rows store the same id.
 * Accounting integrity: `GET /api/reconciliation/groups/:groupId/reconciliations/equation` → `balanced: true`.
 * Backups/restores: the backup/restore runbook (`Server/docs/RUNBOOK_BACKUP.md`) is referenced by the operations plan — confirm it is present in your checkout before relying on it; the restore drill is still open.
 * Smoke scripts live in `Server/scripts/smoke/`.
@@ -387,7 +390,7 @@ Full details, including current gaps: [API documentation](Server/docs/API_DOCUME
 | `Server/docs/RUNBOOK_BACKUP.md` (plain path, not linked — the file may be absent) | Backup/restore runbook referenced by the operations section. |
 | [Client/docs/FRONTEND_BUILD_PROMPT.md](Client/docs/FRONTEND_BUILD_PROMPT.md) | Frontend build brief and per-module definition of done. |
 
-**API at a glance** — the server mounts `/api/users`, `/api/sessions`, `/api/admin` (hidden), `/api/admin/support` (hidden), `/api/messgroups`, `/api/invite`, `/api/memberships`, `/api/meals`, `/api/expenses`, `/api/money`, `/api/policies`, `/api/periods`, `/api/statements`, `/api/recurring`, `/api/reconciliation`, `/api/disputes`, `/api/assets`, `/api/attachments`, `/api/notifications`, `/api/stats`, `/api/inbox`, `/api/support`, `/api/routines`, `/api/shopping-list`, `/api/kitchen-inventory`, `/api/polls`, and the deprecated `/api/summary`. Paths, payloads and rules are intentionally **not** duplicated here — see **[API documentation](Server/docs/API_DOCUMENTATION.md)**.
+**API at a glance** — the server mounts `/api/health`, `/api/users`, `/api/sessions`, `/api/admin` (hidden), `/api/admin/support` (hidden), `/api/messgroups`, `/api/invite`, `/api/memberships`, `/api/meals`, `/api/expenses`, `/api/money`, `/api/policies`, `/api/periods`, `/api/statements`, `/api/recurring`, `/api/reconciliation`, `/api/disputes`, `/api/assets`, `/api/attachments`, `/api/notifications`, `/api/stats`, `/api/inbox`, `/api/support`, `/api/routines`, `/api/shopping-list`, `/api/kitchen-inventory`, `/api/polls`, and the deprecated `/api/summary`. Paths, payloads and rules are intentionally **not** duplicated here — see **[API documentation](Server/docs/API_DOCUMENTATION.md)**.
 
 ---
 
@@ -397,16 +400,16 @@ Short version; the detailed, prioritised list lives in [PROJECT_IMPROVEMENT_RECO
 
 **Before/at deployment**
 
-- [ ] Unify refresh-token storage (`User.refreshToken` vs `Session` families) so device revocation is truthful
-- [ ] Bind statement finalize to a frozen input set; enqueue outbox rows inside the same transaction
-- [ ] Require `payers[]` on expenses; validate every cross-group reference
+- [x] Unify refresh-token storage (`User.refreshToken` vs `Session` families) so device revocation is truthful
+- [x] Bind statement finalize to a frozen input set; enqueue outbox rows inside the same transaction
+- [x] Require `payers[]` on expenses; validate every cross-group reference
 - [ ] Run the replica-set race drill, restore drill and a 50-member load test
 - [ ] Configure real SMTP/WhatsApp, rotate secrets, deploy behind HTTPS with `NODE_ENV=production`
 
 **Short term**
 
-- [ ] CI: syntax check + module-import smoke + `scripts/auditRoutes.mjs` + both test suites
-- [ ] Readiness endpoint, outbox lease recovery, quarantine for pending-scan receipts, scheduled accounting-equation check
-- [ ] Consolidate Zod schemas and extract an export service
+- [x] CI: syntax check + module-import smoke + `scripts/auditRoutes.mjs` + both test suites
+- [x] Readiness endpoint, outbox lease recovery, quarantine for pending-scan receipts, scheduled accounting-equation check
+- [x] Consolidate Zod schemas and extract an export service
 
 **Product ideas** — bazar budget forecast, monthly budgets, payment reminders, Bengali localisation, "explain my bill", PWA offline meal entry, Excel import.

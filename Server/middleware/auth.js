@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { getCookie } from '../utils/tokens.js';
+import { authCacheKey, cacheGet, cacheSet } from '../services/authCache.js';
 
 // Cookie name for the access token (Doc §15 / §19.1)
 const ACCESS_COOKIE = 'mm_at';
@@ -27,10 +28,17 @@ const auth = async (req, res, next) => {
         if (!decoded?.user?.id || !/^[0-9a-fA-F]{24}$/.test(decoded.user.id)) {
             return res.status(401).json({ msg: 'Token is not valid' });
         }
-        // Platform suspension check (cheap indexed lookup on every request)
-        const suspended = await User.findById(decoded.user.id).select('suspended').lean();
-        if (!suspended) return res.status(401).json({ msg: 'Account unavailable' });
-        if (suspended.suspended) return res.status(403).json({ msg: 'Account suspended' });
+        // Platform suspension check — cached per process for ~30 s, keyed by the
+        // token's `iat` so a post-suspend re-login bypasses a stale entry (S4.1).
+        // `adminUpdateUser` invalidates the user's entries on suspend/re-activate.
+        const cacheKey = authCacheKey(decoded.user.id, decoded.iat);
+        let account = cacheGet(cacheKey);
+        if (account === undefined) {
+            account = await User.findById(decoded.user.id).select('suspended').lean();
+            if (account) cacheSet(cacheKey, account);
+        }
+        if (!account) return res.status(401).json({ msg: 'Account unavailable' });
+        if (account.suspended) return res.status(403).json({ msg: 'Account suspended' });
         req.user = decoded.user;
         next();
     } catch (err) {

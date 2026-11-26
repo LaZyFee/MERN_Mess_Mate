@@ -3,16 +3,15 @@ import User from '../models/User.js';
 import Membership from '../models/Membership.js';
 import PolicyVersion from '../models/PolicyVersion.js';
 import { seedDefaultCategories } from './expenseCategoryController.js';
-import ExcelJS from 'exceljs';
 import { createGroupSchema, addEntrySchema, addMemberSchema, extraSchema, joinByCodeSchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import crypto from 'crypto';
-import PDFDocument from 'pdfkit';
 import { audit } from '../models/AuditEvent.js';
 import AuditEvent from '../models/AuditEvent.js';
 import { sendGroupInviteEmail } from '../utils/mailer.js';
+import { writeExcelExport, writePdfExport } from '../services/exportService.js';
 import { publicProfile, MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
-import { z } from 'zod';
+import { groupFeatureFlagSchema as flagSchema } from '../validation/featureSchemas.js';
 const makeJoinCode = () => {
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no ambiguous chars (0/O, 1/I/L)
     let code = '';
@@ -290,54 +289,13 @@ export const calculate = async (req, res, next) => {
         next(err);
     }
 };
-// Export to Excel (member only) â€” ExcelJS (maintained, secure; replaces unmaintained SheetJS)
+// Export to Excel (member only) — figures come from services/exportService.js
+// (ledger-consistent formatting via toDecimalString; no inline float maths).
 export const excelExport = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId).populate('members.user', MEMBER_VISIBLE_FIELDS);
         if (!group) return res.status(404).json({ msg: 'Group not found' });
-        const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet('Mess Data');
-        const headers = ['Date',
-            ...group.members.map(m => `${m.user.username} Meals`),
-            ...group.members.map(m => `${m.user.username} Costs`)];
-        ws.addRow(headers);
-        ws.getRow(1).font = { bold: true };
-        let totalMeals = 0, totalBazar = 0;
-        const totals = group.members.map(member => ({ user: member.user.username, meals: 0, costs: 0 }));
-        if (group.entries.length > 0) {
-            group.entries.sort((a, b) => a.date - b.date).forEach(entry => {
-                const row = [entry.date.toDateString()];
-                group.members.forEach((member, i) => {
-                    const meal = entry.meals.find(m => m.userId.equals(member.user._id));
-                    if (meal) { row.push(meal.count); totals[i].meals += meal.count; totalMeals += meal.count; }
-                    else row.push('');
-                });
-                group.members.forEach((member, i) => {
-                    const cost = entry.costs.find(c => c.userId.equals(member.user._id));
-                    if (cost) { row.push(cost.amount); totals[i].costs += cost.amount; totalBazar += cost.amount; }
-                    else row.push('');
-                });
-                ws.addRow(row);
-            });
-        } else {
-            ws.addRow(['No entries available']);
-        }
-        group.extras.forEach(extra => totalBazar += extra.amount || 0);
-        const mealRate = totalMeals > 0 ? totalBazar / totalMeals : 0;
-        ws.addRow([]);
-        ws.addRow(['TOTAL MEALS', totalMeals]);
-        ws.addRow(['TOTAL BAZAR', totalBazar]);
-        ws.addRow(['MEAL RATE', mealRate]);
-        ws.addRow([]);
-        ws.addRow(['Member', 'Meals', 'Costs', 'Meal Cost', 'Balance']);
-        totals.forEach(t => {
-            const mealCost = t.meals * mealRate;
-            ws.addRow([t.user, t.meals, t.costs, mealCost, t.costs - mealCost]);
-        });
-        res.setHeader('Content-Disposition', 'attachment; filename="mess_export.xlsx"');
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        await wb.xlsx.write(res); // stream directly to the response
-        res.end();
+        await writeExcelExport({ group, res });
     } catch (err) {
         next(err);
     }
@@ -478,84 +436,19 @@ export const inviteByEmail = async (req, res, next) => {
         next(err);
     }
 };
-// ---------- PDF export (member only) ----------
+// ---------- PDF export (member only) — see services/exportService.js ----------
 export const pdfExport = async (req, res, next) => {
     try {
         const group = await MessGroup.findById(req.params.groupId)
             .populate('members.user', MEMBER_VISIBLE_FIELDS);
         if (!group) return res.status(404).json({ msg: 'Group not found' });
-        // Compute totals (same logic as calculate)
-        let totalMeals = 0, totalBazar = 0;
-        const totals = group.members.map(member => ({ user: member.user.username, meals: 0, costs: 0 }));
-        group.entries.forEach(entry => {
-            entry.meals.forEach(m => {
-                const idx = group.members.findIndex(mem => mem.user._id.equals(m.userId));
-                if (idx > -1) { totals[idx].meals += m.count; totalMeals += m.count; }
-            });
-            entry.costs.forEach(c => {
-                const idx = group.members.findIndex(mem => mem.user._id.equals(c.userId));
-                if (idx > -1) { totals[idx].costs += c.amount; totalBazar += c.amount; }
-            });
-        });
-        group.extras.forEach(e => totalBazar += e.amount || 0);
-        const mealRate = totalMeals > 0 ? totalBazar / totalMeals : 0;
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="mess_report.pdf"');
-        const doc = new PDFDocument({ margin: 40 });
-        doc.pipe(res);
-        doc.fontSize(20).text(group.name, { align: 'center' });
-        doc.fontSize(12).text(`Mess Report â€” generated ${new Date().toLocaleDateString()}`, { align: 'center' });
-        doc.moveDown(2);
-        doc.fontSize(14).text('Daily Entries', { underline: true });
-        doc.moveDown(0.5);
-        if (group.entries.length === 0) {
-            doc.fontSize(10).text('No entries recorded.');
-        } else {
-            group.entries.sort((a, b) => a.date - b.date).forEach(entry => {
-                doc.fontSize(10).text(entry.date.toDateString());
-                entry.meals.forEach(m => {
-                    const mem = group.members.find(mem => mem.user._id.equals(m.userId));
-                    doc.text(`   ${mem ? mem.user.username : 'Unknown'}: ${m.count} meals`, { indent: 10 });
-                });
-                entry.costs.forEach(c => {
-                    const mem = group.members.find(mem => mem.user._id.equals(c.userId));
-                    doc.text(`   ${mem ? mem.user.username : 'Unknown'}: ${c.amount} (${c.description || 'cost'})`, { indent: 10 });
-                });
-                doc.moveDown(0.3);
-            });
-        }
-        doc.addPage();
-        doc.fontSize(14).text('Monthly Summary', { underline: true });
-        doc.moveDown();
-        doc.fontSize(11).text(`Total Meals: ${totalMeals}`);
-        doc.text(`Total Bazar: ${totalBazar}`);
-        doc.text(`Meal Rate: ${mealRate.toFixed(2)}`);
-        doc.moveDown();
-        doc.fontSize(12).text('Member Balances', { underline: true });
-        doc.moveDown(0.3);
-        totals.forEach(t => {
-            const mealCost = t.meals * mealRate;
-            const balance = t.costs - mealCost;
-            doc.fontSize(10).text(
-                `${t.user}: meals=${t.meals}, paid=${t.costs.toFixed(2)}, mealCost=${mealCost.toFixed(2)}, balance=${balance.toFixed(2)} ${balance >= 0 ? '(receives)' : '(owes)'}`
-            );
-        });
-        doc.end();
+        await writePdfExport({ group, res });
     } catch (err) {
         next(err);
     }
 };
 
 // ---------- Per-group feature flags ---------- (todo item 12)
-const flagSchema = z.object({
-    routines: z.boolean().optional(),
-    polls: z.boolean().optional(),
-    shoppingList: z.boolean().optional(),
-    kitchenInventory: z.boolean().optional(),
-    bazarRotation: z.boolean().optional(),
-    emergencyBroadcast: z.boolean().optional(),
-    weeklyDigest: z.boolean().optional(),
-});
 
 // GET /api/messgroups/feature-flags/:groupId
 export const getFeatureFlags = async (req, res, next) => {

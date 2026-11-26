@@ -3,6 +3,15 @@ import MessGroup from '../models/MessGroup.js';
 import { paymentNoteSchema, noteParamSchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import { publicProfile, MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
+import { legacyTakaToDecimalString } from '../utils/money.js';
+
+// Response boundary (S3.8): legacy PaymentNote stores takas — expose a canonical
+// decimal string alongside the stored number so clients never format floats.
+const withDecimalAmount = (noteDoc) => {
+    if (!noteDoc) return noteDoc;
+    const obj = typeof noteDoc.toObject === 'function' ? noteDoc.toObject() : noteDoc;
+    return { ...obj, amountDueDecimal: legacyTakaToDecimalString(obj.amountDue) };
+};
 
 // Helper: month param validation is done here when combined with groupId+userId params
 const validateParams = (req, res) => {
@@ -51,7 +60,7 @@ export const upsertPaymentNote = [
                 { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
             );
 
-            res.status(201).json({ msg: 'Payment note saved', paymentNote });
+            res.status(201).json({ msg: 'Payment note saved', paymentNote: withDecimalAmount(paymentNote) });
         } catch (err) {
             next(err);
         }
@@ -80,7 +89,7 @@ export const getPaymentNote = async (req, res, next) => {
             .populate('createdBy', 'username');
 
         if (!paymentNote) return res.status(404).json({ msg: 'No payment note for this month' });
-        res.json(paymentNote);
+        res.json(withDecimalAmount(paymentNote));
     } catch (err) {
         next(err);
     }

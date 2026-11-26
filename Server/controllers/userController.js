@@ -1,4 +1,6 @@
-import { listSessions } from '../services/sessionService.js';
+import {
+    listSessions, createSession, rotateSession, revokeSession, revokeAllSessions,
+} from '../services/sessionService.js';
 import User from '../models/User.js';
 import MessGroup from '../models/MessGroup.js';
 import Membership from '../models/Membership.js';
@@ -10,6 +12,7 @@ import AuditEvent from '../models/AuditEvent.js';
 import Note from '../models/Note.js';
 import bcrypt from 'bcrypt';
 import cloudinary from '../config/cloudinary.js';
+import jwt from 'jsonwebtoken';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, updateProfileSchema } from '../validation/schemas.js';
 import { validate } from '../validation/validate.js';
 import {
@@ -31,23 +34,28 @@ const safeUser = (user) => ({
 
 export const sendAuthResponse = async (res, user, status = 200, req = null, amr, extra = {}) => {
     const accessToken = signAccessToken({ id: user.id, amr });
-    const refreshToken = signRefreshToken(user);
-    await saveRefreshToken(User, user.id, refreshToken);
+    const { rawToken, familyId } = await createSession({
+        user,
+        deviceId: req?.headers['x-device-id'] || 'unknown',
+        userAgent: req?.headers['user-agent'] || '',
+        ip: req?.ip || '',
+    });
 
     const isWeb = req && req.headers['x-client'] === 'web';
+    const refreshCookieValue = `${familyId}:${rawToken}`;
 
     if (isWeb) {
         // Cookie-only: set HttpOnly cookies, omit tokens from JSON body
         setAccessTokenCookie(res, accessToken);
-        setRefreshTokenCookieWide(res, refreshToken); // widened path for BFF
+        setRefreshTokenCookieWide(res, refreshCookieValue); // widened path for BFF
         setCSRFCookie(res);
         res.status(status).json({ user: safeUser(user), ...extra });
     } else {
-        setRefreshTokenCookie(res, refreshToken);
+        setRefreshTokenCookie(res, refreshCookieValue);
         res.status(status).json({
             user: safeUser(user), ...extra,
             accessToken,
-            refreshToken,
+            refreshToken: refreshCookieValue,
         });
     }
 };
@@ -109,7 +117,7 @@ export const login = [
             // If 2FA is enabled, require step-up verification before issuing tokens
             if (user.twoFactor?.enabled) {
                 const { makeChallenge } = await import('./totpController.js');
-                const challengeId = makeChallenge(user.id);
+                const challengeId = await makeChallenge(user.id);
                 return res.json({
                     twoFactorRequired: true,
                     challengeToken: challengeId,
@@ -130,12 +138,70 @@ export const refresh = async (req, res, next) => {
         const refreshToken = req.body?.refreshToken || getCookie(req, 'refreshToken');
         if (!refreshToken) return res.status(400).json({ msg: 'Refresh token required' });
 
+        // New format: familyId:rawToken → CAS rotation on Session.currentTokenHash
+        const colonIdx = refreshToken.lastIndexOf(':');
+        if (colonIdx !== -1) {
+            const familyId = refreshToken.slice(0, colonIdx);
+            const rawToken = refreshToken.slice(colonIdx + 1);
+
+            const result = await rotateSession({ rawToken, ip: req.ip || '' });
+            if (!result) return res.status(401).json({ msg: 'Invalid or expired refresh token' });
+            if (result.user.suspended) return res.status(403).json({ msg: 'Account suspended' });
+
+            const newCookieValue = `${familyId}:${result.newToken}`;
+            const accessToken = signAccessToken({ id: result.user.id, amr: req.user?.amr });
+            const isWeb = req && req.headers['x-client'] === 'web';
+
+            if (isWeb) {
+                setAccessTokenCookie(res, accessToken);
+                setRefreshTokenCookieWide(res, newCookieValue);
+                setCSRFCookie(res);
+                res.status(200).json({ user: safeUser(result.user) });
+            } else {
+                setRefreshTokenCookie(res, newCookieValue);
+                res.status(200).json({
+                    user: safeUser(result.user),
+                    accessToken,
+                    refreshToken: newCookieValue,
+                });
+            }
+            return;
+        }
+
+        // Legacy format: plain JWT refresh token stored in User.refreshToken
+        // Accepted until LEGACY_REFRESH_SUNSET env date, then rejected.
+        const sunset = process.env.LEGACY_REFRESH_SUNSET;
+        if (sunset && new Date() > new Date(sunset)) {
+            return res.status(401).json({ msg: 'Legacy refresh tokens no longer accepted' });
+        }
         const user = await verifyRefreshToken(User, refreshToken);
         if (!user) return res.status(401).json({ msg: 'Invalid or expired refresh token' });
         if (user.suspended) return res.status(403).json({ msg: 'Account suspended' });
 
-        // Rotate: old token is invalidated, a new pair is issued (and cookie updated)
-        await sendAuthResponse(res, user, 200, req);
+        // Migrate legacy token to a new Session family
+        const { rawToken: newRawToken, familyId: newFamilyId } = await createSession({
+            user,
+            deviceId: req?.headers['x-device-id'] || 'unknown',
+            userAgent: req?.headers['user-agent'] || '',
+            ip: req?.ip || '',
+        });
+        const newCookieValue = `${newFamilyId}:${newRawToken}`;
+        const accessToken = signAccessToken({ id: user.id, amr: req.user?.amr });
+        const isWeb = req && req.headers['x-client'] === 'web';
+
+        if (isWeb) {
+            setAccessTokenCookie(res, accessToken);
+            setRefreshTokenCookieWide(res, newCookieValue);
+            setCSRFCookie(res);
+            res.status(200).json({ user: safeUser(user) });
+        } else {
+            setRefreshTokenCookie(res, newCookieValue);
+            res.status(200).json({
+                user: safeUser(user),
+                accessToken,
+                refreshToken: newCookieValue,
+            });
+        }
     } catch (err) {
         next(err);
     }
@@ -146,8 +212,18 @@ export const logout = async (req, res, next) => {
     try {
         const refreshToken = req.body?.refreshToken || getCookie(req, 'refreshToken');
         if (refreshToken) {
-            const user = await verifyRefreshToken(User, refreshToken);
-            if (user) await clearRefreshToken(User, user.id);
+            const colonIdx = refreshToken.lastIndexOf(':');
+            if (colonIdx !== -1) {
+                const familyId = refreshToken.slice(0, colonIdx);
+                const rawToken = refreshToken.slice(colonIdx + 1);
+                let decoded;
+                try {
+                    decoded = jwt.verify(rawToken, process.env.JWT_REFRESH_SECRET);
+                } catch {}
+                if (decoded?.user?.id) {
+                    await revokeSession({ userId: decoded.user.id, familyId });
+                }
+            }
         }
         clearRefreshTokenCookie(res);
         clearRefreshTokenCookie(res, '/api');
@@ -265,7 +341,8 @@ export const resetPassword = [
             user.password = await bcrypt.hash(password, salt);
             user.resetPasswordToken = undefined;
             user.resetPasswordExpires = undefined;
-            user.refreshToken = null; // force re-login on all devices
+            await revokeAllSessions({ userId: user.id }); // revoke all Session families on password reset
+            user.refreshToken = null; // clear legacy hash too
             await user.save();
 
             res.json({ msg: 'Password reset successful' });
@@ -302,9 +379,9 @@ export const changePassword = [
 
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(req.body.newPassword, salt);
-            // Revoke all other sessions: clear stored refresh token so every
-            // device must re-login with the new password (B3 quick win).
-            user.refreshToken = null;
+            // Revoke all Session families so every device must re-login (D1).
+            await revokeAllSessions({ userId: req.user.id });
+            user.refreshToken = null; // clear legacy hash too
             await user.save();
 
             res.json({ msg: 'Password changed' });
@@ -353,8 +430,8 @@ export const googleAuth = async (req, res) => {
         // Resume through the existing credential + OTP flow.
         return res.redirect(frontend + '/login');
     }
-    const refreshToken = signRefreshToken(user);
-    await saveRefreshToken(User, user.id, refreshToken);
+    const { rawToken, familyId } = await createSession({ user });
+    const refreshToken = `${familyId}:${rawToken}`;
     setAccessTokenCookie(res, signAccessToken(user));
     setRefreshTokenCookieWide(res, refreshToken);
     setCSRFCookie(res);

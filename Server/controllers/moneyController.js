@@ -6,6 +6,8 @@ import { audit } from '../models/AuditEvent.js';
 import { withTransaction } from '../utils/transaction.js';
 import { paginateQuery } from '../utils/pagination.js';
 import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
+import { resolveGroupRefs } from '../services/crossGroupRefs.js';
+import Membership from '../models/Membership.js';
 
 // Money endpoints — deposits/contributions, payouts, supplier payments,
 // member-to-member settlements, fund transfers, with confirm/reject/reverse.
@@ -29,6 +31,12 @@ export const submitTransaction = async (req, res, next) => {
         } = req.body;
 
         assertPoisha(amount);
+        await resolveGroupRefs({
+            groupId,
+            membershipIds: [fromMember, toMember].filter(Boolean),
+            accountIds: [fromAccount, toAccount].filter(Boolean),
+            effectiveDate: paidAt || new Date(),
+        });
 
         // sender's own assertion: member contributions submitted by the member are pending
         const tx = await MoneyTransaction.create({
@@ -44,7 +52,7 @@ export const submitTransaction = async (req, res, next) => {
         await audit({ groupId, actorId: req.user.id, action: 'money.submitted', targetType: 'money_transaction', targetId: tx._id, after: { kind, amount } });
         res.status(201).json({ msg: 'Transaction submitted — awaiting confirmation by receiver/treasurer', transaction: tx });
     } catch (err) {
-        if (err.status === 400) return res.status(400).json({ msg: err.message });
+        if ([400, 422].includes(err.status)) return res.status(err.status).json({ msg: err.message });
         next(err);
     }
 };
@@ -95,6 +103,12 @@ const buildJournalLines = (tx) => {
 export const confirmTransaction = async (req, res, next) => {
     try {
         const { groupId, txId } = req.params;
+        if (process.env.REQUIRE_TOTP_MONEY_ROLES === 'true') {
+            const membership = await Membership.findOne({ groupId, user: req.user.id, $or: [{ endDate: null }, { endDate: { $gt: new Date() } }] }).lean();
+            if (['owner', 'treasurer'].includes(membership?.role) && !req.user?.amr?.includes('otp')) {
+                return res.status(403).json({ msg: 'TOTP verification required for money role', code: 'TOTP_REQUIRED' });
+            }
+        }
         const result = await withTransaction(async (session) => {
             const tx = await MoneyTransaction.findOne({ _id: txId, groupId }).session(session);
             if (!tx) throw Object.assign(new Error('Transaction not found'), { status: 404 });

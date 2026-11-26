@@ -3,6 +3,7 @@ import auth from '../middleware/auth.js';
 import { validate } from '../validation/validate.js';
 import { resolveHistoryWindow } from '../middleware/privacy.js';
 import { idempotent } from '../middleware/idempotency.js';
+import { deprecate } from '../middleware/deprecate.js';
 import {
     requireGroupRole, allowSelfOrAdmin, requireGroupRoleV2,
 } from '../middleware/roles.js';
@@ -23,7 +24,7 @@ expenseRouter.use(auth);
 expenseRouter.post('/:groupId', validate(objectIdParamSchema, 'params'), requireGroupRole('member'), addExpense);
 
 // PUT /api/expenses/entry/:id — payer only
-expenseRouter.put('/entry/:id', validate(idParamSchema, 'params'), updateExpense);
+expenseRouter.put('/entry/:id', deprecate({ successor: '/api/expenses/groups/:groupId/expenses', sunsetDate: process.env.LEGACY_SUNSET_DATE }), validate(idParamSchema, 'params'), updateExpense);
 
 // GET /api/expenses/:groupId?month=&from=&to=&userId=&categoryId=&category= — filtered (ex-members clamped)
 expenseRouter.get('/:groupId', validate(expenseFilterQuerySchema, 'query'), requireGroupRole('member'), resolveHistoryWindow, getExpenses);
@@ -32,7 +33,7 @@ expenseRouter.get('/:groupId', validate(expenseFilterQuerySchema, 'query'), requ
 expenseRouter.get('/:groupId/:month', validate(monthParamSchema, 'params'), requireGroupRole('member'), getExpensesByMonth);
 
 // DELETE /api/expenses/entry/:id — payer or group admin
-expenseRouter.delete('/entry/:id', validate(idParamSchema, 'params'), requireGroupRole('member'), allowSelfOrAdmin, deleteExpense);
+expenseRouter.delete('/entry/:id', deprecate({ successor: '/api/expenses/groups/:groupId/expenses', sunsetDate: process.env.LEGACY_SUNSET_DATE }), validate(idParamSchema, 'params'), requireGroupRole('member'), allowSelfOrAdmin, deleteExpense);
 
 // ---------- Expenses (workflow) ----------
 expenseRouter.get('/groups/:groupId/expenses', validate(groupIdParam, 'params'), requireGroupRoleV2('member'), validate(listExpenseQuery, 'query'), listExpenses);

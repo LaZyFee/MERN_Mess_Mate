@@ -10,9 +10,22 @@ import { sendWaDirect, sendWaTemplate } from '../utils/whatsapp.js';
 const isMailConfigured = () => Boolean(process.env.SMTP_HOST);
 const isWaConfigured = () => Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID);
 
-/** Lease a batch of pending messages (single worker instance is safe: state CAS). */
+const LEASE_MS = Number(process.env.OUTBOX_LEASE_MS || 2 * 60 * 1000);
+
+// Reclaim rows whose worker crashed mid-send: the lease expired while the state
+// is still `processing`. They return to `pending` and become claimable again.
+export const reclaimExpiredLeases = async (now = new Date()) => {
+    const res = await NotificationOutbox.updateMany(
+        { state: 'processing', leasedUntil: { $ne: null, $lt: now } },
+        { $set: { state: 'pending', leasedUntil: null, nextAttemptAt: now } }
+    );
+    return res.modifiedCount;
+};
+
+/** Lease a batch of pending messages (CAS on state, lease expiry enforced). */
 const leaseBatch = async (limit = 10) => {
     const now = new Date();
+    await reclaimExpiredLeases(now);
     const candidates = await NotificationOutbox.find({
         state: { $in: ['pending', 'failed'] },
         nextAttemptAt: { $lte: now },
@@ -23,7 +36,14 @@ const leaseBatch = async (limit = 10) => {
     for (const m of candidates) {
         const claimed = await NotificationOutbox.findOneAndUpdate(
             { _id: m._id, state: m.state },
-            { $set: { state: 'processing', attempts: m.attempts + 1 } },
+            {
+                $set: {
+                    state: 'processing',
+                    leasedUntil: new Date(now.getTime() + LEASE_MS),
+                    lastAttemptAt: now,
+                },
+                $inc: { attempts: 1 },
+            },
             { new: true }
         );
         if (claimed) leased.push(claimed);

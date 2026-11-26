@@ -292,6 +292,17 @@ export const appeal = async (req, res, next) => {
 };
 
 const verifyCaptcha = async (token, ip) => {
-    // Stub verifier — wire hCaptcha/Turnstile here when CAPTCHA_PROVIDER is set.
-    return Boolean(token);
+    if (process.env.CAPTCHA_DEV_BYPASS === 'true' && ['development', 'test'].includes(process.env.NODE_ENV)) {
+        return true;
+    }
+    const secret = process.env.TURNSTILE_SECRET;
+    if (!secret || !token) return false;
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret, response: token, remoteip: ip }),
+    });
+    if (!response.ok) return false;
+    const result = await response.json();
+    return result.success === true;
 };

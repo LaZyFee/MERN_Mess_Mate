@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { currentRequestId } from '../utils/requestContext.js';
 
 // AuditEvent — append-only. Financial approvals, reversals, role/policy changes,
 // close attempts, deliveries. No update/delete API exists for this collection.
@@ -42,7 +43,7 @@ export const audit = async ({ groupId = null, actorId = null, action, targetType
         await AuditEvent.create({
             groupId, actorId, action, targetType, targetId,
             before: redact(before), after: redact(after),
-            reason, requestId, ip,
+            reason, requestId: requestId || currentRequestId(), ip,
         });
     } catch (e) {
         // auditing must never break the request path

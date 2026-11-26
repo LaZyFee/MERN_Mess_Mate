@@ -2,6 +2,7 @@ import NotificationOutbox from '../models/NotificationOutbox.js';
 import User from '../models/User.js';
 import { enqueueNotification } from '../services/outboxWorker.js';
 import { normalizeWaNumber, verifyWebhookSignature, processWebhookStatuses } from '../utils/whatsapp.js';
+import { paginateQuery } from '../utils/pagination.js';
 
 // Notifications — delivery status visibility, webhooks, consent & manual resend (Doc §13, §19).
 
@@ -11,16 +12,24 @@ const deliveryFilter = (req) => {
     return filter;
 };
 
-/** GET /api/groups/:groupId/notifications?statementId=&state= */
+/** GET /api/groups/:groupId/notifications?statementId=&state=&cursor= */
 export const listOutbox = async (req, res, next) => {
     try {
         const filter = deliveryFilter(req);
         const q = req.validated?.query || {};
         if (q.statementId) filter.statementId = q.statementId;
         if (q.state) filter.state = q.state;
-        const messages = await NotificationOutbox.find(filter)
-            .sort({ createdAt: -1 }).limit(200).lean();
-        res.json({ messages });
+        else filter.state = { $ne: 'processing' }; // internal lease state, never user-facing
+        if (q.all === 'true') {
+            const messages = await NotificationOutbox.find(filter).sort({ createdAt: -1 }).lean();
+            return res.json({ messages, nextCursor: null, hasMore: false });
+        }
+        const page = await paginateQuery({
+            model: NotificationOutbox, filter,
+            cursor: q.cursor || null, limit: q.limit || 50,
+            sortField: 'createdAt', sortOrder: -1,
+        });
+        res.json({ messages: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore });
     } catch (err) { next(err); }
 };
 
@@ -39,7 +48,7 @@ export const resend = async (req, res, next) => {
         const original = await NotificationOutbox.findOne({ _id: req.params.messageId, groupId: req.params.groupId }).lean();
         if (!original) return res.status(404).json({ msg: 'Notification not found' });
 
-        const { _id, createdAt, updatedAt, state, attempts, providerMessageId, processedAt, dedupeKey, ...rest } = original;
+        const { _id, createdAt, updatedAt, state, attempts, providerMessageId, processedAt, dedupeKey, leasedUntil, lastAttemptAt, ...rest } = original;
         const copy = await enqueueNotification({
             ...rest,
             purpose: `${original.purpose}_resend`,

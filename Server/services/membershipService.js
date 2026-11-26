@@ -16,15 +16,17 @@ export const activeMemberships = async ({ groupId, at = new Date() }) => {
 };
 
 /** Memberships overlapping any part of a month (YYYY-MM string). */
-export const membershipsInMonth = async ({ groupId, month }) => {
+export const membershipsInMonth = async ({ groupId, month, session }) => {
     const [y, m] = month.split('-').map(Number);
     const start = new Date(Date.UTC(y, m - 1, 1));
     const end = new Date(Date.UTC(y, m, 1));
-    const rows = await Membership.find({
+    const query = Membership.find({
         groupId,
         startDate: { $lt: end },
         $or: [{ endDate: null }, { endDate: { $gt: start } }],
     }).sort({ startDate: 1, createdAt: 1 });
+    if (session) query.session(session);
+    const rows = await query;
     return rows;
 };
 

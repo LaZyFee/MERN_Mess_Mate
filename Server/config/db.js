@@ -3,6 +3,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Production requires a replica set for multi-document transactions.
+// Refuse to boot in production without MONGO_REPLICA_SET configured.
+if (process.env.NODE_ENV === 'production' && !process.env.MONGO_REPLICA_SET) {
+    console.error('FATAL: NODE_ENV=production requires MONGO_REPLICA_SET (transactions need a replica set).');
+    process.exit(1);
+}
+
 const connectDB = async () => {
     try {
         const mongoose = (await import('mongoose')).default;
@@ -16,10 +23,6 @@ const connectDB = async () => {
             w: 'majority',
             readPreference: 'primaryPreferred',
             serverSelectionTimeoutMS: 10000,
-            // Point at a replica set (or sharded cluster) so multi-document
-            // transactions are supported. Omit MONGO_REPLICA_SET for a
-            // standalone dev instance — mongoose still connects, transactions
-            // gracefully degrade via utils/transaction.js.
             ...(process.env.MONGO_REPLICA_SET ? { replicaSet: process.env.MONGO_REPLICA_SET } : {}),
         };
         await connect(process.env.MONGO_URI, opts);

@@ -2,29 +2,7 @@ import KitchenItem from '../models/KitchenItem.js';
 import Membership from '../models/Membership.js';
 import { audit } from '../models/AuditEvent.js';
 import { emitGroup } from './routinesController.js';
-import { z } from 'zod';
-
-const itemCreateSchema = z.object({
-    name: z.string().trim().min(1).max(80),
-    unit: z.string().trim().max(20).optional().default(''),
-    currentStock: z.number().nonnegative().optional().default(0),
-    reorderThreshold: z.number().nonnegative().optional().default(0),
-    averageConsumptionPerDay: z.number().nonnegative().optional().default(0),
-});
-
-const itemUpdateSchema = z.object({
-    currentStock: z.number().nonnegative().optional(),
-    reorderThreshold: z.number().nonnegative().optional(),
-    averageConsumptionPerDay: z.number().nonnegative().optional(),
-    isActive: z.boolean().optional(),
-});
-
-const refillSchema = z.object({
-    quantity: z.number().positive(),
-    unit: z.string().trim().max(20).optional().default(''),
-    costPoisha: z.number().nonnegative().optional().default(0),
-    note: z.string().trim().max(200).optional().default(''),
-});
+import { kitchenItemCreateSchema as itemCreateSchema, kitchenItemUpdateSchema as itemUpdateSchema, kitchenRefillSchema as refillSchema } from '../validation/featureSchemas.js';
 
 // GET /api/kitchen-inventory/groups/:groupId — list items
 export const listKitchenItems = async (req, res, next) => {

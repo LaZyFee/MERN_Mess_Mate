@@ -1,6 +1,7 @@
 ﻿import Dispute from '../models/Dispute.js';
 import { audit } from '../models/AuditEvent.js';
 import { MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
+import { paginateQuery } from '../utils/pagination.js';
 
 // Disputes — open/list/respond/resolve against a source or statement item.
 
@@ -20,15 +21,25 @@ export const openDispute = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-/** GET /api/groups/:groupId/disputes?status= */
+/** GET /api/groups/:groupId/disputes?status=&cursor= */
 export const listDisputes = async (req, res, next) => {
     try {
+        const q = req.validated?.query || {};
         const filter = { groupId: req.params.groupId };
-        if (req.validated?.query?.status) filter.status = req.validated.query.status;
-        const disputes = await Dispute.find(filter)
-            .populate('raisedBy', MEMBER_VISIBLE_FIELDS)
-            .sort({ createdAt: -1 }).limit(100).lean();
-        res.json({ disputes });
+        if (q.status) filter.status = q.status;
+        if (q.all === 'true') {
+            const disputes = await Dispute.find(filter)
+                .populate('raisedBy', MEMBER_VISIBLE_FIELDS)
+                .sort({ createdAt: -1 }).lean();
+            return res.json({ disputes, nextCursor: null, hasMore: false });
+        }
+        const page = await paginateQuery({
+            model: Dispute, filter,
+            cursor: q.cursor || null, limit: q.limit || 50,
+            sortField: 'createdAt', sortOrder: -1,
+            populate: { path: 'raisedBy', select: MEMBER_VISIBLE_FIELDS },
+        });
+        res.json({ disputes: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore });
     } catch (err) { next(err); }
 };
 

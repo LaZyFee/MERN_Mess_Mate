@@ -6,6 +6,7 @@ import MessGroup from '../models/MessGroup.js';
 import Membership from '../models/Membership.js';
 import { audit } from '../models/AuditEvent.js';
 import { recordSecurityEvent } from '../models/SecurityEvent.js';
+import { withTransaction } from '../utils/transaction.js';
 
 // In-memory rate-limit buckets (per-IP + per-user). In production use Redis.
 const ipBuckets = new Map();
@@ -55,30 +56,26 @@ export const joinByCode = async (req, res, next) => {
             return res.status(200).json({ msg: 'Join processed' });
         }
 
-        const updated = await InviteCode.findOneAndUpdate(
-            { _id: doc._id, revokedAt: null, expiresAt: { $gt: NOW() }, usedCount: { $lt: doc.maxUses } },
-            { $inc: { usedCount: 1 } },
-            { new: true }
-        );
-        if (!updated) {
-            return res.status(200).json({ msg: 'Join processed' });
-        }
+        if (userId) {
+            await withTransaction(async (session) => {
+                const updated = await InviteCode.findOneAndUpdate(
+                    { _id: doc._id, revokedAt: null, expiresAt: { $gt: NOW() }, usedCount: { $lt: doc.maxUses } },
+                    { $inc: { usedCount: 1 } },
+                    { new: true, session }
+                );
+                if (!updated) throw Object.assign(new Error('Invite is no longer available'), { status: 409 });
 
-        const group = await MessGroup.findById(groupId);
-        if (!group) {
-            return res.status(404).json({ msg: 'Group not found' });
-        }
-
-        const already = group.members?.some(m => String(m.user) === String(userId));
-        if (!already && userId) {
-            group.members.push({ user: userId, role: 'member' });
-            await group.save();
-
-            await Membership.findOneAndUpdate(
-                { groupId, user: userId },
-                { groupId, user: userId, role: 'member', startDate: NOW() },
-                { upsert: true, new: true }
-            );
+                const group = await MessGroup.findOne({ _id: groupId }).session(session);
+                if (!group) throw Object.assign(new Error('Group not found'), { status: 404 });
+                const already = group.members?.some(m => String(m.user) === String(userId));
+                if (!already) group.members.push({ user: userId, role: 'member' });
+                await group.save({ session });
+                await Membership.findOneAndUpdate(
+                    { groupId, user: userId },
+                    { groupId, user: userId, role: 'member', startDate: NOW() },
+                    { upsert: true, new: true, session }
+                );
+            });
         }
 
         if (userId) userLocks.delete(userId);

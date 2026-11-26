@@ -1,6 +1,5 @@
 import express from 'express';
 import auth from '../middleware/auth.js';
-import { z } from 'zod';
 import {
     requirePlatformAdmin,
 } from '../controllers/adminController.js';
@@ -15,6 +14,8 @@ import {
 } from '../validation/supportSchemas.js';
 import { validate } from '../validation/validate.js';
 import { objectId } from '../validation/schemas.js';
+import { adminCannedReplyParam } from '../validation/featureSchemas.js';
+import { z } from 'zod';
 
 // Platform admin Support Desk — inherits the 404-masking guard.
 
@@ -38,7 +39,7 @@ router.get('/stats', adminStats);
 
 router.get('/canned-replies', listCannedReplies);
 router.post('/canned-replies', validate(cannedReplySchema), createCannedReply);
-router.put('/canned-replies/:replyId', validate(z.object({ replyId: objectId }), 'params'), validate(cannedReplySchema), updateCannedReply);
-router.delete('/canned-replies/:replyId', validate(z.object({ replyId: objectId }), 'params'), deleteCannedReply);
+router.put('/canned-replies/:replyId', validate(adminCannedReplyParam, 'params'), validate(cannedReplySchema), updateCannedReply);
+router.delete('/canned-replies/:replyId', validate(adminCannedReplyParam, 'params'), deleteCannedReply);
 
 export default router;

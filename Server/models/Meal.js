@@ -41,5 +41,8 @@ mealSchema.pre('validate', function (next) {
 
 mealSchema.index({ groupId: 1, date: 1, 'breakfast.state': 1, 'lunch.state': 1, 'snacks.state': 1, 'dinner.state': 1 });
 
+// Stats charts query by (groupId, month) with a string range (S4.6).
+mealSchema.index({ groupId: 1, month: 1 });
+
 const Meal = mongoose.model('Meal', mealSchema);
 export default Meal;

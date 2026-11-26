@@ -162,7 +162,26 @@ There is **no universal envelope**. The two recurring shapes are:
 | Bare resource | The document itself, e.g. `201 <group>`, `200 <mealRecord>` | legacy CRUD endpoints (`/api/meals/:groupId`, `/api/messgroups/*`) |
 | Message + resource | `{ "msg": "...", "<resource>": {...} }` | most V2 endpoints |
 | List | `{ "<plural>": [...] }` | most list endpoints |
-| Cursor page | `{ "<plural>": [...], "nextCursor": "<base64 or id>|<null>", "hasMore": true|false }` | expenses, money, inbox, support tickets, admin users, admin tickets, group audit log |
+| Cursor page | `{ "<plural>": [...], "nextCursor": "<base64 or id>|<null>", "hasMore": true|false }` | expenses, money, inbox, support tickets, admin users, admin tickets, group audit log, **memberships, guest meals, disputes, outbox, polls, assets** (see §1.4.1) |
+
+#### 1.4.1 Cursor list contract (memberships · guest meals · disputes · outbox · polls · assets)
+
+All six lists share the same query/response contract, implemented with `utils/pagination.js#paginateQuery`:
+
+| Query | Meaning |
+|---|---|
+| `cursor` | Opaque base64 value from the previous `nextCursor`. Omit on the first page. |
+| `limit` | Page size, clamped **1–100** (default 50). |
+| `all=true` | Escape hatch for exports: returns every row, `hasMore: false`, `nextCursor: null`. |
+
+* **Memberships** `GET /api/memberships/groups/:groupId/memberships` → `{ memberships, active, nextCursor, hasMore }` (`_id` ascending).
+* **Guest meals** `GET /api/meals/:groupId/guests` → `{ guests, nextCursor, hasMore }` (`createdAt` descending). **Legacy shape:** without `cursor`/`limit` the response is still the bare array, so old clients are unaffected.
+* **Disputes** `GET /api/disputes/groups/:groupId/disputes` → `{ disputes, nextCursor, hasMore }` (`createdAt` descending).
+* **Outbox** `GET /api/notifications/groups/:groupId/notifications` → `{ messages, nextCursor, hasMore }`. Rows in the internal `processing` lease state are never returned unless you ask for that state explicitly (which the query validator rejects).
+* **Polls** `GET /api/polls/groups/:groupId` → `{ polls, nextCursor, hasMore }`.
+* **Assets** `GET /api/assets/groups/:groupId` → `{ assets, nextCursor, hasMore }`.
+
+Legacy `GET /api/meals/:groupId` and `GET /api/expenses/:groupId` accept the same `cursor`/`limit` pair **opt-in**: supply `cursor` and they answer `{ meals|expenses, nextCursor, hasMore }`; omit it and the historic bare array is returned unchanged.
 
 **Errors:**
 
@@ -212,11 +231,11 @@ Missing token → `401 { msg: 'No token, authorization denied' }`. Failed verify
 
 Additional facts verified in `utils/tokens.js` and `controllers/userController.js`:
 
-* The refresh JWT carries `type: 'refresh'` and a unique `jti`. The server stores only its **sha256 hash** on `User.refreshToken`; presenting a token whose hash does not match the stored hash is rejected (this is what makes rotation one-token-at-a-time).
+* The refresh JWT carries `type: 'refresh'`, a unique `jti`, and a `fam` claim (family id). The server stores only its **sha256 hash** on the `Session.currentTokenHash` field of the matching `Session` family row; presenting a token whose hash does not match the stored hash is rejected (this is what makes rotation one-token-at-a-time).
 * Access JWTs carry `user.id` and, when 2FA was used, `user.amr` containing `'otp'`.
-* **Web clients get no tokens in the JSON body** - only `{ user: {...} }`. Non-web clients also receive `accessToken` and `refreshToken` in the body.
+* **Web clients get no tokens in the JSON body** - only `{ user: {...} }`. Non-web clients also receive `accessToken` and `refreshToken` in the body. The cookie value is `familyId:rawToken` where `familyId` identifies the session family and `rawToken` is the refresh JWT.
 * `user` in a login/register/refresh response is exactly `{ id, username, email, phone, profilePic, isVerified }` (`safeUser`).
-* `mm_at` cookies cannot be revoked before expiry: logout clears cookies and the stored refresh hash, but an already-issued access token keeps working until its 1-hour expiry.
+* `mm_at` cookies cannot be revoked before expiry: logout clears cookies and revokes the Session family, but an already-issued access token keeps working until its 1-hour expiry.
 
 ### 2.3 Login flow
 
@@ -231,21 +250,21 @@ Challenges live in an **in-process map** with a 5-minute TTL (see `controllers/t
 
 ### 2.4 Refresh & rotation
 
-* `POST /api/users/refresh` reads the refresh token from **`req.body.refreshToken` first, then the `refreshToken` cookie**. No body and no cookie → `400 { msg: 'Refresh token required' }`.
-* Invalid, expired, or rotated-away token → `401 { msg: 'Invalid or expired refresh token' }`.
-* Success → a **new** access + refresh pair (the old refresh hash is overwritten, so the old refresh token is dead) and the same response shape as login. **Replace all cookies from the `Set-Cookie` headers; preserve each `Set-Cookie` separately when proxying (BFF).**
+* `POST /api/users/refresh` reads the refresh token from **`req.body.refreshToken` first, then the `refreshToken` cookie**. The cookie value is `familyId:rawToken`. No body and no cookie → `400 { msg: 'Refresh token required' }`.
+* The refresh is a conditional-update CAS on `Session.currentTokenHash`: the presented `rawToken`'s hash must equal `currentTokenHash`. On success a new token is issued in the same family and the old hash is archived to `previousTokenHashes`. The cookie is updated to `familyId:newToken`. Invalid, expired, or replayed (stale) token → `401 { msg: 'Invalid or expired refresh token' }`. A stale replay revokes the whole family.
+* Legacy format: a plain JWT refresh token stored in `User.refreshToken` (no `familyId:` prefix) is still accepted until the `LEGACY_REFRESH_SUNSET` env date, after which it is rejected with `401 { msg: 'Legacy refresh tokens no longer accepted' }`. On successful legacy refresh the token is migrated to a new Session family.
+* Success → a **new** access + refresh pair (the old refresh hash is archived, so the old refresh token is dead) and the same response shape as login. **Replace all cookies from the `Set-Cookie` headers; preserve each `Set-Cookie` separately when proxying (BFF).**
 * Cookie-authenticated clients must send `X-Client: web` and the CSRF header (see §3) - the refresh cookie alone triggers the CSRF check.
 
 ### 2.5 Logout
 
-`POST /api/users/logout`. Reads the refresh token from body or cookie, verifies it, clears `User.refreshToken`, and clears `refreshToken` (both `Path=/api/users` and `Path=/api`), `mm_at`, and `mm_csrf`. Always answers `200 { msg: 'Logged out' }`.
+`POST /api/users/logout`. Reads the refresh token from body or cookie (format `familyId:rawToken`), verifies it, revokes the matching Session family, clears `User.refreshToken` (legacy), and clears `refreshToken` (both `Path=/api/users` and `Path=/api`), `mm_at`, and `mm_csrf`. Always answers `200 { msg: 'Logged out' }`.
 
 ### 2.6 Device sessions (`/api/sessions`)
 
-* `GET /api/sessions/users/sessions` lists **active `Session` rows** for the caller (`listSessions`), not the `User.refreshToken` used by login.
+* `GET /api/sessions/users/sessions` lists **active `Session` rows** for the caller (`listSessions`).
 * `DELETE /api/sessions/users/sessions/:familyId` revokes one; `DELETE /api/sessions/users/sessions` revokes all except an optional `exceptFamilyId`.
-
-> **Inconsistency (verified):** login/refresh rotate `User.refreshToken`, while `/api/sessions` operates on the separate `Session` collection. Revoking a "device" therefore does **not** invalidate the refresh token the client is actually using, and the device list can be empty while the client holds a valid refresh token. `NEEDS VERIFICATION` semantics until the two stores are unified (tracked in [`PROJECT_IMPROVEMENT_RECOMMENDATIONS.md`](PROJECT_IMPROVEMENT_RECOMMENDATIONS.md)).
+* Login/refresh now issue a `Session` family (familyId + hashed token in `currentTokenHash`) and the refresh cookie carries `familyId:rawToken`. Revoking a device revokes the matching family, so the device list is authoritative (D1). Legacy `User.refreshToken` is kept only for back-compat through the `LEGACY_REFRESH_SUNSET` window.
 
 ### 2.7 Google OAuth
 
@@ -275,7 +294,9 @@ Practical consequence for a browser client: after login/refresh read `mm_csrf` f
 * Origin allowlist = `FRONTEND_URL` split on commas (default `http://localhost:5174`); no wildcard; `credentials: true`.
 * Methods: `GET, POST, PUT, DELETE, PATCH`.
 * `Access-Control-Allow-Headers`: `Content-Type`, `Authorization`, `x-auth-token`, `x-csrf-token`, `x-client`, `Idempotency-Key`, `X-Admin-Key`. **A new custom header must be added server-side or the browser preflight fails.**
-* `Access-Control-Expose-Headers`: `Deprecation`, `Sunset`, `Link`.
+* `Access-Control-Expose-Headers`: `Deprecation`, `Sunset`, `Link`, `X-Request-Id`.
+
+**Request correlation:** every response carries an `X-Request-Id` header. If the client sends a well-formed one (`[A-Za-z0-9_-]{8,64}`) it is echoed, otherwise the server generates a UUID. The same id is stamped on `AuditEvent.requestId` rows written during that request, so a response, a log line and an audit entry can be joined.
 
 **Other response headers** applied globally: Helmet CSP (`default-src 'self'`, images from self/data/Cloudinary, `frame-ancestors 'none'`), `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/microphone/geolocation disabled), HSTS in production, and `Cache-Control: no-store` on authenticated JSON.
 
@@ -286,6 +307,7 @@ Practical consequence for a browser client: after login/refresh read `mm_csrf` f
 | `X-Client: web` | Send on **login, register and refresh** from a browser. Switches to cookie transport and omits tokens from JSON. |
 | `x-csrf-token` | Every cookie-authenticated mutation (see above). |
 | `Idempotency-Key` | Optional on idempotent routes (§5.1). |
+| `X-Request-Id` | Optional; correlation id echoed back and stored in audit rows. |
 | `X-Admin-Key` | Only if the deployment sets `ADMIN_PANEL_KEY`; required on every `/api/admin*` call then. |
 
 ---
@@ -332,6 +354,7 @@ Routes marked **idempotent** wrap `middleware/idempotency.js`:
 | Replay | Same key + same hash + stored response → that response is returned with HTTP 200 (or the stored ≤400 status) and `"__idempotentReplay": true` appended. |
 | Conflict | Same key + different body → `409 { msg: 'Idempotency key reused with a different request body' }`. |
 | In flight | Same key while the first request has not stored a result → `409 { msg: 'Request with this key is still processing' }`. Duplicate concurrent insert → `409 { msg: 'Duplicate idempotency key - retry shortly' }`. |
+| Lease recovery | A record claimed by a crashed process carries `leaseUntil`; the hourly `idempotency cleanup` job clears expired leases so a key can never be stuck "processing" forever. |
 | Retention | 24 hours (`IdempotencyRecord.expiresAt`, TTL index). |
 
 Use a fresh UUID per logical operation and reuse it for retries of that operation. Idempotent routes: `POST /api/expenses/groups/:groupId/expenses`, `.../approve`, `.../reverse`, `POST /api/money/groups/:groupId/money`, `.../confirm`, `.../reverse`, `POST /api/memberships/groups/:groupId/memberships`, `POST /api/statements/groups/:groupId/statements/:month/finalize`, `POST /api/reconciliation/groups/:groupId/reconciliations`, `POST /api/recurring/groups/:groupId/recurring/:ruleId/generate`, `POST /api/support/tickets`.
@@ -346,9 +369,12 @@ Use a fresh UUID per logical operation and reuse it for retries of that operatio
 | `POST /api/support/appeal` | 1 / 24 h / IP | `429 { msg: 'Appeal already submitted today' }` |
 | `POST /api/support/tickets/:ticketId/messages` | 10 / min / IP (+ 50 messages per ticket, per user) | `429 { code: 'TICKET_MESSAGE_LIMIT' }` |
 | `POST /api/invite/join-by-code` | Per-user **5-failure lockout** implemented in the controller with exponential backoff (15 min * 2^failures/5), in-memory. Failed attempts return a neutral `200`; only a locked user gets `429 { msg: 'Too many failed attempts, try again later' }`. | The `joinCodeLimiter` middleware in `middleware/rateLimiters.js` exists but is **mounted nowhere** - do not rely on its 10/15 min IP limit. |
+| `GET /api/health`, `GET /api/admin/health` | No limiter (probe endpoints; `X-Request-Id` still echoed). | - |
 | `/api/admin*` | **No dedicated limiter** (only whatever the proxy applies). | - |
 
 Limiter state for join-code lockouts and TOTP challenges is per-process (in-memory); horizontal scaling multiplies effective limits. `NEEDS VERIFICATION` for multi-instance deployments.
+
+TOTP login challenges are stored in MongoDB (`TOTPChallenge`, TTL index), not in a process `Map`, so a restart or a second instance does not drop a pending 2FA login.
 
 ### 5.3 File uploads
 
@@ -400,6 +426,14 @@ Limiter state for join-code lockouts and TOTP challenges is per-process (in-memo
 ## 7. Endpoint index (code-addressable)
 
 Every mounted route, one row each. `Middleware` is the exact guard chain in execution order (router-level guards included). The handler link is relative to this file (`docs/`), so it opens the controller at the defining line.
+
+### 7.0 Health probe (unauthenticated)
+
+| Method | Path | Middleware | Handler |
+|---|---|---|---|
+| `GET` | `/api/health` | - | [`health`](../routes/healthRoutes.js) |
+
+Returns `{status, uptimeSec, db:{ok,latencyMs}, scheduler:{running,lastTickAt,staleSec}, time}`; `503` when the DB ping fails. No tenant data.
 
 ### 7.1 Authentication, users & 2FA
 
@@ -462,6 +496,7 @@ Every mounted route, one row each. `Middleware` is the exact guard chain in exec
 | `GET` | `/api/admin/audit` | - | [`listAuditEvents`](../controllers/adminController.js#L106) |
 | `GET` | `/api/admin/groups/:groupId` | validate(z.object({ groupId: objectId }), 'params') | [`adminGetGroup`](../controllers/adminController.js#L197) |
 | `GET` | `/api/admin/groups` | - | [`adminListGroups`](../controllers/adminController.js#L175) |
+| `GET` | `/api/admin/health` | - | [`getHealth`](../controllers/adminController.js) |
 | `GET` | `/api/admin/jobs` | - | [`listJobStatuses`](../controllers/jobController.js#L4) |
 | `GET` | `/api/admin/overview` | - | [`getOverview`](../controllers/adminController.js#L58) |
 | `GET` | `/api/admin/traffic` | - | [`getTraffic`](../controllers/adminController.js#L84) |
@@ -528,8 +563,9 @@ Every mounted route, one row each. `Middleware` is the exact guard chain in exec
 | Method | Path | Middleware | Handler |
 |---|---|---|---|
 | `DELETE` | `/api/meals/entry/:id` | validate(idParamSchema, 'params'), requireGroupRole('member'), allowSelfOrAdmin | [`deleteMeal`](../controllers/mealController.js#L315) |
+| `GET` | `/api/meals/:groupId/bazar-forecast` | validate(bazarForecastQuerySchema, 'query'), requireGroupRole('member') | [`getBazarForecast`](../controllers/mealController.js) |
 | `GET` | `/api/meals/:groupId/:month` | validate(monthParamSchema, 'params'), requireGroupRole('member') | [`getMealsByMonth`](../controllers/mealController.js#L288) |
-| `GET` | `/api/meals/:groupId/guests` | validate(objectIdParamSchema, 'params'), requireGroupRole('member') | [`listGuestMeals`](../controllers/mealController.js#L125) |
+| `GET` | `/api/meals/:groupId/guests` | validate(objectIdParamSchema, 'params'), validate(cursorListQuery, 'query'), requireGroupRole('member') | [`listGuestMeals`](../controllers/mealController.js#L125) |
 | `GET` | `/api/meals/:groupId/headcount/tomorrow` | validate(headcountQuerySchema, 'query'), requireGroupRole('member') | [`getTomorrowHeadcount`](../controllers/mealController.js#L365) |
 | `GET` | `/api/meals/:groupId` | validate(mealFilterQuerySchema, 'query'), requireGroupRole('member'), resolveHistoryWindow | [`getMeals`](../controllers/mealController.js#L334) |
 | `POST` | `/api/meals/:groupId/absence/apply` | validate(objectIdParamSchema, 'params'), requireGroupRole('admin') | [`applyAbsence`](../controllers/mealController.js#L210) |
@@ -746,6 +782,15 @@ Every mounted route, one row each. `Middleware` is the exact guard chain in exec
 | `POST` | `/api/polls/:pollId/close` | requireGroupRoleV2('member') | [`closePoll`](../controllers/pollController.js#L75) |
 | `POST` | `/api/polls/:pollId/vote` | validate(voteSchema), requireGroupRoleV2('member') | [`votePoll`](../controllers/pollController.js#L47) |
 | `POST` | `/api/polls/groups/:groupId` | validate(groupIdParam, 'params'), validate(pollCreateSchema), requireGroupRoleV2('member') | [`createPoll`](../controllers/pollController.js#L28) |
+
+### 7.26b Budgets (new in S5.2)
+
+| Method | Path | Middleware | Handler |
+|---|---|---|---|
+| `DELETE` | `/api/budgets/groups/:groupId/:budgetId` | validate(budgetIdParam, 'params'), requireGroupRoleV2('treasurer') | [`deleteBudget`](../controllers/budgetController.js) |
+| `GET` | `/api/budgets/groups/:groupId` | validate(groupIdParam, 'params'), validate(budgetMonthQuery, 'query'), requireGroupRoleV2('member') | [`listBudgets`](../controllers/budgetController.js) |
+| `GET` | `/api/budgets/groups/:groupId/variance` | validate(groupIdParam, 'params'), validate(budgetMonthQuery, 'query'), requireGroupRoleV2('member') | [`budgetVariance`](../controllers/budgetController.js) |
+| `POST` | `/api/budgets/groups/:groupId` | validate(groupIdParam, 'params'), validate(budgetUpsertSchema), requireGroupRoleV2('treasurer') | [`upsertBudget`](../controllers/budgetController.js) |
 
 ### 7.27 Legacy summary (deprecated)
 
@@ -1124,6 +1169,35 @@ Handler: [`updateMeal`](../controllers/mealController.js#L82)
 Guard: validate(mealFilterQuerySchema, 'query'), requireGroupRole('member'), resolveHistoryWindow
 
 Handler: [`getMeals`](../controllers/mealController.js#L334)
+
+
+### GET `/api/meals/:groupId/bazar-forecast`
+
+Guard: validate(bazarForecastQuerySchema, 'query'), requireGroupRole('member')
+
+Handler: [`getBazarForecast`](../controllers/mealController.js)
+
+Query: `days` (1–60, default 7), `date` (`YYYY-MM-DD`, default tomorrow in Dhaka).
+
+```json
+{
+  "targetDate": "2026-05-02",
+  "window": { "from": "...", "to": "...", "days": 30, "observedUnits": 90000 },
+  "headcount": { "breakfast": 3000, "lunch": 3000, "snacks": 0, "dinner": 3000 },
+  "days": 7, "dailyUnits": 9000, "totalUnits": 63000,
+  "categories": [{ "categoryId": "...", "name": "Bazar", "pricePerPortionPoisha": 7000,
+                   "samples": 12, "expectedPoisha": 441000, "lowPoisha": 380000, "highPoisha": 500000 }],
+  "expectedPoisha": 441000, "band": { "lowPoisha": 380000, "highPoisha": 500000 },
+  "confidence": "high", "insufficientData": false
+}
+```
+
+Rules (`services/bazarForecastRules.js`, pure + unit-tested): price per portion = **median** of
+`categoryAmount × 1000 / observedUnits` over approved food expenses in the trailing 30 days;
+expected = `pricePerPortion × dailyUnits × days / 1000`; band = 25th–75th percentile of the same
+rates. `confidence` is `high` when every category has ≥7 samples, `medium` at ≥3, else `low`. With
+no food history: `insufficientData: true`, `confidence: "none"`, zeros (never a fabricated number).
+All amounts are integer poisha.
 
 
 ### GET `/api/meals/:groupId/headcount/tomorrow`
@@ -2786,6 +2860,7 @@ An expense is a **multi-line, multi-payer document** that moves through `draft �
 | `serviceStart` / `serviceEnd` | string \| null | → | used by `member_days` |
 | `isPayable` | boolean | → | supplier payable (unpaid) vs paid |
 | `receiptReference` | string | → | ≤100, used by duplicate detection |
+| `payers` | array | → (≥1) | each: `memberId` ObjectId, `amount` integer poisha ≥1, `fundAccountId?` ObjectId \| null |
 | `lines` | array | → (≥1) | each: `description?` ≤200, `categoryId` ObjectId **required**, `amount` integer poisha ≥1, `splitMode?`, `beneficiaries?: ObjectId[]`, `fixedAmounts?: [{ membershipId, amount }]`, `weights?: [{ membershipId, weight (int ≤1) }]`, `usageQuantities?: [{ membershipId, quantity ≥0 }]` |
 
 * **Request example:**
@@ -2795,6 +2870,9 @@ An expense is a **multi-line, multi-payer document** that moves through `draft �
     "costPeriod": "2026-11",
     "supplierName": "Karwan Bazar",
     "receiptReference": "RCPT-2026-11-24-01",
+    "payers": [
+      { "memberId": "65a000000000000000000010", "amount": 72550 }
+    ],
     "lines": [
       { "description": "Weekly bazar", "categoryId": "65a000000000000000000012", "amount": 12550, "splitMode": "meal_units" },
       { "description": "Wi-Fi", "categoryId": "65a000000000000000000013", "amount": 60000, "splitMode": "equal_all" }
@@ -3489,7 +3567,7 @@ These were found while verifying the documentation against source. **Nothing in 
 
 | # | Finding | Practical impact |
 |---|---|---|
-| 1 | **Two refresh-token stores.** Login/refresh rotate `User.refreshToken`; `/api/sessions` manages `Session` families. | "Log out other devices" does not revoke the token in use; the device list may be empty while the client is logged in. |
+| 1 | **Two refresh-token stores** (resolved in S1). Login/refresh now issue a `Session` family and the refresh cookie carries `familyId:rawToken`. Legacy `User.refreshToken` is accepted only until `LEGACY_REFRESH_SUNSET`, then rejected. | Revocation, device management and reuse detection are now truthful through the `Session` family. |
 | 2 | **`joinCodeLimiter` is mounted nowhere.** `middleware/rateLimiters.js` exports it, but `inviteRoutes.js` uses per-controller lockout instead. | The documented 10/15 min IP limit does not exist; only the 5-failure user lockout applies. |
 | 3 | **Money `fromMember`/`toMember` are Membership ids, despite the name and the `moneySchema` comment.** Journal lines use `ref: 'Membership'`. | Sending a `User` id posts a journal line that no balance lookup will match. Always send membership ids. |
 | 4 | **`GET /api/meals/:groupId/headcount/tomorrow` requires `groupId` in the query** (schema) even though it is in the path. | Send `?groupId=<id>` or you get `400 Validation failed` (`field: "groupId"`). |
@@ -3608,4 +3686,378 @@ Definitions copied from `validation/` and the inline schemas in route/controller
 * `inboxListQuery { unread?: '0'|'1', cursor? (≤512), limit? (1–100) }` - `inboxReadSchema { ids? (≤200), all? }` (one required) - `inboxPrefsSchema { types?: record<string,{inApp,email}>, quietHours?: {from,to} HH:MM }`.
 * `ticketCreateSchema`, `ticketCategoryEnum`, `ticketListQuery`, `ticketMessageSchema`, `ticketTransitionSchema { note?, reason? }` (passthrough), `ticketRateSchema { score 1–5, comment? }`, `appealSchema`, `adminTicketListQuery`, `ticketPriorityEnum ('low'|'normal'|'high'|'urgent')`, `adminReplySchema`, `adminAssignSchema { assignedAdminId (nullable) }`, `adminTicketPatchSchema`, `adminRedactSchema { reason (3–500) }`, `cannedReplySchema`, `supportAdminRoutes.msgParam { ticketId, messageId }` - full literals in `validation/supportSchemas.js`.
 * Routines: full literals in `validation/routineSchemas.js` (reproduced inline in §9.21).
-* Shopping list, kitchen inventory, polls: inline literals reproduced in §9.22–§9.24.
+* Shopping list, kitchen inventory, polls, TOTP 2FA, admin id params and invite bodies: literals now live in `validation/featureSchemas.js` (re-exported where previously imported from a controller), reproduced inline in §9.22–§9.24.
+
+## 11. Generated route table (machine-checked)
+
+> Regenerated by `node scripts/auditRoutes.mjs --write-table`; only this block is
+touched, the prose above is hand-maintained. `--write-table --check` fails when it
+is stale (CI runs it).
+
+<!-- BEGIN:generated:routes -->
+
+<!-- generated from routes/ by scripts/auditRoutes.mjs — 222 routes -->
+
+### Health probe (unauthenticated)
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/health` |
+
+### Authentication, users & 2FA
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/users/auth/google` |
+| `GET` | `/api/users/auth/google/callback` |
+| `GET` | `/api/users/download-my-data` |
+| `GET` | `/api/users/groups/:groupId/members` |
+| `GET` | `/api/users/profile` |
+| `GET` | `/api/users/verify-email/:token` |
+| `POST` | `/api/users/2fa/disable` |
+| `POST` | `/api/users/2fa/setup` |
+| `POST` | `/api/users/2fa/verify` |
+| `POST` | `/api/users/change-password` |
+| `POST` | `/api/users/forgot-password` |
+| `POST` | `/api/users/login` |
+| `POST` | `/api/users/login/2fa` |
+| `POST` | `/api/users/login/2fa-challenge` |
+| `POST` | `/api/users/logout` |
+| `POST` | `/api/users/profile-pic` |
+| `POST` | `/api/users/refresh` |
+| `POST` | `/api/users/register` |
+| `POST` | `/api/users/reset-password` |
+| `PUT` | `/api/users/profile` |
+
+### Admin support desk
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/admin/support/canned-replies/:replyId` |
+| `GET` | `/api/admin/support/canned-replies` |
+| `GET` | `/api/admin/support/stats` |
+| `GET` | `/api/admin/support/tickets` |
+| `GET` | `/api/admin/support/tickets/:ticketId` |
+| `PATCH` | `/api/admin/support/tickets/:ticketId` |
+| `POST` | `/api/admin/support/canned-replies` |
+| `POST` | `/api/admin/support/tickets/:ticketId/assign` |
+| `POST` | `/api/admin/support/tickets/:ticketId/close` |
+| `POST` | `/api/admin/support/tickets/:ticketId/internal-note` |
+| `POST` | `/api/admin/support/tickets/:ticketId/messages/:messageId/redact` |
+| `POST` | `/api/admin/support/tickets/:ticketId/reopen` |
+| `POST` | `/api/admin/support/tickets/:ticketId/reply` |
+| `POST` | `/api/admin/support/tickets/:ticketId/resolve` |
+| `PUT` | `/api/admin/support/canned-replies/:replyId` |
+
+### Platform administration (hidden)
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/admin/groups/:groupId` |
+| `GET` | `/api/admin/audit` |
+| `GET` | `/api/admin/groups` |
+| `GET` | `/api/admin/groups/:groupId` |
+| `GET` | `/api/admin/health` |
+| `GET` | `/api/admin/jobs` |
+| `GET` | `/api/admin/overview` |
+| `GET` | `/api/admin/traffic` |
+| `GET` | `/api/admin/users` |
+| `GET` | `/api/admin/users/:userId` |
+| `PATCH` | `/api/admin/users/:userId` |
+
+### Mess groups, join codes, categories & extras
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/messgroups/categories/:groupId/:categoryId` |
+| `DELETE` | `/api/messgroups/extras/:groupId/:extraId` |
+| `DELETE` | `/api/messgroups/remove-member/:groupId/:userId` |
+| `GET` | `/api/messgroups/:groupId` |
+| `GET` | `/api/messgroups/audit-log/:groupId` |
+| `GET` | `/api/messgroups/calculate/:groupId` |
+| `GET` | `/api/messgroups/categories/:groupId` |
+| `GET` | `/api/messgroups/code/:groupId` |
+| `GET` | `/api/messgroups/entries/:groupId` |
+| `GET` | `/api/messgroups/export/:groupId` |
+| `GET` | `/api/messgroups/extras/:groupId` |
+| `GET` | `/api/messgroups/feature-flags/:groupId` |
+| `GET` | `/api/messgroups/my-groups` |
+| `GET` | `/api/messgroups/payment-note/:groupId/:userId/:month` |
+| `GET` | `/api/messgroups/payment-notes/:groupId/:month` |
+| `GET` | `/api/messgroups/pdf/:groupId` |
+| `PATCH` | `/api/messgroups/feature-flags/:groupId` |
+| `POST` | `/api/messgroups/add-entry/:groupId` |
+| `POST` | `/api/messgroups/add-member/:groupId` |
+| `POST` | `/api/messgroups/approve/:groupId/:userId` |
+| `POST` | `/api/messgroups/categories/:groupId` |
+| `POST` | `/api/messgroups/categories/:groupId/seed` |
+| `POST` | `/api/messgroups/create` |
+| `POST` | `/api/messgroups/extras/:groupId` |
+| `POST` | `/api/messgroups/invite/:groupId` |
+| `POST` | `/api/messgroups/join-by-code` |
+| `POST` | `/api/messgroups/join-request/:groupId` |
+| `POST` | `/api/messgroups/regenerate-code/:groupId` |
+| `PUT` | `/api/messgroups/categories/:groupId/:categoryId` |
+| `PUT` | `/api/messgroups/payment-note/:groupId/:userId/:month` |
+
+### Meals & guest meals
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/meals/entry/:id` |
+| `GET` | `/api/meals/:groupId` |
+| `GET` | `/api/meals/:groupId/:month` |
+| `GET` | `/api/meals/:groupId/bazar-forecast` |
+| `GET` | `/api/meals/:groupId/guests` |
+| `GET` | `/api/meals/:groupId/headcount/tomorrow` |
+| `POST` | `/api/meals/:groupId` |
+| `POST` | `/api/meals/:groupId/absence/apply` |
+| `POST` | `/api/meals/:groupId/absence/preview` |
+| `POST` | `/api/meals/:groupId/bulk/apply` |
+| `POST` | `/api/meals/:groupId/bulk/preview` |
+| `POST` | `/api/meals/:groupId/guests` |
+| `PUT` | `/api/meals/entry/:id` |
+
+### Expenses (V2) & legacy entries
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/expenses/entry/:id` |
+| `GET` | `/api/expenses/:groupId` |
+| `GET` | `/api/expenses/:groupId/:month` |
+| `GET` | `/api/expenses/groups/:groupId/expenses` |
+| `POST` | `/api/expenses/:groupId` |
+| `POST` | `/api/expenses/groups/:groupId/expenses` |
+| `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/approve` |
+| `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/reject` |
+| `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/reverse` |
+| `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/submit` |
+| `PUT` | `/api/expenses/entry/:id` |
+
+### Legacy monthly summary
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/summary/:groupId/:month` |
+| `GET` | `/api/summary/whatsapp/:groupId/:month` |
+| `POST` | `/api/summary/finalize/:groupId/:month` |
+
+### Statistics
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/stats/:groupId` |
+| `GET` | `/api/stats/groups/:groupId/dashboard` |
+
+### Memberships
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/memberships/groups/:groupId/memberships` |
+| `GET` | `/api/memberships/groups/:groupId/memberships/active` |
+| `GET` | `/api/memberships/groups/:groupId/memberships/month/:month` |
+| `PATCH` | `/api/memberships/groups/:groupId/memberships/:membershipId` |
+| `POST` | `/api/memberships/groups/:groupId/memberships` |
+| `POST` | `/api/memberships/groups/:groupId/memberships/:membershipId/depart` |
+
+### Policy versions
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/policies/groups/:groupId/policies` |
+| `POST` | `/api/policies/groups/:groupId/policies` |
+
+### Periods
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/periods/groups/:groupId/periods` |
+| `GET` | `/api/periods/groups/:groupId/periods/:month` |
+| `GET` | `/api/periods/groups/:groupId/periods/:month/checklist` |
+| `GET` | `/api/periods/groups/:groupId/periods/:month/preview` |
+| `POST` | `/api/periods/groups/:groupId/periods/:month/begin-review` |
+| `POST` | `/api/periods/groups/:groupId/periods/:month/correct` |
+| `POST` | `/api/periods/groups/:groupId/periods/:month/return-to-open` |
+
+### Money & funds
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/money/groups/:groupId/funds` |
+| `GET` | `/api/money/groups/:groupId/memberships/:membershipId/balance` |
+| `GET` | `/api/money/groups/:groupId/money` |
+| `POST` | `/api/money/groups/:groupId/funds` |
+| `POST` | `/api/money/groups/:groupId/funds/:fundId/custodian` |
+| `POST` | `/api/money/groups/:groupId/money` |
+| `POST` | `/api/money/groups/:groupId/money/:txId/confirm` |
+| `POST` | `/api/money/groups/:groupId/money/:txId/reject` |
+| `POST` | `/api/money/groups/:groupId/money/:txId/reverse` |
+
+### Statements
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/statements/groups/:groupId/statements` |
+| `GET` | `/api/statements/groups/:groupId/statements/:month` |
+| `GET` | `/api/statements/groups/:groupId/statements/id/:statementId` |
+| `POST` | `/api/statements/groups/:groupId/statements/:month/finalize` |
+
+### Recurring rules
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/recurring/groups/:groupId/recurring` |
+| `POST` | `/api/recurring/groups/:groupId/recurring` |
+| `POST` | `/api/recurring/groups/:groupId/recurring/:ruleId/generate` |
+| `POST` | `/api/recurring/groups/:groupId/recurring/generate-all` |
+| `PUT` | `/api/recurring/groups/:groupId/recurring/:ruleId` |
+
+### Reconciliation
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/reconciliation/groups/:groupId/reconciliations` |
+| `GET` | `/api/reconciliation/groups/:groupId/reconciliations/equation` |
+| `POST` | `/api/reconciliation/groups/:groupId/reconciliations` |
+| `POST` | `/api/reconciliation/groups/:groupId/reconciliations/:recId/resolve` |
+
+### Disputes
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/disputes/groups/:groupId/disputes` |
+| `POST` | `/api/disputes/groups/:groupId/disputes` |
+| `POST` | `/api/disputes/groups/:groupId/disputes/:disputeId/resolve` |
+| `POST` | `/api/disputes/groups/:groupId/disputes/:disputeId/respond` |
+
+### Notifications & outbox
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/notifications/groups/:groupId/notifications` |
+| `GET` | `/api/notifications/groups/:groupId/notifications/:messageId` |
+| `GET` | `/api/notifications/whatsapp/webhook` |
+| `POST` | `/api/notifications/groups/:groupId/notifications/:messageId/resend` |
+| `POST` | `/api/notifications/groups/:groupId/notifications/manual-share` |
+| `POST` | `/api/notifications/whatsapp/webhook` |
+| `PUT` | `/api/notifications/whatsapp/consent` |
+
+### Sessions
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/sessions/users/sessions` |
+| `DELETE` | `/api/sessions/users/sessions/:familyId` |
+| `GET` | `/api/sessions/users/sessions` |
+
+### Attachments
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/attachments/groups/:groupId/:attachmentId` |
+| `POST` | `/api/attachments/groups/:groupId/upload` |
+
+### Deposit assets
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/assets/groups/:groupId` |
+| `POST` | `/api/assets/groups/:groupId` |
+| `POST` | `/api/assets/groups/:groupId/:assetId/refund` |
+
+### Inbox
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/inbox` |
+| `GET` | `/api/inbox/preferences` |
+| `GET` | `/api/inbox/unread-count` |
+| `POST` | `/api/inbox/read` |
+| `PUT` | `/api/inbox/preferences` |
+
+### Support tickets
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/support/tickets` |
+| `GET` | `/api/support/tickets/:ticketId` |
+| `POST` | `/api/support/actions/:token` |
+| `POST` | `/api/support/appeal` |
+| `POST` | `/api/support/tickets` |
+| `POST` | `/api/support/tickets/:ticketId/close` |
+| `POST` | `/api/support/tickets/:ticketId/messages` |
+| `POST` | `/api/support/tickets/:ticketId/rate` |
+| `POST` | `/api/support/tickets/:ticketId/reopen` |
+| `POST` | `/api/support/tickets/:ticketId/resolve` |
+
+### Routines, board, duties
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/routines/groups/:groupId/notes/:noteId` |
+| `GET` | `/api/routines/groups/:groupId/bazar-spend-rotation` |
+| `GET` | `/api/routines/groups/:groupId/board/today` |
+| `GET` | `/api/routines/groups/:groupId/duties` |
+| `GET` | `/api/routines/groups/:groupId/duties/fairness` |
+| `GET` | `/api/routines/groups/:groupId/menu` |
+| `GET` | `/api/routines/groups/:groupId/menu/bazar-suggestions` |
+| `GET` | `/api/routines/groups/:groupId/notes` |
+| `GET` | `/api/routines/groups/:groupId/notes/:noteId` |
+| `GET` | `/api/routines/groups/:groupId/rosters` |
+| `GET` | `/api/routines/groups/:groupId/rosters/:rosterId` |
+| `PATCH` | `/api/routines/groups/:groupId/notes/:noteId` |
+| `PATCH` | `/api/routines/groups/:groupId/rosters/:rosterId` |
+| `POST` | `/api/routines/groups/:groupId/duties/:assignmentId/done` |
+| `POST` | `/api/routines/groups/:groupId/duties/:assignmentId/reassign` |
+| `POST` | `/api/routines/groups/:groupId/emergency-broadcast` |
+| `POST` | `/api/routines/groups/:groupId/menu` |
+| `POST` | `/api/routines/groups/:groupId/notes` |
+| `POST` | `/api/routines/groups/:groupId/notes/:noteId/ack` |
+| `POST` | `/api/routines/groups/:groupId/notes/:noteId/tasks/:taskId/claim` |
+| `POST` | `/api/routines/groups/:groupId/notes/:noteId/tasks/:taskId/done` |
+| `POST` | `/api/routines/groups/:groupId/rosters` |
+| `POST` | `/api/routines/groups/:groupId/rosters/:rosterId/extend-horizon` |
+| `POST` | `/api/routines/groups/:groupId/rosters/:rosterId/publish` |
+| `POST` | `/api/routines/groups/:groupId/swaps` |
+| `POST` | `/api/routines/groups/:groupId/swaps/:swapId/respond` |
+
+### Shopping list
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/shopping-list/groups/:groupId/items/:itemId` |
+| `GET` | `/api/shopping-list/groups/:groupId` |
+| `GET` | `/api/shopping-list/groups/:groupId/history` |
+| `PATCH` | `/api/shopping-list/groups/:groupId/items/:itemId` |
+| `POST` | `/api/shopping-list/groups/:groupId/items` |
+| `POST` | `/api/shopping-list/groups/:groupId/to-expense` |
+
+### Kitchen inventory
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/kitchen-inventory/groups/:groupId/:itemId` |
+| `GET` | `/api/kitchen-inventory/groups/:groupId` |
+| `PATCH` | `/api/kitchen-inventory/groups/:groupId/:itemId` |
+| `POST` | `/api/kitchen-inventory/groups/:groupId` |
+| `POST` | `/api/kitchen-inventory/groups/:groupId/:itemId/refill` |
+
+### Polls
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/polls/:pollId/results` |
+| `GET` | `/api/polls/groups/:groupId` |
+| `POST` | `/api/polls/:pollId/close` |
+| `POST` | `/api/polls/:pollId/vote` |
+| `POST` | `/api/polls/groups/:groupId` |
+
+### Invite codes
+
+| Method | Path |
+|---|---|
+| `GET` | `/api/invite/codes/:groupId` |
+| `POST` | `/api/invite/codes` |
+| `POST` | `/api/invite/join-by-code` |
+
+<!-- END:generated:routes -->

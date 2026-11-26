@@ -42,10 +42,14 @@ import kitchenInventoryRoutes from './routes/kitchenInventoryRoutes.js';
 import pollRoutes from './routes/pollRoutes.js';
 import { startOutboxWorker } from './services/outboxWorker.js';
 import { startScheduler } from './services/schedulerService.js';
+import healthRoutes from './routes/healthRoutes.js';
+import budgetRoutes from './routes/budgetRoutes.js';
 import { setSocketIo } from './services/inboxService.js';
+import { runWithRequestContext } from './utils/requestContext.js';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import session from 'express-session';
 
 dotenv.config();
@@ -127,8 +131,20 @@ app.use(cors({
     // cross-origin (localhost:3000 → :5000) XHRs, so every cookie-authenticated
     // mutation fails the CSRF check in local development.
     allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'x-csrf-token', 'x-client', 'Idempotency-Key', 'X-Admin-Key'],
-    exposedHeaders: ['Deprecation', 'Sunset', 'Link'],
+    exposedHeaders: ['Deprecation', 'Sunset', 'Link', 'X-Request-Id'],
 }));
+
+// Request correlation (S3.5): every request gets an id, echoed in X-Request-Id and
+// attached to audit rows written from that request (audit() reads req.requestId).
+app.use((req, res, next) => {
+    const incoming = req.headers['x-request-id'];
+    const id = typeof incoming === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(incoming)
+        ? incoming
+        : crypto.randomUUID();
+    req.requestId = id;
+    res.setHeader('X-Request-Id', id);
+    runWithRequestContext({ requestId: id, ip: req.ip || '' }, next);
+});
 
 // ---------- Body parsing + sanitization ----------
 app.use('/api/notifications/whatsapp/webhook', express.json({
@@ -162,6 +178,8 @@ app.use(passport.session());
 
 // ---------- Routes ----------
 app.get('/', (req, res) => res.send('Meal Mate Server is running'));
+// Unauthenticated liveness/readiness probe — no tenant data (S3.1)
+app.use('/api/health', healthRoutes);
 app.use('/api/users', authLimiter, totpRoutes, userRouter);
 // Platform admin control plane — hidden (guard replies 404 to non-admins), unlinked
 app.use('/api/admin', adminRouter);
@@ -190,6 +208,7 @@ app.use('/api/shopping-list', generalLimiter, shoppingListRoutes);
 app.use('/api/kitchen-inventory', generalLimiter, kitchenInventoryRoutes);
 app.use('/api/polls', generalLimiter, pollRoutes);
 app.use('/api/invite', generalLimiter, inviteRoutes);
+app.use('/api/budgets', generalLimiter, budgetRoutes);
 
 // ---------- Socket.IO (JWT-authenticated realtime updates) ----------
 const httpServer = createServer(app);

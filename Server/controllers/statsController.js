@@ -37,7 +37,9 @@ const matchWindow = (groupId, q) => {
     } else if (q.year) {
         // granularity=month → 12 monthly buckets inside the year
         // granularity=year  → all buckets for the year, collapsed client-side
-        match.month = { $regex: `^${q.year}-` };
+        // Index-friendly range on the `YYYY-MM` string (S4.6) — a plain range keeps
+        // the (groupId, month) index usable instead of a collection scan.
+        match.month = { $gte: `${q.year}-01`, $lte: `${q.year}-12` };
     }
     return match;
 };
@@ -152,7 +154,7 @@ export const getStats = async (req, res, next) => {
         // finalized snapshots, useful for year-over-year comparison
         const summaryMatch = q.month
             ? { groupId, month: q.month }
-            : { groupId, month: { $regex: match.month?.$regex || '^' } };
+            : (match.month ? { groupId, month: match.month } : { groupId });
         const finalized = await MonthlySummary.find(summaryMatch)
             .select('month totalMeals totalExpenses mealRate isFinalized')
             .sort({ month: 1 })

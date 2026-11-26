@@ -14,42 +14,29 @@ import {
     decryptSecret,
 } from '../utils/totp.js';
 import { validate } from '../validation/validate.js';
-import { z } from 'zod';
+import TOTPChallenge from '../models/TOTPChallenge.js';
 
 const CHALLENGE_TTL = 5 * 60 * 1000;
-const challenges = new Map();
-
-export const makeChallenge = (userId) => {
+export const makeChallenge = async (userId) => {
     const id = randomBytes(16).toString('hex');
-    challenges.set(id, { userId, expiresAt: Date.now() + CHALLENGE_TTL, used: false });
+    await TOTPChallenge.create({
+        challengeId: id,
+        userId,
+        expiresAt: new Date(Date.now() + CHALLENGE_TTL),
+    });
     return id;
 };
 
-const consumeChallenge = (id) => {
-    const c = challenges.get(id);
-    if (!c || c.used || c.expiresAt < Date.now()) return null;
-    c.used = true;
-    challenges.delete(id);
-    return c;
+const consumeChallenge = async (id) => {
+    const now = new Date();
+    return TOTPChallenge.findOneAndUpdate(
+        { challengeId: id, used: false, expiresAt: { $gt: now } },
+        { $set: { used: true } },
+        { new: true }
+    ).lean();
 };
 
-setInterval(() => {
-    const now = Date.now();
-    for (const [id, c] of challenges.entries()) {
-        if (c.expiresAt < now) challenges.delete(id);
-    }
-}, 600000).unref();
-
-export const setupSchema = z.object({});
-export const verifySchema = z.object({ code: z.string().length(6) });
-export const disableSchema = z.object({
-    password: z.string().min(1),
-    code: z.string().regex(/^(?:\d{6}|[A-F0-9]{8})$/),
-});
-export const login2faSchema = z.object({
-    challengeToken: z.string().min(1),
-    code: z.string().regex(/^(?:\d{6}|[A-F0-9]{8})$/),
-});
+export { totpSetupSchema as setupSchema, totpVerifySchema as verifySchema, totpDisableSchema as disableSchema, totpLoginSchema as login2faSchema } from '../validation/featureSchemas.js';
 
 export const setup = async (req, res, next) => {
     try {
@@ -171,7 +158,7 @@ export const loginChallenge = async (req, res, next) => {
             return await sendAuthResponse(res, user, 200, req, ['pwd'], { twoFactorRequired: false });
         }
 
-        const challengeId = makeChallenge(user.id);
+        const challengeId = await makeChallenge(user.id);
         return res.json({
             twoFactorRequired: true,
             challengeToken: challengeId,
@@ -183,7 +170,7 @@ export const loginChallenge = async (req, res, next) => {
 export const login2fa = async (req, res, next) => {
     try {
         const { challengeToken, code } = req.body;
-        const challenge = consumeChallenge(challengeToken);
+        const challenge = await consumeChallenge(challengeToken);
         if (!challenge) {
             return res.status(403).json({ msg: 'Invalid or expired challenge', code: 'TWO_FA_INVALID_CHALLENGE' });
         }

@@ -3,7 +3,15 @@ import Membership from '../models/Membership.js';
 import MessGroup from '../models/MessGroup.js';
 import AuditEvent from '../models/AuditEvent.js';
 import { audit } from '../models/AuditEvent.js';
+import { revokeAllSessions } from '../services/sessionService.js';
 import { publicProfile, MEMBER_VISIBLE_FIELDS } from '../middleware/privacy.js';
+import NotificationOutbox from '../models/NotificationOutbox.js';
+import Attachment from '../models/Attachment.js';
+import Reconciliation from '../models/Reconciliation.js';
+import Expense from '../models/Expense.js';
+import { JobLock, JobRun } from '../models/JobRun.js';
+import { getSchedulerHeartbeat } from '../services/schedulerService.js';
+import { cacheInvalidateUser } from '../services/authCache.js';
 
 // ADMIN-ONLY control plane. Never exposed in any user-facing route, sitemap,
 // or API listing. Guard fails CLOSED and responses are intentionally generic.
@@ -163,6 +171,14 @@ export const adminUpdateUser = async (req, res, next) => {
         const user = await User.findByIdAndUpdate(req.params.userId, update, { new: true })
             .select('-twoFactor.secretEnc -twoFactor.recoveryCodesHash -password -refreshToken -resetPasswordToken -verifyEmailToken').lean();
         if (!user) return res.status(404).json({ msg: 'Not found' });
+        // The auth middleware caches {suspended} for ~30 s (S4.1): drop it so the
+        // change takes effect on the next request, not after the TTL.
+        cacheInvalidateUser(req.params.userId);
+        if (update.suspended === true) {
+            await revokeAllSessions({ userId: req.params.userId }); // kill all refresh families on suspend
+            await User.findByIdAndUpdate(req.params.userId, { refreshToken: null }); // clear legacy hash
+            req.app.get('io')?.in(`user:${req.params.userId}`).disconnectSockets();
+        }
         await alog(req, 'admin.users.view', { targetId: user._id });
         await alog(req, 'admin.user_updated', { targetId: req.params.userId, after: update });
         res.json({ user });
@@ -213,5 +229,71 @@ export const adminDeleteGroup = async (req, res, next) => {
         await group.save();
         await alog(req, 'admin.group_archived', { targetId: group._id, reason: req.body?.reason || '' });
         res.json({ msg: 'Group archived' });
+    } catch (err) { next(err); }
+};
+
+// ---------------- Operational health (S3.4) ----------------
+
+/** GET /api/admin/health — what is stuck: job age, outbox depth, variance, scans, locks */
+export const getHealth = async (req, res, next) => {
+    try {
+        const now = new Date();
+        const dayAgo = new Date(now.getTime() - 86400_000);
+
+        const [lastRuns, locks, outboxByState, oldestPending, scanAgg, varianceAgg, expiringJobs] = await Promise.all([
+            JobRun.aggregate([
+                { $sort: { startedAt: -1 } },
+                { $group: { _id: '$name', run: { $first: '$$ROOT' } } },
+            ]),
+            JobLock.find({}).lean(),
+            NotificationOutbox.aggregate([{ $group: { _id: '$state', count: { $sum: 1 } } }]),
+            NotificationOutbox.findOne({ state: 'pending' }).sort({ createdAt: 1 }).select('createdAt updatedAt').lean(),
+            Attachment.aggregate([{ $group: { _id: '$scanStatus', count: { $sum: 1 } } }]),
+            Reconciliation.aggregate([
+                { $match: { status: 'open' } },
+                { $group: { _id: null, varianceTotal: { $sum: '$variance' }, open: { $sum: 1 } } },
+            ]),
+            Expense.countDocuments({ status: 'submitted', createdAt: { $lt: dayAgo } }),
+        ]);
+
+        const jobs = lastRuns.map(r => ({
+            name: r._id,
+            status: r.run.status,
+            startedAt: r.run.startedAt,
+            finishedAt: r.run.finishedAt,
+            ageMinutes: r.run.startedAt ? Math.round((now - new Date(r.run.startedAt)) / 60000) : null,
+            failed: r.run.failed,
+            error: r.run.error || null,
+        })).sort((a, b) => (b.ageMinutes ?? 0) - (a.ageMinutes ?? 0));
+
+        const outbox = Object.fromEntries(outboxByState.map(o => [o._id, o.count]));
+        const scans = Object.fromEntries(scanAgg.map(s => [s._id, s.count]));
+        const variance = varianceAgg[0] || { varianceTotal: 0, open: 0 };
+        const heartbeat = getSchedulerHeartbeat();
+
+        res.json({
+            generatedAt: now,
+            jobs: { count: jobs.length, stale: jobs.filter(j => j.ageMinutes !== null && j.ageMinutes > 36 * 60), recentFailures: jobs.filter(j => j.status === 'failed'), oldest: jobs.slice(0, 10) },
+            outbox: {
+                byState: outbox,
+                pending: outbox.pending || 0,
+                stuckProcessing: outbox.processing || 0,
+                oldestPendingAgeMinutes: oldestPending ? Math.round((now - new Date(oldestPending.createdAt)) / 60000) : null,
+            },
+            reconciliation: { open: variance.open, varianceTotal: variance.varianceTotal },
+            scans: { pending: scans.pending || 0, rejected: scans.rejected || 0, clean: scans.clean || 0 },
+            stuckExpenses: expiringJobs,
+            locks: locks.map(l => ({
+                name: l.name,
+                owner: l.owner,
+                lockedUntil: l.lockedUntil,
+                held: Boolean(l.lockedUntil && new Date(l.lockedUntil) > now),
+            })),
+            scheduler: {
+                running: heartbeat.running,
+                lastTickAt: heartbeat.lastTickAt,
+                staleMinutes: heartbeat.lastTickAt ? Math.round((now - new Date(heartbeat.lastTickAt)) / 60000) : null,
+            },
+        });
     } catch (err) { next(err); }
 };

@@ -28,6 +28,11 @@ const outboxMessageSchema = new mongoose.Schema(
         },
         attempts: { type: Number, default: 0 },
         maxAttempts: { type: Number, default: 5 },
+        // leasedUntil: expiry of the current worker claim. A crash mid-send leaves
+        // the row in `processing`; once the lease expires another worker reclaims it.
+        leasedUntil: { type: Date, default: null },
+        // lastAttemptAt / firstQueuedAt: observability for the admin health panel (S3.4)
+        lastAttemptAt: { type: Date, default: null },
         nextAttemptAt: { type: Date, default: Date.now },
         lastError: { type: String, default: '' },
         providerMessageId: { type: String, default: '', index: true },
@@ -38,6 +43,7 @@ const outboxMessageSchema = new mongoose.Schema(
 );
 
 outboxMessageSchema.index({ state: 1, nextAttemptAt: 1 });
+outboxMessageSchema.index({ state: 1, leasedUntil: 1 });
 outboxMessageSchema.index(
     { statementId: 1, userId: 1, channel: 1, templateVersion: 1, purpose: 1 },
     { unique: true, sparse: true }

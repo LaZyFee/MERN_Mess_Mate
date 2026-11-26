@@ -3,17 +3,32 @@ import { assertNoOverlap, activeMemberships, membershipsInMonth } from '../servi
 import { audit } from '../models/AuditEvent.js';
 import { auditRoleChange, assertOwnerTransfer } from '../middleware/roles.js';
 import { reassignDepartedMemberDuties } from '../services/routineJobs.js';
+import { paginateQuery } from '../utils/pagination.js';
 
 // Membership endpoints — effective-dated intervals, placeholder accounts,
 // role assignment, departure with preserved balances.
 
-/** GET /api/groups/:groupId/memberships — history + active */
+/** GET /api/groups/:groupId/memberships — history + active (cursor; `?all=true` for exports) */
 export const listMemberships = async (req, res, next) => {
     try {
         const { groupId } = req.params;
-        const rows = await Membership.find({ groupId }).sort({ startDate: -1 }).lean();
-        const active = rows.filter(m => !m.endDate || new Date(m.endDate) > new Date());
-        res.json({ memberships: rows, active });
+        const q = req.validated?.query || {};
+        if (q.all === 'true') {
+            const rows = await Membership.find({ groupId }).sort({ startDate: -1 }).lean();
+            const active = rows.filter(m => !m.endDate || new Date(m.endDate) > new Date());
+            return res.json({ memberships: rows, active, hasMore: false, nextCursor: null });
+        }
+        const page = await paginateQuery({
+            model: Membership, filter: { groupId },
+            cursor: q.cursor || null, limit: q.limit || 50,
+            sortField: '_id', sortOrder: 1,
+        });
+        res.json({
+            memberships: page.items,
+            active: page.items.filter(m => !m.endDate || new Date(m.endDate) > new Date()),
+            nextCursor: page.nextCursor,
+            hasMore: page.hasMore,
+        });
     } catch (err) { next(err); }
 };
 
@@ -117,6 +132,10 @@ export const departMembership = async (req, res, next) => {
         membership.endDate = at;
         membership.leftAt = at;
         await membership.save();
+        if (membership.user) {
+            req.app.get('io')?.in(`user:${membership.user}`).disconnectSockets();
+            req.app.get('io')?.in(`group:${groupId}`).disconnectSockets();
+        }
 
         await audit({
             groupId, actorId: req.user.id,
