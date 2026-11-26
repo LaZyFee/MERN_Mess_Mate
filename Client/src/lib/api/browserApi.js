@@ -16,7 +16,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/bff";
 
 // Only used for mm_csrf (double-submit) and mm_theme — see getCsrfToken below.
 
-function getCookie(name) {
+function getCookie(name) { // eslint-disable-line no-unused-vars -- kept for mm_csrf/mm_theme readers
   if (typeof document === "undefined") return null;
   const match = document.cookie
     .split("; ")

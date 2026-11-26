@@ -17,7 +17,7 @@
 - Card · shared/Card.jsx · variant(elevated|outlined|filled|unstyled),padding,isHoverable,isClickable,header,footer · content containers. ⚠ uses literal bg-white/borders → fix to vars in T0.8
 - Alert · shared/Alert.jsx · status(info|success|warning|error),title,isDismissible,onDismiss · inline notices [FLAG SVG icons]
 - Badge · shared/Badge.jsx · variant,colorScheme,size,isRounded,icon · generic chips
-- StatusBadge · shared/StatusBadge.js · status, configs in STATUS_CONFIGS (driver/document/payment/online) · status chips with icon+color — EXTEND with mealmate statuses (expense, money, period, statementItem, outbox, ticket, membership) in T0.8
+- StatusBadge · shared/StatusBadge.js · status, configs in STATUS_CONFIGS (driver/document/payment/online/expense/money/period/statement_item/outbox/ticket/**asset**) · status chips with icon+color
 - Avatar · shared/Avatar.jsx · src,alt,name(initials fallback),size,hasBorder,status,isSquare,bgColor · user images
 - Skeleton · shared/Skeleton.jsx · variant(text|circle|rect),width,height,isAnimated · loading placeholders
 - Loading · shared/Loading.jsx · size,color,fullScreen,text · spinner (imports TravelLoader — verify exists)
@@ -38,6 +38,8 @@
 - Sectionheader · shared/Sectionheader.js · rotatedLabel,eyebrow,headingLines[],ctaLabel,ctaHref,description,accentFrom/To · marketing/section headers
 - BlockedFormOverlay · shared/BlockedFormOverlay.js · isBlocked,title,description,uploadHref,uploadButtonText · lock forms on prerequisites
 - ThemeToggle · shared/ThemeToggle.js · className,scrolled,topbar · light/dark toggle (uses uiStore + mm_theme cookie)
+- LanguageToggle · shared/LanguageToggle.jsx · className · EN/বাংলা switch; writes `mm_lang` cookie via `lib/i18n` and re-renders the tree (P14/T14.17a)
+- TurnstileWidget · shared/TurnstileWidget.jsx · onToken(token),isRequired,theme · Cloudflare Turnstile; renders nothing without `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; `hasTurnstile()` gates submit buttons (P14/T14.4)
 - RateLimitCatcher · shared/RateLimitCatcher.jsx · error,reset,onRetry,onClose,isOverlay · 429 full-screen UI (PREFERRED)
 - RateLimitListener · shared/RateLimitListener.jsx · (duplicate — prefer RateLimitCatcher)
 - Toast · shared/Toast.jsx · toast rendering incl. success/error/warning/loading [FLAG SVG]
@@ -60,6 +62,13 @@
 - CoMemberDirectory · app/(app)/groups/[groupId]/members/CoMemberDirectory.jsx · groupId*, initialMembers? · T8.6 co-member cards (username + optional wa.me link) + self leave with history-cutoff confirm.
 - AdminShell · app/(admin)/admin/AdminShell.jsx · initialOverview* · hidden admin chrome + ToastProvider.
 - Admin Overview/Users/Groups/Audit/Support/Ticket clients · app/(admin)/admin/** · initial* props from SSR pages · platform-admin plane (probe 404s for non-admins).
+- AdminHealthPanel · app/(admin)/admin/AdminHealthPanel.jsx · initialHealth?
+- ActivityClient · app/(app)/groups/[groupId]/activity/ · initialEvents*,initialAction · group audit feed (action filter, cursor load-more)
+- BazarForecastCard · app/(app)/groups/[groupId]/BazarForecastCard.jsx · groupId*,initialForecast? · 7/14/30-day bazar spend forecast + band
+- BudgetsPanel · app/(app)/groups/[groupId]/more/BudgetsPanel.jsx · groupId*,categories,canEdit · monthly budgets with `Progress` variance
+- AssetsPanel · app/(app)/groups/[groupId]/more/AssetsPanel.jsx · groupId*,canManage · deposit assets, cursor load-more, refund modal
+- ExplainBillDrawer · app/(app)/groups/[groupId]/statements/ExplainBillDrawer.jsx · groupId*,month*,membershipId?,displayName?,onClose* · en/bn frozen-statement bill breakdown
+- ExpenseImportWizard · app/(app)/groups/[groupId]/expenses/ExpenseImportWizard.jsx · isOpen*,onClose*,groupId*,onImported? · .xlsx/.csv import via `ModalStepper` (preview → diff → apply)
 - TicketContextPanel · app/(admin)/admin/support/[ticketId]/ · owner,memberships,ticket,busy,onPriority,onClearAssignee · admin ticket sidebar.
 
 ## layouts/ & socket/

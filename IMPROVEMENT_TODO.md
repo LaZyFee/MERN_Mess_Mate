@@ -1,5 +1,5 @@
 # MealMate Improvement TODO
-Last Session: T14.5 → T14.11
+Last Session: T14.D → complete
 
 > Source: `Server/docs/PROJECT_IMPROVEMENT_RECOMMENDATIONS.md` (PIR). Order = PIR §7 roadmap. **Backend (Server) first, then frontend (Client).**
 > Markers: `[ ]` todo · `[~]` in progress (add what's left) · `[x]` done · `[!]` blocked (reason) · `[-]` deferred (needs measured trigger / human infra)
@@ -88,17 +88,17 @@ Last Session: T14.5 → T14.11
 - [x] T14.8 Admin health panel (`/admin` overview section) (needs S3.4).
 - [x] T14.9 Group "Activity" tab from `getGroupAuditLog` with action/actor filters; add to GroupShell TABS (existing API).
 - [x] T14.10 Bazar forecast card on Overview/Board (needs S5.1).
-- [ ] T14.11 Budgets panel: per-category variance with `Progress` (needs S5.2).
-- [ ] T14.12 Duty fairness: weighted share display in DutiesClient (needs S5.4).
-- [ ] T14.13 ReconciliationPanel: suggestion list (needs S5.5).
-- [ ] T14.14 StatementDetail: "Explain my bill" drawer (needs S5.6).
-- [ ] T14.15 Excel import wizard with `ModalStepper` (needs S5.7).
-- [ ] T14.16 Notification prefs: add "payment reminder" type on Profile (needs S5.3).
-- [ ] T14.17a Bengali i18n infra: dictionary loader, `mm_lang` cookie, bn digit/currency in `lib/utils/format.js`, language toggle.
-- [ ] T14.17b Translate shell + auth + home.
-- [ ] T14.17c Translate group tabs (one tab per sub-step; split further if >3 files).
-- [ ] T14.18 Phase gate: `npm run lint`, `audit:colors`, `audit:svg`, `npm run build`.
-- [ ] T14.D Docs sync (Client: COMPONENTS.md, README_1 → `Client/README.md`, TODO.md; plus root docs touched by client features).
+- [x] T14.11 Budgets panel: per-category variance with `Progress` (needs S5.2).
+- [x] T14.12 Duty fairness: weighted share display in DutiesClient (needs S5.4).
+- [x] T14.13 ReconciliationPanel: suggestion list (needs S5.5).
+- [x] T14.14 StatementDetail: "Explain my bill" drawer (needs S5.6).
+- [x] T14.15 Excel import wizard with `ModalStepper` (needs S5.7).
+- [x] T14.16 Notification prefs: add "payment reminder" type on Profile (needs S5.3).
+- [x] T14.17a Bengali i18n infra: dictionary loader, `mm_lang` cookie, bn digit/currency in `lib/utils/format.js`, language toggle.
+- [x] T14.17b Translate shell + auth + home.
+- [x] T14.17c Translate group tabs (one tab per sub-step; split further if >3 files).
+- [x] T14.18 Phase gate: `npm run lint`, `audit:colors`, `audit:svg`, `npm run build`.
+- [x] T14.D Docs sync (Client: COMPONENTS.md, README_1 → `Client/README.md`, TODO.md; plus root docs touched by client features).
 
 ## Deferred `[-]` (only with a measured trigger — do not start)
 - [-] S6.1 Redis rate-limit store + `@socket.io/redis-adapter` (second instance needed).
@@ -132,3 +132,9 @@ Last Session: T14.5 → T14.11
 - New S5 job: `debtorReminders` in the scheduler job table (quiet hours + consent honoured, one reminder per statement revision+member+channel).
 - `dutyFairnessBoard` response is additive: now also returns `totalUnits`, `activeMembers`, `fairness {gini, level, mostLoaded, leastLoaded}`, `weights`, and per-row `weightedUnits`/`sharePct`/`fairSharePct`/`balance`; `cleaningCount` now matches any `cleaning:*` key.
 - Expense import cap: 5 MB upload, 2000 rows, 10 requests / 15 min / IP; rows land as `draft` expenses (approval unchanged).
+- After P14 (client phase gate): `npm run lint` → **0 errors, 17 warnings** (pre-existing); `audit:colors` clean; `audit:svg` clean; `npm run build` → **passes, 35 routes** (was 20). Server re-checked: **238 unit pass / 0 fail**, routes **231/231**.
+- New client files: `components/shared/{TurnstileWidget,LanguageToggle}.jsx`, `lib/i18n/{index.js,LangProvider.jsx,dict/common.js}`, `app/(admin)/admin/AdminHealthPanel.jsx`, `app/(app)/groups/[groupId]/{activity/page.jsx,activity/ActivityClient.jsx,BazarForecastCard.jsx}`, `more/{BudgetsPanel,AssetsPanel}.jsx`, `statements/ExplainBillDrawer.jsx`, `expenses/ExpenseImportWizard.jsx`, `lib/actions/activity.js`.
+- Client env var: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (Client `.env.example` + Client README + root README §7). CSP adds `https://challenges.cloudflare.com` to script/connect/frame.
+- Locale: cookie `mm_lang` (`en|bn`), read server-side in `app/layout.jsx`; **no `[lang]` URL segment** so existing routes are untouched. `formatPoisha(poisha, "bn")` prints Bengali digits (default remains `en`).
+- Small backend follow-ups made to support the UI: `listMemberships`/`listGuestMeals` return the whole list when no `cursor`/`limit` is sent (SSR-safe), group audit log accepts `?action=`/`?actorId=`, budget variance lines include `_id` (delete from the UI), `410 Gone` surfaced once per session from `browserApi`.
+- Remaining (deferred/human only): Bengali translation of individual tab bodies beyond shell/auth/home/tab labels, PWA offline drafts (`[-]` T14.19), H1–H4 human drills/infra.

@@ -48,7 +48,7 @@ function typedErr(status, data, msg) {
   return err;
 }
 
-let refreshing = null;
+let refreshing = null; // eslint-disable-line no-unused-vars
 /**
  * Server-side refresh is INTENTIONALLY a no-op.
  *

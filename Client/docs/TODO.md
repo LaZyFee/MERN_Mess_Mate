@@ -1,5 +1,5 @@
 # MealMate Frontend TODO
-Last Session: Backend/frontend audit pass. Fixed the auth cookie contract — `middleware.js`, `browserApi.js` and `serverApi.js` no longer look for a non-existent `mm_rt` cookie; refresh now uses the real `refreshToken`/`mm_at` HttpOnly cookies (HTTP 200 = success, tokens stay out of JS). Production build passes with all routes. → Next: optional P12/UX polish only (backlog clear).
+Last Session: P14 complete. Budgets, duty fairness, reconciliation suggestions, "explain my bill" (en/bn), Excel import wizard, payment-reminder prefs, Bengali i18n (dictionary + `mm_lang` cookie + LanguageToggle), group Activity tab, admin health panel, load-more everywhere. Gate: lint 0 errors, color/SVG audits clean, build passes (35 routes). → Next: backlog clear.
 
 ## P0 Recon & Foundation (Next.js per §8)
 - [x] T0.1 Recon done; deps installed (next, socket.io-client, chart.js, react-chartjs-2). Icon family: react-icons/lu.
@@ -92,6 +92,30 @@ Last Session: Backend/frontend audit pass. Fixed the auth cookie contract — `m
 - [x] T13.8 Fixed password meter/build-blocking placeholders and roster payload wiring; remaining hidden-admin route and co-member/leave-directory polish.
   → Follow-up in this session: ConfirmationModal gained `details` + `isLoading` alias (prop is `confirmText`); inline `bg-(--${tone})` dynamic classes replaced with static maps; ChartCanvas moved to `components/charts/ChartCanvas.jsx` (shared by Charts tab + admin; Turbopack cannot resolve `(app)`/`[groupId]` in import paths).
 
+## P14 Improvements
+- [x] T14.0 Re-read `AGENTS.md` + `next/dist/docs` (internationalization, cookies) + `FRONTEND_BUILD_PROMPT.md` §1/§8.9; noted: cookie-based locale (no `[lang]` segment) keeps every route intact.
+- [x] T14.1 Sessions page: notice rewritten; revoking is authoritative (device signs out immediately).
+- [x] T14.2 Expense draft: `payers[]` required — payer defaults to the signed-in member; submit disabled without one.
+- [x] T14.3 Receipts: `scanStatus: pending` renders a non-clickable chip instead of a download link.
+- [x] T14.4 `TurnstileWidget` on new-ticket and appeal forms; `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; CSP allows `challenges.cloudflare.com` (script/connect/frame).
+- [x] T14.5 Load-more: members, guest meals, disputes (backend now returns full lists when no cursor is sent — SSR-safe).
+- [x] T14.6 Load-more: outbox, polls, and a new `AssetsPanel` (deposit assets + refunds).
+- [x] T14.7 `410 Gone` handled once per session in `browserApi`; `LegacyExpensePanel` swaps to a "retired" notice; legacy meal delete steers to the current grid.
+- [x] T14.8 `AdminHealthPanel` on `/admin` overview (scheduler, stale jobs, outbox depth, variance, scans, locks).
+- [x] T14.9 Group **Activity** tab (`GET /messgroups/audit-log/:groupId`) with action-family filter + load-more; added to GroupShell TABS (owner/manager/treasurer/auditor).
+- [x] T14.10 `BazarForecastCard` on the Overview (7/14/30-day horizon, band, confidence, "insufficient data" state).
+- [x] T14.11 `BudgetsPanel` in More: planned/spent/left tiles + per-category `Progress` variance (treasurer+ edits).
+- [x] T14.12 Duties fairness card shows weighted units, share % vs fair share, Gini + level.
+- [x] T14.13 Reconciliation panel lists server suggestions (unconfirmed, underpaid, missing receipts) with at-risk total.
+- [x] T14.14 `ExplainBillDrawer` on statement rows (desktop + mobile), EN/বাংলা toggle, frozen figures only.
+- [x] T14.15 `ExpenseImportWizard` (ModalStepper: upload → review diff → apply) for treasurer+; imported rows are drafts.
+- [x] T14.16 Notification prefs: `payment_reminder` type added.
+- [x] T14.17a i18n infra: `lib/i18n` (registry, `translate`, `mm_lang` cookie), `LangProvider`/`useT`, `toBengaliDigits` + `formatPoisha(poisha, lang)`, `LanguageToggle` in app/admin/group chrome.
+- [x] T14.17b Shell + auth + home translated (`dict/common.js`: shell/group/auth/home).
+- [x] T14.17c Group tab labels translated via `group.tab.*`.
+- [x] T14.18 Phase gate: `lint` 0 errors, `audit:colors` clean, `audit:svg` clean, `build` passes (35 routes).
+- [x] T14.D Docs sync: COMPONENTS.md (new shared + feature components), README env/structure, TODO, root docs.
+
 ## Notes & Decisions
 - Mandatory UI implementation rule: use Tailwind `className` utilities for layout and presentation. `style={{ ... }}` is prohibited for JSX components; dynamic CSS values use a CSS custom property such as `style={{ "--progress": value }}` only when no Tailwind arbitrary-value form is practical. All colors remain CSS-variable based.
 - Completed the §8.9 split for the remaining auth/group routes: `page.jsx` files are Server Components, interactive forms/views live in client components, and SSR reads use `src/lib/actions/{auth,groups}.js`; clients seed state from `initial*` props and use browser APIs only for mutations/refreshes.
@@ -106,3 +130,4 @@ Last Session: Backend/frontend audit pass. Fixed the auth cookie contract — `m
 - Verification: `npm run lint` → 0 errors; `audit:colors` → clean; `audit:svg` → clean; `npm run build` → PASSES (compiled successfully, all routes render). Dev-server warnings removed: `@custom-variant dark` dropped from globals.css (unused; codebase uses explicit `[data-theme="dark"]` classes) and obsolete `eslint` key dropped from next.config.js.
 - Admin plane gotcha: /admin pages must NEVER be linked from user UI; guard is server-side probe only. `ADMIN_PANEL_KEY` is optional (backend `requirePlatformAdmin` also enforces the `amr: otp` claim). Empty `.env` value = header not sent. Symlinked trees (Turbopack) resolve `@/app/...` fine but NOT relative `../(app)/[groupId]/...` imports — put shared code in `src/components`.
 - Env additions: `SOCKET_ORIGIN` (CSP connect-src, comma-separated), `ADMIN_PANEL_KEY` (server-only, never NEXT_PUBLIC_).
+- P14 notes: locale is cookie-based (`mm_lang`) because Next.js i18n routing (`app/[lang]`) would have moved every existing route; `LangProvider` reads the cookie server-side in `app/layout.jsx`, so there is no flash. `formatPoisha(poisha, "bn")` renders Bengali digits; default stays `en`. New API helpers: `budgetsApi`, `auditApi`, `assetsApi`, `expensesApi.previewImport/applyImport`, `statementsApi.explain/remindDebtors`, `reconciliationApi.suggestions`, `routinesApi.bazarForecast`, cursor-args for members/guests/disputes/outbox/polls/assets. Backend follow-ups made in this phase: `listMemberships`/`listGuestMeals` return the full list when no `cursor`/`limit` is sent (SSR compatibility), `?action=`/`?actorId=` filters on the group audit log, and budget variance lines now include `_id` so the UI can delete a line. Env addition: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (empty = no captcha widget).

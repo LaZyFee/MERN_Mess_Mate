@@ -245,6 +245,7 @@ Set the client's backend URL env var (see §7.2) to `http://localhost:5000` and 
 | `NEXT_PUBLIC_APP_URL` | Public origin of the client app |
 | `SOCKET_ORIGIN` | Socket.IO origin allowed in the client CSP `connect-src` (comma-separated for several) |
 | `ADMIN_PANEL_KEY` | Optional client-side copy of the backend admin key for the hidden `/admin` plane; leave empty unless the backend sets one |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key for the support/appeal forms (empty = no widget; pair with the backend's `TURNSTILE_SECRET`) |
 
 The browser never receives a backend URL or a token — all calls go through `/api/bff` on the client origin. See `Client/.env.example` for the canonical list.
 
@@ -336,7 +337,7 @@ Legend: **IMPLEMENTED** (verified in source and exercised by tests/build) · **P
 | Planning & insight (budgets, reminders, reconciliation, import) | IMPLEMENTED | Budget CRUD + live variance, debtor reminders via outbox (quiet hours/consent), read-only reconciliation suggestions, frozen-statement "explain my bill" (en+bn), Excel/CSV preview → diff → apply. |
 | Security hardening | IMPLEMENTED | Session families are authoritative for refresh tokens; revoke-one/revoke-all/password-change/suspend revoke families; legacy `User.refreshToken` accepted until `LEGACY_REFRESH_SUNSET`. |
 | Browser authentication (BFF) | IMPLEMENTED locally / NEEDS VERIFICATION deployed | Cookie login, CSRF, logout, BFF relay tested locally; Google OAuth + 2FA through a deployed BFF untested. |
-| Frontend | PARTIALLY IMPLEMENTED | Next.js App Router client builds all routes; see roadmap for open items. |
+| Frontend | IMPLEMENTED | Next.js App Router client builds all routes (35); P14 added budgets, duty fairness, reconciliation suggestions, "explain my bill" (en/bn), Excel import, payment-reminder prefs, Bengali i18n (`mm_lang`) and a group Activity tab. |
 
 Known issues, inconsistencies and product questions are tracked in [`PROJECT_IMPROVEMENT_RECOMMENDATIONS.md`](Server/docs/PROJECT_IMPROVEMENT_RECOMMENDATIONS.md) — the backend was **not** changed to match documentation.
 
@@ -414,4 +415,4 @@ Short version; the detailed, prioritised list lives in [PROJECT_IMPROVEMENT_RECO
 - [x] Readiness endpoint, outbox lease recovery, quarantine for pending-scan receipts, scheduled accounting-equation check
 - [x] Consolidate Zod schemas and extract an export service
 
-**Product ideas** — all five backend pieces now exist: bazar budget forecast (S5.1), monthly budgets (S5.2), post-finalize payment reminders (S5.3), "explain my bill" in English and Bengali (S5.6) and Excel/CSV expense import (S5.7); plus weighted duty fairness (S5.4) and reconciliation suggestions (S5.5). Still open: Bengali UI localisation (client `T14.17`), PWA offline meal entry (deferred, policy review).
+**Product ideas** — every backend piece in the PIR §5 list now exists (forecast, budgets, reminders, "explain my bill" en+bn, Excel import) and is wired into the client. Still open: PWA offline meal entry (deferred, policy review) and completing the Bengali translation beyond shell/auth/home/group tabs (infrastructure is in place: `Client/src/lib/i18n`).

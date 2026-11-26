@@ -2658,7 +2658,7 @@ Mount: `/api/messgroups`. Every route requires auth. Guards noted per route; the
 
 #### GET `/api/messgroups/audit-log/:groupId`
 * **Guards:** legacy `requireGroupRole('member')`; the controller then requires `owner|manager|treasurer|auditor`.
-* **Query:** `limit` (default 50), `cursor`.
+* **Query:** `limit` (default 50), `cursor`, `action` (exact action key, e.g. `expense.approved`), `actorId` (ObjectId).
 * **Success:** `200 { events, nextCursor, hasMore }`. **Errors:** `403 { msg: 'Owner, manager, treasurer, or auditor role required' }`.
 
 #### Payment notes (legacy)

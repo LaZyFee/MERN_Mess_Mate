@@ -9,7 +9,6 @@ import { useCallback, useEffect, useState } from "react";
 import { LuReceiptText, LuLoaderCircle, LuTriangleAlert } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Modal from "@/components/modals/Modal";
-import { useToast } from "@/components/shared/ToastProvider";
 import { statementsApi } from "@/lib/api/statements";
 import { formatPoisha } from "@/lib/utils/format";
 
@@ -24,7 +23,6 @@ function amountOf(row) {
 }
 
 export default function ExplainBillDrawer({ groupId, month, membershipId = null, displayName = "", onClose }) {
-  const { showToast } = useToast();
   const [lang, setLang] = useState("en");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);

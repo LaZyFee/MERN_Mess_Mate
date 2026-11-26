@@ -11,7 +11,11 @@ import { LuShieldCheck } from "react-icons/lu";
 
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
-export const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+// Next.js inlines NEXT_PUBLIC_* at build time; `process` is a compile-time token here.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""; // eslint-disable-line no-undef
+
+/** True when a Turnstile site key is configured (forms use this to gate submit). */
+export const hasTurnstile = () => Boolean(TURNSTILE_SITE_KEY);
 
 let loaderPromise = null;
 function loadScript() {

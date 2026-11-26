@@ -11,7 +11,7 @@ import Alert from "@/components/shared/Alert";
 import Button from "@/components/shared/Button";
 import Input from "@/components/shared/Input";
 import Textarea from "@/components/shared/Textarea";
-import TurnstileWidget, { TURNSTILE_SITE_KEY } from "@/components/shared/TurnstileWidget";
+import TurnstileWidget, { hasTurnstile } from "@/components/shared/TurnstileWidget";
 import { supportApi } from "@/lib/api/platform";
 
 export default function AppealClient() {
@@ -73,7 +73,7 @@ export default function AppealClient() {
           onChange={(event) => setMessage(event.target.value)}
           helperText="At least 10 characters"
         />
-        <TurnstileWidget onToken={setCaptchaToken} isRequired={Boolean(TURNSTILE_SITE_KEY)} />
+        <TurnstileWidget onToken={setCaptchaToken} isRequired={hasTurnstile()} />
         {state.note && (
           <Alert status="info" title="Appeal received">
             {state.note}
@@ -84,7 +84,7 @@ export default function AppealClient() {
           size="lg"
           isFullWidth
           isLoading={state.status === "sending"}
-          isDisabled={state.status === "sending" || email.trim().length < 5 || message.trim().length < 10 || (Boolean(TURNSTILE_SITE_KEY) && !captchaToken)}
+          isDisabled={state.status === "sending" || email.trim().length < 5 || message.trim().length < 10 || (hasTurnstile() && !captchaToken)}
         >
           Submit appeal
         </Button>

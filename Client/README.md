@@ -31,6 +31,7 @@ npm run dev                      # http://localhost:5174
 | `NEXT_PUBLIC_APP_URL` | Public origin of this app (invite links, OAuth redirects). |
 | `SOCKET_ORIGIN` | Comma-separated origin(s) allowed in the CSP `connect-src`. |
 | `ADMIN_PANEL_KEY` | Optional defense-in-depth key for `/admin/*`; must match the backend's `ADMIN_PANEL_KEY`. Empty when unused. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key for the support ticket and appeal forms. Empty ⇒ the widget is not rendered (the backend must then have `CAPTCHA_DEV_BYPASS` or `TURNSTILE_SECRET` set accordingly). |
 
 Auth is **cookie-only**: `mm_at` (access, HttpOnly, `/`), `refreshToken`
 (refresh, HttpOnly, `/api`), `mm_csrf` (double-submit, readable).
@@ -61,7 +62,7 @@ Client/
     (app)/                      protected layout (session → redirect) + AppChrome
       page.jsx                  home (my groups)
       groups/[groupId]/         overview · meals · expenses · money · statements
-                                · board · charts · members · more
+                                · board · charts · members · activity · more
       support/ · inbox/ · profile/
     (admin)/admin/              hidden platform-admin plane (probed, 404 otherwise)
     api/bff/[...path]/route.js  allowlist proxy to BACKEND_URL
@@ -69,7 +70,8 @@ Client/
     actions/                    Layer 1 — server-only reads (one file per domain)
     api/                        serverApi (SSR) · browserApi (/api/bff) · domain clients
     store/                      zustand: authStore (no persist), groupStore, uiStore
-    utils/                      format.js (formatPoisha/parseTaka/month/Dhaka-day)
+    utils/                      format.js (formatPoisha/parseTaka/month/Dhaka-day/toBengaliDigits)
+    i18n/                       index.js (dictionary registry, mm_lang cookie) + LangProvider.jsx + dict/
   src/components/               shared UI (Button, Card, Modal, Table, Toast, …)
   src/features/                 interactive domain components
 ```

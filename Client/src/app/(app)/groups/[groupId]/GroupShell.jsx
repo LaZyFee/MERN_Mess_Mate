@@ -23,7 +23,7 @@ import { useAuthStore } from "@/lib/store/authStore";
 import { groupsApi } from "@/lib/api/groups";
 import ThemeToggle from "@/components/shared/ThemeToggle";
 import LanguageToggle from "@/components/shared/LanguageToggle";
-import { useT, useLang } from "@/lib/i18n/LangProvider";
+import { useLang } from "@/lib/i18n/LangProvider";
 
 export const GroupContext = createContext(null);
 export const useGroup = () => useContext(GroupContext);
