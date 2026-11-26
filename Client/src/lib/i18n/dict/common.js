@@ -1,6 +1,6 @@
 // T14.17b — shared dictionaries: shell (nav/actions), auth, home.
 // Keys: "<namespace>.<key>". Missing bn keys fall back to English.
-import { registerDictionary } from "@/lib/i18n";
+import { registerDictionary } from "@/lib/i18n/registry";
 
 registerDictionary("en", "shell", {
   "groups": "My groups",
@@ -73,6 +73,11 @@ registerDictionary("en", "auth", {
   "join.title": "Join a group",
   "join.code": "Join code",
   "join.submit": "Join",
+  "login2fa.enterCode": "Enter the 6-digit code from your authenticator app.",
+  "login2fa.code": "Authenticator Code",
+  "login2fa.verify": "Verify",
+  "login2fa.back": "Back",
+  "login2fa.invalidCode": "Invalid code",
 });
 
 registerDictionary("bn", "auth", {
@@ -94,6 +99,11 @@ registerDictionary("bn", "auth", {
   "join.title": "গ্রুপে যোগ দিন",
   "join.code": "জয়েন কোড",
   "join.submit": "যোগ দিন",
+  "login2fa.enterCode": "আপনার অথেন্টিকেটর অ্যাপ থেকে 6-অंকের কোড লিখুন।",
+  "login2fa.code": "অথেন্টিকেটর কোড",
+  "login2fa.verify": "যাচাই করুন",
+  "login2fa.back": "পেছনে যান",
+  "login2fa.invalidCode": "অভৈধ কোড",
 });
 
 registerDictionary("en", "home", {

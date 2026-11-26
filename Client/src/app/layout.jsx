@@ -12,7 +12,6 @@ export const metadata = {
     "Meal, expense and money tracking for shared living, backed by a real double-entry ledger.",
 };
 
-
 export const viewport = {
   width: "device-width",
   initialScale: 1,
@@ -20,20 +19,17 @@ export const viewport = {
 };
 
 export default async function RootLayout({ children }) {
-  // T14.17a — locale comes from the mm_lang cookie (server read, no flash)
+  // T14.17a — locale & theme come from cookies (server read, no flash).
+  // mm_theme is the only readable theme cookie; setting data-theme during SSR
+  // paints the right theme immediately and removes the client-side <script>
+  // that React 19 flags during SSR.
   const cookieStore = await cookies();
   const lang = normalizeLang(cookieStore.get(LANG_COOKIE)?.value);
+  const theme = cookieStore.get("mm_theme")?.value;
 
   return (
-    <html lang={lang} suppressHydrationWarning>
-      <head>
-        {/* Set theme before paint to avoid flash; mm_theme is the only readable cookie */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var m=document.cookie.match(/mm_theme=(dark|light)/);var t=m?m[1]:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`,
-          }}
-        />
-      </head>
+    <html lang={lang} suppressHydrationWarning data-theme={theme ?? "light"}>
+      <head></head>
       <body>
         <LangProvider initialLang={lang}>{children}</LangProvider>
       </body>

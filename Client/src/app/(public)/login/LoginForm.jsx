@@ -2,15 +2,17 @@
 
 import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LuEye, LuEyeOff } from "react-icons/lu";
 import Input from "@/components/shared/Input";
 import Button from "@/components/shared/Button";
 import { useToast } from "@/components/shared/ToastProvider";
 import { useAuthStore } from "@/lib/store/authStore";
 import { authApi } from "@/lib/api/auth";
 import { useT } from "@/lib/i18n/LangProvider";
-
+import PasswordInput from "@/components/auth/PasswordInput.jsx";
 // 2FA step 
 function TwoFAStep({ challengeToken, onBack }) {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const hydrate = useAuthStore((s) => s.hydrate);
@@ -21,14 +23,14 @@ function TwoFAStep({ challengeToken, onBack }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!code.trim()) { setErr("Enter your 6-digit code"); return; }
+    if (!code.trim()) { setErr(t("auth.login2fa.invalidCode")); return; }
     setLoading(true);
     try {
       const data = await authApi.twoFactorLogin({ challengeToken, code: code.trim() });
       hydrate({ user: data.user, roles: data.user?.roles || [], isAdmin: Boolean(data.user?.isAdmin) });
       router.replace(searchParams.get("next") || "/");
     } catch (ex) {
-      setErr(ex?.data?.message || ex?.message || "Invalid code");
+      setErr(ex?.data?.message || ex?.message || t("auth.login2fa.invalidCode"));
     } finally {
       setLoading(false);
     }
@@ -37,10 +39,10 @@ function TwoFAStep({ challengeToken, onBack }) {
   return (
     <form onSubmit={handleSubmit} noValidate>
       <p className="text-sm [color:var(--tm)] mb-4">
-        Enter the 6-digit code from your authenticator app.
+        {t("auth.login2fa.enterCode")}
       </p>
       <Input
-        label="Authenticator Code"
+        label={t("auth.login2fa.code")}
         isRequired
         value={code}
         onChange={(e) => { setCode(e.target.value); setErr(""); }}
@@ -53,10 +55,10 @@ function TwoFAStep({ challengeToken, onBack }) {
       />
       <div className="flex gap-3 mt-4">
         <Button variant="outline" onClick={onBack} isDisabled={loading} className="flex-1">
-          Back
+          {t("auth.login2fa.back")}
         </Button>
         <Button type="submit" isLoading={loading} isDisabled={loading} className="flex-1">
-          Verify
+          {t("auth.login2fa.verify")}
         </Button>
       </div>
     </form>
@@ -131,9 +133,9 @@ export default function LoginForm() {
           autoComplete="email"
           inputMode="email"
         />
-        <Input
+        <PasswordInput
+          size="md"
           label={t("auth.login.password")}
-          type="password"
           isRequired
           value={form.password}
           onChange={set("password")}
@@ -141,7 +143,8 @@ export default function LoginForm() {
           errorMessage={errors.password}
           autoComplete="current-password"
         />
-        <div className="text-right -mt-2">
+        <div className="flex items-center justify-between gap-3 -mt-2">
+
           <a
             href="/forgot-password"
             className="[font-size:0.8125rem] [color:var(--p)] font-medium"

@@ -5,22 +5,23 @@
 // read it through `useT()`. Dictionaries are plain objects — a missing key falls
 // back to English, then to the key itself, so a partial translation never breaks UI.
 
+import { dictionaries, registerDictionary } from "./registry";
+
+// Register all dictionary namespaces so translations are available app-wide.
+// The side-effect import is hoisted to the top of the module by the ES module
+// spec; `dict/common` now imports `registerDictionary` from the leaf `registry`
+// module, so it runs only after `registerDictionary` is defined (no TDZ error).
+import "./dict/common";
+import "./dict/landing";
+
 export const LANGS = ["en", "bn"];
 export const DEFAULT_LANG = "en";
 export const LANG_COOKIE = "mm_lang";
 
+// Re-exported for consumers that import the registry from `@/lib/i18n`.
+export { registerDictionary };
+
 export const normalizeLang = (value) => (LANGS.includes(value) ? value : DEFAULT_LANG);
-
-const dictionaries = {
-  en: {},
-  bn: {},
-};
-
-/** Register a dictionary namespace (called from each `dict/*.js` module). */
-export const registerDictionary = (lang, namespace, entries) => {
-  if (!dictionaries[lang]) dictionaries[lang] = {};
-  dictionaries[lang][namespace] = { ...(dictionaries[lang][namespace] || {}), ...entries };
-};
 
 /** Look up "namespace.key"; falls back bn → en → key. */
 export const translate = (lang, key, vars = {}) => {

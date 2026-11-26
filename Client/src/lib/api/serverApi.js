@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 /* global process */
 
-const API_BASE_URL = process.env.BACKEND_URL || "http://localhost:5000";
+const API_BASE_URL = process.env.BACKEND_URL || "http://localhost:5001";
 const BACKEND_API = `${API_BASE_URL}/api`;
 
 // MealMate has no public unauthenticated GET endpoints — every API is
