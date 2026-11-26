@@ -71,14 +71,14 @@ resolved** (see §1 and the verification record in §9).
 | Recommendation | Current situation | Problem / opportunity | Proposed solution | Benefits | Priority | Complexity | Dependencies |
 |---|---|---|---|---|---|---|---|
 | Bazar budget forecast ✅ | `headcount/tomorrow` + recent approved poisha prices exist | Managers still decide purchases by feel; over/under-buying | `GET …/bazar-forecast?days=7`: portions × trailing 30-day median price per category, with a confidence band | Less waste; predictable month | High | Medium | headcount, approved expenses, `stats` |
-| Budget planning per month | No budget entity | No "we are 80 % through the budget on day 12" signal | `Budget {groupId, month, categoryId, amountPoisha}` + variance endpoint | Proactive cost control | High | Medium | new model |
-| Payment reminders for debtors | `checkPeriodDeadlines` reminds managers only | Residents forget to pay | Reuse the outbox: after finalize, enqueue per-member "you owe ৳X" reminders with dedupe keys (respect quiet hours/consent) | Faster settlement | Medium | Low | outbox, consents |
-| Duty fairness analytics | `dutyFairnessBoard` returns counts | Counts hide the *time* imbalance (cooking > trash) | Weight tasks, show a Gini/rolling share in the board | Fairer rotas | Medium | Low | `routinesController` |
-| Reconciliation assistant | Reconciliation stores expected vs actual | Explaining a variance means reading the ledger manually | Suggest likely causers: unconfirmed transactions, expenses with `paidTotal < amount`, receipts missing | Faster resolution | Medium | Medium | ledger, expenses |
+| Budget planning per month ✅ | No budget entity | No "we are 80 % through the budget on day 12" signal | `Budget {groupId, month, categoryId, amountPoisha}` + variance endpoint | Proactive cost control | High | Medium | new model |
+| Payment reminders for debtors ✅ | `checkPeriodDeadlines` reminds managers only | Residents forget to pay | Reuse the outbox: after finalize, enqueue per-member "you owe ৳X" reminders with dedupe keys (respect quiet hours/consent) | Faster settlement | Medium | Low | outbox, consents |
+| Duty fairness analytics ✅ | `dutyFairnessBoard` returns counts | Counts hide the *time* imbalance (cooking > trash) | Weight tasks, show a Gini/rolling share in the board | Fairer rotas | Medium | Low | `routinesController` |
+| Reconciliation assistant ✅ | Reconciliation stores expected vs actual | Explaining a variance means reading the ledger manually | Suggest likely causers: unconfirmed transactions, expenses with `paidTotal < amount`, receipts missing | Faster resolution | Medium | Medium | ledger, expenses |
 | Bengali localisation | English-only UI strings | Bangladeshi messes are Bengali-first | `next-intl`-style dictionary + Bengali number/currency formatting; backend already stores ৳ data | Adoption | High | Medium | frontend only |
 | PWA + offline meal drafts | Slot-state entry exists | Poor connectivity on mobile | Offline queue storing **only** group/month/date/portions (no tokens, encrypted per user), synced through the BFF | Entries captured on the spot | Medium | High | frontend, policy review |
-| Import from Excel | `migrateLegacyData.js` is a one-shot script | New groups have spreadsheets | Upload preview → dry-run diff → apply (reusing the bulk-preview pattern) | Low-friction onboarding | Medium | Medium | `mealBulkSchema`, expenses |
-| "Explain my bill" narrative | Statement items contain every component | Residents dispute what they do not understand | Generate a plain-language (or Bengali) breakdown from the frozen statement item in both email and UI | Fewer disputes | Medium | Low | statement snapshot |
+| Import from Excel ✅ | `migrateLegacyData.js` is a one-shot script | New groups have spreadsheets | Upload preview → dry-run diff → apply (reusing the bulk-preview pattern) | Low-friction onboarding | Medium | Medium | `mealBulkSchema`, expenses |
+| "Explain my bill" narrative ✅ | Statement items contain every component | Residents dispute what they do not understand | Generate a plain-language (or Bengali) breakdown from the frozen statement item in both email and UI | Fewer disputes | Medium | Low | statement snapshot |
 
 ## 6. Long-term architectural ideas (only with a measured trigger)
 
@@ -102,7 +102,7 @@ resolved** (see §1 and the verification record in §9).
 7. ✅ Consolidate Zod schemas; extract export service.
 
 **Medium term (product)**
-8. Bengali localisation; bazar budget forecast ✅; monthly budgets; payment reminders; "explain my bill".
+8. Bengali localisation (client, `T14.17`); bazar budget forecast ✅; monthly budgets ✅; payment reminders ✅; "explain my bill" ✅ (English + Bengali text); Excel import ✅.
 9. ✅ Cursor pagination on the remaining list endpoints.
 
 **Long term (scale — only when measured)**
@@ -127,7 +127,7 @@ Files inspected in this audit (source, not proof of behaviour — every behaviou
 - **Server/controllers (31)** — admin, attachment, depositAsset, dispute, expenseCategory, expense, inbox, invite, job, kitchenInventory, meal, membership, messGroup, money, notification, paymentNote, period, policy, poll, reconciliation, recurring, routines, session, shoppingList, statement, stats, summary, supportAdmin, support, totp, user
 - **Server/services (19)** — allocation, duplicateDetection, inboxService(.rules), jobRunner(.rules), ledger, membership, outboxWorker, period, retentionRules, routineJobs, routineRules, scheduler, security, session, statement, supportJobs, supportRules
 - **Server/models (~38)** — every model referenced in the source inventory of `PROJECT_IMPROVEMENT_RECOMMENDATIONS` (prior pass) plus `Meal`, `Poll`, `Statement`, `Period`, `Membership`, `Expense`, `User`, `AuditEvent`
-- **Server/routes (29)** — all router files (route table reconciled: 221 routes = 221 documented)
+- **Server/routes (29)** — all router files (route table reconciled: 231 routes = 231 documented)
 - **Server/utils** — dhakaTime, mailer, money, pagination, tokens, totp, transaction, whatsapp
 - **Server/validation** — inboxSchemas, routineSchemas, schemas, supportSchemas, validate
 - **Server/scripts** — checkIndexes, migrateInviteCodes, migrateLegacyData, importSmoke, smoke/*
@@ -140,7 +140,7 @@ Files inspected in this audit (source, not proof of behaviour — every behaviou
 |---|---|
 | `node --check` on every server file | pass |
 | Module import smoke (all routes/controllers/services/models) | 0 failures |
-| Unit tests `npm test` | **176 pass / 0 fail** |
-| Integration tests `npm run test:integration` | **53 pass / 0 fail** |
-| Route ↔ API doc diff (`Server/scripts/auditRoutes.mjs` vs `Server/docs/API_DOCUMENTATION.md`) | **221 asserted = 221 documented**, 0 missing each way |
+| Unit tests `npm test` | **238 pass / 0 fail** |
+| Integration tests `npm run test:integration` | **59 pass / 0 fail** |
+| Route ↔ API doc diff (`Server/scripts/auditRoutes.mjs` vs `Server/docs/API_DOCUMENTATION.md`) | **231 asserted = 231 documented**, 0 missing each way; `--write-table --check` clean |
 | `next build` (Client) | **success**, 20 routes |

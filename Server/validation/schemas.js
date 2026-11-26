@@ -457,6 +457,17 @@ export const resolveReconciliationSchema = z.object({
     explanation: z.string().max(500).optional(),
 });
 export const recIdParam = z.object({ groupId: objectId, recId: objectId });
+// optional month scope for the reconciliation suggestion list (S5.5)
+export const suggestionQuery = z.object({ month: month.optional() });
+// "Explain my bill" scope (S5.6): optional membershipId + preferred language
+export const explainQuery = z.object({
+    membershipId: objectId.optional(),
+    lang: z.enum(['en', 'bn']).optional(),
+});
+// Excel import apply (S5.7): the hash returned by preview proves the reviewed diff
+export const importApplySchema = z.object({
+    previewHash: z.string().min(16).max(128),
+});
 
 // ---- disputes ----
 export const disputeSchema = z.object({

@@ -236,6 +236,17 @@ export const runAccountingEquationCheckJob = async () => {
     return { processed, failed, unbalancedCount: unbalanced.length };
 };
 
+/**
+ * Post-finalize debtor reminders (S5.3): enqueue one reminder per owing member
+ * (statement revision + member + channel dedupe), honouring quiet hours/consent.
+ */
+export const runDebtorReminderJob = async (now = new Date()) => {
+    const { runDebtorReminderJob: run } = await import('./reminderService.js');
+    const results = await run({ now });
+    const queued = results.reduce((s, r) => s + r.queued, 0);
+    return { processed: queued, failed: 0, groups: results.length };
+};
+
 let schedulerTimer = null;
 let lastSchedulerTickAt = null;
 export const markSchedulerTick = (at = new Date()) => { lastSchedulerTickAt = at; };
@@ -429,6 +440,7 @@ export const ALL_JOBS = [
     ['anomalySweep', async () => runAnomalySweep()],
     ['receiptRescan', async () => rescanPendingAttachments()],
     ['accountingEquation', async () => runAccountingEquationCheckJob()],
+    ['debtorReminders', async (now) => runDebtorReminderJob(now)],
 ];
 
 export const runAllJobs = async (now = new Date()) => {

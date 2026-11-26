@@ -58,6 +58,7 @@
   - [7.24 Shopping list](#724-shopping-list)
   - [7.25 Kitchen inventory](#725-kitchen-inventory)
   - [7.26 Polls](#726-polls)
+  - [7.26b Budgets](#726b-budgets-new-in-s52)
   - [7.27 Legacy summary (deprecated)](#727-legacy-summary-deprecated)
 - [8. Endpoint list (one heading per route)](#8-endpoint-list-one-heading-per-route)
 - [9. Detailed endpoint reference (by domain)](#9-detailed-endpoint-reference-by-domain)
@@ -588,6 +589,8 @@ Returns `{status, uptimeSec, db:{ok,latencyMs}, scheduler:{running,lastTickAt,st
 | `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/approve` | validate(expenseIdParam, 'params'), requireGroupRoleV2('treasurer'), validate(reasonBody), idempotent('expense.approve') | [`approveExpense`](../controllers/expenseController.js#L159) |
 | `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/reject` | validate(expenseIdParam, 'params'), requireGroupRoleV2('treasurer'), validate(reasonBody) | [`rejectExpense`](../controllers/expenseController.js#L256) |
 | `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/reverse` | validate(expenseIdParam, 'params'), requireGroupRoleV2('treasurer'), validate(reasonBody), idempotent('expense.reverse') | [`reverseExpense`](../controllers/expenseController.js#L274) |
+| `POST` | `/api/expenses/groups/:groupId/expenses/import/preview` | importLimiter, validate(groupIdParam, 'params'), requireGroupRoleV2('treasurer'), importUpload.single('file') | [`previewExpenseImport`](../controllers/expenseImportController.js) |
+| `POST` | `/api/expenses/groups/:groupId/expenses/import/apply` | importLimiter, validate(groupIdParam, 'params'), requireGroupRoleV2('treasurer'), validate(importApplySchema), importUpload.single('file'), idempotent('expense.import') | [`applyExpenseImport`](../controllers/expenseImportController.js) |
 | `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/submit` | validate(expenseIdParam, 'params'), requireGroupRoleV2('member') | [`submitExpense`](../controllers/expenseController.js#L128) |
 | `POST` | `/api/expenses/groups/:groupId/expenses` | validate(groupIdParam, 'params'), requireGroupRoleV2('member'), validate(createExpenseSchema), idempotent('expense.create') | [`createExpense`](../controllers/expenseController.js#L57) |
 | `PUT` | `/api/expenses/entry/:id` | validate(idParamSchema, 'params') | [`updateExpense`](../controllers/expenseController.js#L390) |
@@ -629,10 +632,12 @@ Returns `{status, uptimeSec, db:{ok,latencyMs}, scheduler:{running,lastTickAt,st
 
 | Method | Path | Middleware | Handler |
 |---|---|---|---|
-| `GET` | `/api/statements/groups/:groupId/statements/:month` | validate(monthParam, 'params'), requireGroupRoleV2('member') | [`getStatement`](../controllers/statementController.js#L76) |
+| `GET` | `/api/statements/groups/:groupId/statements/:month` | validate(monthParam, 'params'), requireGroupRoleV2('member') |
+| `GET` | `/api/statements/groups/:groupId/statements/:month/explain` | validate(monthParam, 'params'), validate(explainQuery, 'query'), requireGroupRoleV2('member') | [`explainBill`](../controllers/statementController.js) |
 | `GET` | `/api/statements/groups/:groupId/statements/id/:statementId` | validate(groupIdParam, 'params'), requireGroupRoleV2('member') | [`getStatementById`](../controllers/statementController.js#L94) |
 | `GET` | `/api/statements/groups/:groupId/statements` | validate(groupIdParam, 'params'), requireGroupRoleV2('member') | [`listStatements`](../controllers/statementController.js#L85) |
 | `POST` | `/api/statements/groups/:groupId/statements/:month/finalize` | validate(monthParam, 'params'), requireGroupRoleV2('owner'), validate(finalizeSchema), idempotent('statement.finalize') | [`finalize`](../controllers/statementController.js#L10) |
+| `POST` | `/api/statements/groups/:groupId/statements/:month/reminders` | validate(monthParam, 'params'), requireGroupRoleV2('treasurer'), idempotent('statement.reminders') | [`remindDebtors`](../controllers/statementController.js) |
 
 ### 7.14 Recurring expenses
 
@@ -649,6 +654,7 @@ Returns `{status, uptimeSec, db:{ok,latencyMs}, scheduler:{running,lastTickAt,st
 | Method | Path | Middleware | Handler |
 |---|---|---|---|
 | `GET` | `/api/reconciliation/groups/:groupId/reconciliations/equation` | validate(groupIdParam, 'params'), requireGroupRoleV2('treasurer') | [`accountingEquation`](../controllers/reconciliationController.js#L79) |
+| `GET` | `/api/reconciliation/groups/:groupId/reconciliations/suggestions` | validate(groupIdParam, 'params'), requireGroupRoleV2('treasurer'), validate(suggestionQuery, 'query') | [`listReconciliationSuggestions`](../controllers/reconciliationController.js) |
 | `GET` | `/api/reconciliation/groups/:groupId/reconciliations` | validate(groupIdParam, 'params'), requireGroupRoleV2('member'), validate(listReconciliationQuery, 'query') | [`listReconciliations`](../controllers/reconciliationController.js#L40) |
 | `POST` | `/api/reconciliation/groups/:groupId/reconciliations/:recId/resolve` | validate(recIdParam, 'params'), requireGroupRoleV2('treasurer'), validate(resolveReconciliationSchema) | [`resolveReconciliation`](../controllers/reconciliationController.js#L50) |
 | `POST` | `/api/reconciliation/groups/:groupId/reconciliations` | validate(groupIdParam, 'params'), requireGroupRoleV2('treasurer'), validate(reconciliationSchema), idempotent('reconciliation.create') | [`createReconciliation`](../controllers/reconciliationController.js#L10) |
@@ -784,6 +790,12 @@ Returns `{status, uptimeSec, db:{ok,latencyMs}, scheduler:{running,lastTickAt,st
 | `POST` | `/api/polls/groups/:groupId` | validate(groupIdParam, 'params'), validate(pollCreateSchema), requireGroupRoleV2('member') | [`createPoll`](../controllers/pollController.js#L28) |
 
 ### 7.26b Budgets (new in S5.2)
+
+Planned per-category monthly ceilings with variance computed on read from approved,
+non-reversal expenses (`services/budgetRules.js`) — the plan never drifts from the
+ledger. `categoryId: null` is the group-wide total for the month; one row per
+`(groupId, month, categoryId)` (upsert). Status per line: `on_track` (<80 %),
+`near` (≥80 %), `over` (≥100 %, or any spend against a zero budget).
 
 | Method | Path | Middleware | Handler |
 |---|---|---|---|
@@ -2912,6 +2924,18 @@ An expense is a **multi-line, multi-payer document** that moves through `draft �
 * **Errors:** `404`; `409` state/period conflicts; `422`.
 * **Side effects:** a mirrored reversal journal is posted and a reversal expense row is created; the original keeps `status: 'reversed'` and its journals (never deleted), period revision bump, audit `expense.reversed`.
 
+#### POST `/api/expenses/groups/:groupId/expenses/import/preview` (S5.7)
+* **Guard:** V2 `treasurer`; 10 requests / 15 min / IP. **Body:** multipart `file` (.xlsx or .csv, ≤ 5 MB) **or** JSON `{ rows: [...] }` (≤ 2000).
+* **Columns:** `date` (ISO, `dd/mm/yyyy` or Excel serial), `supplier`, `description`, `category` (by name), `amount` (taka, e.g. `1,250.50`), `receiptRef`, `paidBy` (member display name).
+* **Success:** `200 { msg, source, errors[], stats {rows, valid, invalid, totalPoisha, months}, toCreate[], duplicates[], previewHash }` — nothing is written.
+* **Errors:** row-level problems are reported per row (`{ row, field, msg }`) inside `errors[]`; unsupported file types → `422`.
+
+#### POST `/api/expenses/groups/:groupId/expenses/import/apply` - **idempotent** (`expense.import`) (S5.7)
+* **Guard:** V2 `treasurer`; same upload shape as preview, plus `{ previewHash }` (the value preview returned).
+* **Success:** `201 { msg: 'Imported N draft expense(s)', created, duplicates, rows[{ row, expenseId }] }` — imported rows land as **drafts** for normal review.
+* **Errors:** `409 { msg: 'The file changed since the preview', previewHash }` when the file no longer matches the approved diff; `422` when `previewHash` is missing or a period is closed.
+* **Side effects:** period guard per month, audit `expense.import_applied`.
+
 #### Legacy expense CRUD (float Taka - deprecated for new work)
 
 | Endpoint | Guard | Body | Success |
@@ -3068,6 +3092,8 @@ All money fields are integer poisha; `mealUnits` may be fractional. Errors: `422
 | `GET /api/statements/groups/:groupId/statements/:month` | V2 `member` | `month` | `200 { statements, current }` - every version of that month, version desc; `current` is the `state === 'current'` row or `null` |
 | `GET /api/statements/groups/:groupId/statements/id/:statementId` | V2 `member` | `statementId` | `200 { statement, superseded }`; `404 { msg: 'Statement not found' }` |
 | `POST /api/statements/groups/:groupId/statements/:month/finalize` | **V2 `owner`**, **idempotent** (`statement.finalize`) | `month`; body `schemas.finalizeSchema`: `{ expectedRevision? (int ≥0), reason? (≤300) }` | `201 { msg: 'Statement v<N> finalized; deliveries queued', statement }` |
+| `POST /api/statements/groups/:groupId/statements/:month/reminders` | **V2 `treasurer`**, **idempotent** (`statement.reminders`) | `month`; no body | `202 { msg, queued, skipped, targets }` (one reminder per owing member + channel; honours quiet hours/consent); `422` when there is nothing to remind |
+| `GET /api/statements/groups/:groupId/statements/:month/explain` | V2 `member` (own item; `treasurer+` may pass any `membershipId`) | query `membershipId?`, `lang?` (`en`\|`bn`) | `200 { statementId, version, month, status, headline, sections[{key, rows[{key,label,labelBn,amountPoisha,display{en,bn}}]}], summary }` — figures frozen from the statement; `404` when no current statement / item |
 
 * **`expectedRevision`:** when omitted, the server uses the period's *current* revision - which disables optimistic concurrency. Always send the revision you displayed (from `/periods/:month`).
 * **Errors:** `409` with `{ msg }` when the revision changed (refetch and re-confirm), when unresolved `unknown` meal slots exist, or when the month is not in `review`; `422` for business-rule failures.
@@ -3103,6 +3129,7 @@ Mount: `/api/reconciliation`. Cash-count vs ledger-expected, with the variance s
 |---|---|---|---|
 | `GET /api/reconciliation/groups/:groupId/reconciliations` | V2 `member` | query `accountId?` | `200 { reconciliations }` (asOf desc, ≤100) |
 | `GET /api/reconciliation/groups/:groupId/reconciliations/equation` | V2 `treasurer` | - | `200 { fundAssets, supplierPayable, totalMemberCredits, balanced, clearing, memberCredits }` - **the body is the equation object itself (no wrapper)** |
+| `GET /api/reconciliation/groups/:groupId/reconciliations/suggestions` | V2 `treasurer` | query `month?` (`YYYY-MM`) | `200 { groupId, month, suggestions[], summary, scanned }` — read-only; kinds `unconfirmed_transaction` (submitted > 48 h), `underpaid_expense` (`paidTotal < amount` on payable rows), `missing_receipt`; `summary { total, byKind, bySeverity, atRiskPoisha }` |
 | `POST /api/reconciliation/groups/:groupId/reconciliations` | V2 `treasurer`, **idempotent** (`reconciliation.create`) | `schemas.reconciliationSchema`: `accountId` (ObjectId), `actualBalance` (integer, **may be negative**), `asOf?` (string) | `201 { msg: 'Reconciled exactly' \| 'Variance recorded - resolve before close', reconciliation }` |
 | `POST /api/reconciliation/groups/:groupId/reconciliations/:recId/resolve` | V2 `treasurer` | `schemas.resolveReconciliationSchema`: `resolution` (`adjusted\|accepted_shortage\|found_cash\|none`), `explanation?` (≤500) | `200 { msg: 'Reconciliation resolved', reconciliation }` |
 
@@ -3344,7 +3371,7 @@ Mount: `/api/routines`. All routes require auth + `requireGroupRoleV2` (so audit
 | `GET /api/routines/groups/:groupId/duties` | member | `localDate?`, `membershipId?`, `status?`, `rosterId?` | `200 { duties }` |
 | `POST /api/routines/groups/:groupId/duties/:assignmentId/done` | member | `{ doneNote? (≤200) }` (**not validated** on this route) | `200 { duty }`; `404 { msg: 'Duty not found' }`; `409 { msg: 'Duty already done' }` |
 | `POST /api/routines/groups/:groupId/duties/:assignmentId/reassign` | manager | `routineSchemas.dutyReassignSchema`: `{ toMembershipId, reason? }` | `200 { duty }`; `404` |
-| `GET /api/routines/groups/:groupId/duties/fairness` | member | `month?` | `200 { month, board }` |
+| `GET /api/routines/groups/:groupId/duties/fairness` | member | `month?` | `200 { month, board, totalUnits, activeMembers, fairness, weights }` — `board[].weightedUnits` (task weights: bazar/cooking 3, cleaning:bathroom 2, else 1), `sharePct`, `fairSharePct`, `balance`; `fairness { gini, level, mostLoaded, leastLoaded }` |
 
 Duty statuses: `scheduled`, `done`, `missed`, `swapped`, `skipped`, `cancelled`.
 
@@ -3696,7 +3723,7 @@ is stale (CI runs it).
 
 <!-- BEGIN:generated:routes -->
 
-<!-- generated from routes/ by scripts/auditRoutes.mjs — 222 routes -->
+<!-- generated from routes/ by scripts/auditRoutes.mjs — 231 routes -->
 
 ### Health probe (unauthenticated)
 
@@ -3832,6 +3859,8 @@ is stale (CI runs it).
 | `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/reject` |
 | `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/reverse` |
 | `POST` | `/api/expenses/groups/:groupId/expenses/:expenseId/submit` |
+| `POST` | `/api/expenses/groups/:groupId/expenses/import/apply` |
+| `POST` | `/api/expenses/groups/:groupId/expenses/import/preview` |
 | `PUT` | `/api/expenses/entry/:id` |
 
 ### Legacy monthly summary
@@ -3899,8 +3928,10 @@ is stale (CI runs it).
 |---|---|
 | `GET` | `/api/statements/groups/:groupId/statements` |
 | `GET` | `/api/statements/groups/:groupId/statements/:month` |
+| `GET` | `/api/statements/groups/:groupId/statements/:month/explain` |
 | `GET` | `/api/statements/groups/:groupId/statements/id/:statementId` |
 | `POST` | `/api/statements/groups/:groupId/statements/:month/finalize` |
+| `POST` | `/api/statements/groups/:groupId/statements/:month/reminders` |
 
 ### Recurring rules
 
@@ -3918,6 +3949,7 @@ is stale (CI runs it).
 |---|---|
 | `GET` | `/api/reconciliation/groups/:groupId/reconciliations` |
 | `GET` | `/api/reconciliation/groups/:groupId/reconciliations/equation` |
+| `GET` | `/api/reconciliation/groups/:groupId/reconciliations/suggestions` |
 | `POST` | `/api/reconciliation/groups/:groupId/reconciliations` |
 | `POST` | `/api/reconciliation/groups/:groupId/reconciliations/:recId/resolve` |
 
@@ -4051,6 +4083,15 @@ is stale (CI runs it).
 | `POST` | `/api/polls/:pollId/close` |
 | `POST` | `/api/polls/:pollId/vote` |
 | `POST` | `/api/polls/groups/:groupId` |
+
+### Budgets
+
+| Method | Path |
+|---|---|
+| `DELETE` | `/api/budgets/groups/:groupId/:budgetId` |
+| `GET` | `/api/budgets/groups/:groupId` |
+| `GET` | `/api/budgets/groups/:groupId/variance` |
+| `POST` | `/api/budgets/groups/:groupId` |
 
 ### Invite codes
 

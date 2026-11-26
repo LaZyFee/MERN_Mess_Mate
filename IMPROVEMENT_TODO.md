@@ -1,5 +1,5 @@
 # MealMate Improvement TODO
-Last Session: S5.1 → S5.2
+Last Session: S5.D → T14.0
 
 > Source: `Server/docs/PROJECT_IMPROVEMENT_RECOMMENDATIONS.md` (PIR). Order = PIR §7 roadmap. **Backend (Server) first, then frontend (Client).**
 > Markers: `[ ]` todo · `[~]` in progress (add what's left) · `[x]` done · `[!]` blocked (reason) · `[-]` deferred (needs measured trigger / human infra)
@@ -67,14 +67,14 @@ Last Session: S5.1 → S5.2
 
 ## S5 Product features — backend (PIR §5)
 - [x] S5.1 `GET /api/meals/:groupId/bazar-forecast?days=7` (portions × trailing-30d median per category + band). Pure rule file + test.
-- [ ] S5.2 `Budget {groupId, month, categoryId, amountPoisha}` model + CRUD + variance endpoint.
-- [ ] S5.3 Post-finalize debtor reminders via outbox (dedupeKey per statement+member; honour quiet hours/consent).
-- [ ] S5.4 Duty fairness: task weights + rolling share/Gini in `dutyFairnessBoard`.
-- [ ] S5.5 Reconciliation suggestions: unconfirmed transactions, `paidTotal < amount` expenses, missing receipts.
-- [ ] S5.6 "Explain my bill": structured breakdown (en + bn) from frozen statement item.
-- [ ] S5.7 Excel import: preview → dry-run diff → apply (reuse bulk-preview pattern).
-- [ ] S5.8 Phase gate.
-- [ ] S5.D Docs sync (API new endpoints + TOC; plan §3 Budget model, §14/§20; PIR §5 ✅; README §2/§15; route count).
+- [x] S5.2 `Budget {groupId, month, categoryId, amountPoisha}` model + CRUD + variance endpoint.
+- [x] S5.3 Post-finalize debtor reminders via outbox (dedupeKey per statement+member; honour quiet hours/consent).
+- [x] S5.4 Duty fairness: task weights + rolling share/Gini in `dutyFairnessBoard`.
+- [x] S5.5 Reconciliation suggestions: unconfirmed transactions, `paidTotal < amount` expenses, missing receipts.
+- [x] S5.6 "Explain my bill": structured breakdown (en + bn) from frozen statement item.
+- [x] S5.7 Excel import: preview → dry-run diff → apply (reuse bulk-preview pattern).
+- [x] S5.8 Phase gate.
+- [x] S5.D Docs sync (API new endpoints + TOC; plan §3 Budget model, §14/§20; PIR §5 ✅; README §2/§15; route count).
 
 ## C Client (start only after S1–S5 for that feature are `[x]`)
 - [ ] T14.0 Read `AGENTS.md` + relevant `node_modules/next/dist/docs/` page once; note in Notes. Re-read `FRONTEND_BUILD_PROMPT.md` §1 + §8.9 once; note in Notes.
@@ -125,3 +125,10 @@ Last Session: S5.1 → S5.2
 - Model changes: `NotificationOutbox.leasedUntil` + `lastAttemptAt` + `(state,leasedUntil)` index; `IdempotencyRecord.sourceId` no longer single-field indexed (covered by the unique key). Run `scripts/checkIndexes.js` on deploy.
 - Fixed regression: `allocateExpense` now validates membership overlap with the *service period* (`resolveGroupRefs` gained `effectiveRange`), so mid-month joins don't 422; zero-cost meal lines no longer divide by zero.
 - Docs sync: README §10/§11/§12/§15 + `routes/ 29 routers`; plan §10 test counts, §17.2 job table, §21.1; PIR §1-§4 ✅ marks, §7 items 3-7 ✅, §8 decisions D1-D5 resolved, §9 verification record.
+- After S5 (phase gate): unit **238** pass, integration **59** pass, routes **231/231** match, import smoke 161 modules / 0 failures, `--write-table --check` clean.
+- New S5 files: `models/Budget.js`, `controllers/budgetController.js`, `routes/budgetRoutes.js`, `validation/budgetSchemas.js`, `services/budgetRules.js`; `services/reminderRules.js` + `services/reminderService.js`; `services/dutyFairnessRules.js`; `services/reconciliationSuggestionRules.js` + `services/reconciliationSuggestions.js`; `services/billExplanationRules.js`; `services/expenseImportRules.js` + `services/expenseImportFile.js`, `controllers/expenseImportController.js`.
+- New S5 tests: `budgetRules`, `reminderRules`, `dutyFairness`, `reconciliationSuggestions`, `billExplanation`, `expenseImport` (6 files, 41 tests).
+- New S5 routes (+7): budgets (4), `POST /api/statements/groups/:groupId/statements/:month/reminders`, `GET .../:month/explain`, `POST /api/expenses/groups/:groupId/expenses/import/preview`, `.../import/apply`.
+- New S5 job: `debtorReminders` in the scheduler job table (quiet hours + consent honoured, one reminder per statement revision+member+channel).
+- `dutyFairnessBoard` response is additive: now also returns `totalUnits`, `activeMembers`, `fairness {gini, level, mostLoaded, leastLoaded}`, `weights`, and per-row `weightedUnits`/`sharePct`/`fairSharePct`/`balance`; `cleaningCount` now matches any `cleaning:*` key.
+- Expense import cap: 5 MB upload, 2000 rows, 10 requests / 15 min / IP; rows land as `draft` expenses (approval unchanged).

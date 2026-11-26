@@ -468,8 +468,9 @@ export const menuBazarSuggestions = async (req, res, next) => {
 };
 
 // GET /api/routines/groups/:groupId/duties/fairness?month=YYYY-MM
-// Counts of duties done/missed per member for the month — powers the fairness
-// board and the `fair` rotation mode.
+// Weighted duty units + rolling share + Gini (S5.4). A bazar run or a cooking
+// shift is worth more than wiping tables, so the board shows weighted units and
+// each member's share of the group total against the equal split.
 export const dutyFairnessBoard = async (req, res, next) => {
     try {
         const { groupId } = req.params;
@@ -482,34 +483,23 @@ export const dutyFairnessBoard = async (req, res, next) => {
         const duties = await DutyAssignment.find({
             groupId,
             localDate: { $gte: from, $lte: to },
-        }).lean();
+        }).select('membershipId taskKey status').lean();
 
-        const memberships = await Membership.find({ groupId }).lean();
-        const memMap = new Map(memberships.map(m => [String(m._id), m]));
+        const memberships = await Membership.find({ groupId }).select('displayName role').lean();
+        const { buildFairnessBoard, DEFAULT_TASK_WEIGHTS } = await import('../services/dutyFairnessRules.js');
+        const result = buildFairnessBoard({
+            members: memberships.map(m => ({ membershipId: m._id, displayName: m.displayName, role: m.role })),
+            duties,
+        });
 
-        const board = [];
-        for (const m of memberships) {
-            const mid = String(m._id);
-            const md = duties.filter(d => String(d.membershipId) === mid);
-            board.push({
-                membershipId: m._id,
-                displayName: m.displayName,
-                role: m.role,
-                total: md.length,
-                done: md.filter(d => d.status === 'done').length,
-                missed: md.filter(d => d.status === 'missed').length,
-                scheduled: md.filter(d => d.status === 'scheduled').length,
-                swapped: md.filter(d => d.status === 'swapped').length,
-                skipped: md.filter(d => d.status === 'skipped').length,
-                bazarCount: md.filter(d => d.taskKey === 'bazar' && d.status === 'done').length,
-                cleaningCount: md.filter(d => d.taskKey === 'cleaning' && d.status === 'done').length,
-                cookingCount: md.filter(d => d.taskKey === 'cooking' && d.status === 'done').length,
-            });
-        }
-
-        board.sort((a, b) => b.done - a.done);
-
-        res.json({ month: targetMonth, board });
+        res.json({
+            month: targetMonth,
+            board: result.rows,
+            totalUnits: result.totalUnits,
+            activeMembers: result.activeMembers,
+            fairness: result.fairness,
+            weights: DEFAULT_TASK_WEIGHTS,
+        });
     } catch (err) { next(err); }
 };
 

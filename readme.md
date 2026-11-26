@@ -65,8 +65,9 @@ MealMate models the domain properly:
 | **Money & funds** | Contributions, payouts, supplier payments, member settlements, transfers, fees; confirm→post workflow; cash/wallet/bank fund accounts with custodians; derived balances. |
 | **Month close** | Period state machine, versioned statement preview, close checklist, accounting-equation check, immutable finalize, corrections as new versions, email/WhatsApp bill delivery. |
 | **Recurring bills & policies** | Recurring rules generating expense drafts; immutable, effective-dated policy versions (meal weights, portion rules, cutoff hour). |
-| **Reconciliation & disputes** | Cash-count vs ledger expectation with variance resolution; member disputes on expenses, money transactions or statement items. |
-| **Household ops** | Duty rosters (bazar/cleaning/cooking), swaps, weekly menu, notes/announcements/hand-over tasks, today board, bazar suggestions, duty-fairness board, emergency broadcast. |
+| **Reconciliation & disputes** | Cash-count vs ledger expectation with variance resolution; a read-only suggestion list (unconfirmed transactions, underpaid payables, missing receipts); member disputes on expenses, money transactions or statement items. |
+| **Household ops** | Duty rosters (bazar/cleaning/cooking), swaps, weekly menu, notes/announcements/hand-over tasks, today board, bazar suggestions, weighted duty-fairness board (task weights, rolling share, Gini), emergency broadcast. |
+| **Planning & insight** | Monthly budgets per category (or group total) with live variance; bazar forecast from portions × trailing 30-day median; post-finalize debtor reminders; "explain my bill" breakdown (English + Bengali) from the frozen statement; Excel/CSV expense import with preview → diff → apply. |
 | **Bazar tools** | Shared shopping list → expense draft; kitchen stock inventory with refills; quick polls. |
 | **Notifications** | In-app inbox with preferences and Socket.IO push, transactional email, WhatsApp templates with opt-in consent and delivery webhooks, manual `wa.me` fallback. |
 | **Support desk** | User tickets with strict turn-taking and SLA timers, hidden admin desk (queue, canned replies, internal notes, redaction), public appeal for suspended accounts. |
@@ -306,7 +307,7 @@ npm run test:integration   # integration suite (mongodb-memory-server + supertes
 * The first integration run needs the `mongod` binary (or a populated `mongodb-memory-server` cache).
 * No provider credentials are needed: SMTP/WhatsApp/ClamAV/CAPTCHA paths run their no-op branches.
 
-**Last recorded run (P11/S3 phase gate):** 176 unit tests pass, 53 integration tests pass, 0 failures. Re-run both suites after any change — the numbers in this line are a snapshot, not a guarantee.
+**Last recorded run (P14/S5 phase gate):** 238 unit tests pass, 59 integration tests pass, 0 failures. Re-run both suites after any change — the numbers in this line are a snapshot, not a guarantee.
 
 **Route ↔ documentation check**
 
@@ -314,7 +315,7 @@ npm run test:integration   # integration suite (mongodb-memory-server + supertes
 node scripts/auditRoutes.mjs
 ```
 
-compares the documented endpoints in `Server/docs/API_DOCUMENTATION.md` with the actual router table and prints anything missing on either side (expected output: `ACTUAL: 221 DOCUMENTED: 221`). `node scripts/auditRoutes.mjs --write-table` regenerates the generated route table block in the API doc (prose untouched); `--write-table --check` fails when it is stale. `node scripts/importSmoke.mjs` loads every route/controller/service/model to prove nothing is unreachable. CI (`.github/workflows/ci.yml`) runs all of these plus both suites.
+compares the documented endpoints in `Server/docs/API_DOCUMENTATION.md` with the actual router table and prints anything missing on either side (expected output: `ACTUAL: 231 DOCUMENTED: 231`). `node scripts/auditRoutes.mjs --write-table` regenerates the generated route table block in the API doc (prose untouched); `--write-table --check` fails when it is stale. `node scripts/importSmoke.mjs` loads every route/controller/service/model to prove nothing is unreachable. CI (`.github/workflows/ci.yml`) runs all of these plus both suites.
 
 **Not covered automatically:** live OAuth/2FA through a deployed BFF, real SMTP/WhatsApp delivery, ClamAV, CAPTCHA, replica-set recovery drills and load tests. See [Roadmap](#15-roadmap).
 
@@ -326,12 +327,13 @@ Legend: **IMPLEMENTED** (verified in source and exercised by tests/build) · **P
 
 | Area | Status | Notes |
 |---|---|---|
-| Backend API (all modules) | IMPLEMENTED | 221 routes across 29 routers, documented 1:1 in `Server/docs/API_DOCUMENTATION.md`. |
+| Backend API (all modules) | IMPLEMENTED | 231 routes across 29 routers, documented 1:1 in `Server/docs/API_DOCUMENTATION.md`. |
 | Financial core (ledger, allocation, statements) | IMPLEMENTED | Atomic on a replica set; standalone dev falls back to non-transactional. |
 | Inbox & background jobs | IMPLEMENTED | Inbox, preferences, job locks/run logs. Delivery depends on provider config. |
 | Support desk | PARTIALLY IMPLEMENTED | User + admin APIs, SLA jobs, turn-taking. Real Turnstile CAPTCHA wired (needs `TURNSTILE_SECRET`; `CAPTCHA_DEV_BYPASS` for dev/test). |
 | Operations & observability | IMPLEMENTED | `GET /api/health` readiness probe, admin `GET /api/admin/health` exception view, outbox lease recovery, nightly accounting-equation check, `X-Request-Id` correlation on responses and audit rows. |
-| Household ops (routines/shopping/kitchen/polls) | PARTIALLY IMPLEMENTED | Rule level tested; roster horizon auto-extension is a placeholder (explicit endpoint works). |
+| Household ops (routines/shopping/kitchen/polls) | PARTIALLY IMPLEMENTED | Rule level tested; roster horizon auto-extension is a placeholder (explicit endpoint works). Duty fairness board now reports weighted units / share / Gini. |
+| Planning & insight (budgets, reminders, reconciliation, import) | IMPLEMENTED | Budget CRUD + live variance, debtor reminders via outbox (quiet hours/consent), read-only reconciliation suggestions, frozen-statement "explain my bill" (en+bn), Excel/CSV preview → diff → apply. |
 | Security hardening | IMPLEMENTED | Session families are authoritative for refresh tokens; revoke-one/revoke-all/password-change/suspend revoke families; legacy `User.refreshToken` accepted until `LEGACY_REFRESH_SUNSET`. |
 | Browser authentication (BFF) | IMPLEMENTED locally / NEEDS VERIFICATION deployed | Cookie login, CSRF, logout, BFF relay tested locally; Google OAuth + 2FA through a deployed BFF untested. |
 | Frontend | PARTIALLY IMPLEMENTED | Next.js App Router client builds all routes; see roadmap for open items. |
@@ -412,4 +414,4 @@ Short version; the detailed, prioritised list lives in [PROJECT_IMPROVEMENT_RECO
 - [x] Readiness endpoint, outbox lease recovery, quarantine for pending-scan receipts, scheduled accounting-equation check
 - [x] Consolidate Zod schemas and extract an export service
 
-**Product ideas** — bazar budget forecast, monthly budgets, payment reminders, Bengali localisation, "explain my bill", PWA offline meal entry, Excel import.
+**Product ideas** — all five backend pieces now exist: bazar budget forecast (S5.1), monthly budgets (S5.2), post-finalize payment reminders (S5.3), "explain my bill" in English and Bengali (S5.6) and Excel/CSV expense import (S5.7); plus weighted duty fairness (S5.4) and reconciliation suggestions (S5.5). Still open: Bengali UI localisation (client `T14.17`), PWA offline meal entry (deferred, policy review).

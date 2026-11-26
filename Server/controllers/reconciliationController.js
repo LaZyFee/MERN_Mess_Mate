@@ -81,3 +81,17 @@ export const accountingEquation = async (req, res, next) => {
         res.json(await getAccountingEquation({ groupId: req.params.groupId }));
     } catch (err) { next(err); }
 };
+
+/**
+ * GET /api/groups/:groupId/reconciliations/suggestions?month=YYYY-MM (S5.5)
+ * Read-only: unconfirmed transactions, payable expenses not fully paid, and
+ * expenses with no receipt. Never mutates anything; ranks by severity then amount.
+ */
+export const listReconciliationSuggestions = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const month = req.validated?.query?.month || null;
+        const { collectReconciliationSuggestions } = await import('../services/reconciliationSuggestions.js');
+        res.json(await collectReconciliationSuggestions({ groupId, month }));
+    } catch (err) { next(err); }
+};

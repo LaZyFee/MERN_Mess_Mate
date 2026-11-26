@@ -78,7 +78,10 @@ Group-owned cash / wallet / bank. `kind`, currency BDT, `maskedIdentifier` (raw 
 Frozen per-line allocation evidence produced at approval: `expenseId`, `lineId`, `poolKind` (the split mode), `total`, `entries[{membershipId, weight, charge}]`, `algorithmVersion: 'largest_remainder_v1'`, `reversalOf`. Unique index (groupId, expenseId, lineId). Makes any statement explainable/auditable after the fact.
 
 **`Reconciliation`** (`models/Reconciliation.js`)
-Counted (physical/statement) cash vs ledger-expected balance for a fund account at `asOf`. Stores `expectedBalance`, `actualBalance`, `variance` (actual − expected), status open/resolved, resolution (`adjusted` | `accepted_shortage` | `found_cash`), explanation and reviewers. Variances are explained, never hidden.
+Counted (physical/statement) cash vs ledger-expected balance for a fund account at `asOf`. Stores `expectedBalance`, `actualBalance`, `variance` (actual − expected), status open/resolved, resolution (`adjusted` | `accepted_shortage` | `found_cash`), explanation and reviewers. Variances are explained, never hidden. Read-only suggestions (`services/reconciliationSuggestionRules.js`) flag unconfirmed transactions, payable expenses with `paidTotal < amount`, and expenses without a receipt.
+
+**`Budget`** (`models/Budget.js`, S5.2)
+Planned monthly ceiling per expense category in integer poisha: `groupId`, `month` (`YYYY-MM`), `categoryId` (`null` = group-wide total), `amountPoisha`, `note`, `createdBy`/`updatedBy`. Unique `(groupId, month, categoryId)` — one upsert per line. Actual spend is **never stored**: `services/budgetRules.js` recomputes it from approved, non-reversal expenses (costPeriod range), so the plan can never drift from the ledger.
 
 ### 3.3 Expenses & Categories
 
@@ -199,7 +202,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | **periodService** | `services/periodService.js` | `getOrCreatePeriod` (auto-links latest PolicyVersion), `ensureOpen` (409 when finalized/review — blocks edits), `bumpRevision` (atomic `$inc` guarded against finalized), `beginReview`, finalize guard. Audit-logged transitions. |
 | **membershipService** | `services/membershipService.js` | Interval algebra over Memberships: `activeMemberships(at)`, `membershipsInMonth`, `isEligibleOn`, `eligibleDaysIn` (member_days mode), `assertNoOverlap`. |
 | **sessionService** | `services/sessionService.js` | Refresh-token **families**: `createSession` (new familyId + hashed token), `rotateSession` (validates, detects replay of old token → revokes family, issues new in-family token), `revokeSession`. 7-day TTL. |
-| **schedulerService** | `services/schedulerService.js` | Cron-driven jobs: `generateRecurringDraftsForMonth(costPeriod)` for all due active rules (idempotent via generatedKeys), deadline reminders, expired-idempotency cleanup, and `applyDefaultMealsForPreviousDay()` — fills only `unknown` slots of the prior Dhaka day from the group's `defaultMealSubunits`. |
+| **schedulerService** | `services/schedulerService.js` | Cron-driven jobs: `generateRecurringDraftsForMonth(costPeriod)` for all due active rules (idempotent via generatedKeys), deadline reminders, expired-idempotency cleanup, `applyDefaultMealsForPreviousDay()` — fills only `unknown` slots of the prior Dhaka day from the group's `defaultMealSubunits`, debtor reminders (`runDebtorReminderJob`), accounting-equation check. All runs go through `jobRunner.runJob()` (JobLock + JobRun). |
 | **outboxWorker** | `services/outboxWorker.js` | Leases pending/failed batches (findOneAndUpdate claim), delivers via `mailer.sendMail` (email) or WhatsApp template/direct send (checks recipient consent first → `skipped` when opted out, `not_configured` when env missing), retries with backoff up to maxAttempts. |
 | **duplicateDetection** | `services/duplicateDetection.js` | `checkDuplicateExpense()` — exact `receiptReference` match + fuzzy supplier+amount within ±3-day window; returns `duplicateWarnings[]` surfaced by create/submit. |
 | **inboxService** | `services/inboxService.js` (+ `inboxService.rules.js`) | `notify()` — inserts InboxNotification rows with dedupe, emits `inbox-new` to Socket.IO `user:<id>` rooms. `notifyAdmins()` — fans out to platform admins resolved from `ADMIN_EMAILS`. |
@@ -245,11 +248,11 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **periodController** — `listPeriods`, `getPeriod`, `previewStatement` (no-persist draft), `startReview`, `reopenPeriod` (return-to-open), `closeChecklist` (pre-close checks), `recordCorrection` (audit-marked prior-period adjustment).
 
-**statementController** — `finalize` (owner-only, wraps `finalizeStatement`), `getStatement` (version history for a month), `listStatements`, `getStatementById`.
+**statementController** — `finalize` (owner-only, wraps `finalizeStatement`), `getStatement` (version history for a month), `listStatements`, `getStatementById`, `remindDebtors` (queue debtor reminders for the current revision, S5.3), `explainBill` (structured en+bn breakdown of one frozen item, S5.6).
 
 **recurringController** — `listRules`, `createRule`, `updateRule`, `generateDraft` (single rule + costPeriod, idempotent), `generateAllDrafts`.
 
-**reconciliationController** — `createReconciliation` (expected from ledger vs counted actual), `listReconciliations`, `resolveReconciliation`, `accountingEquation` (assets = liabilities + equity health check).
+**reconciliationController** — `createReconciliation` (expected from ledger vs counted actual), `listReconciliations`, `resolveReconciliation`, `accountingEquation` (assets = liabilities + equity health check), `listReconciliationSuggestions` (read-only suggestion list, S5.5).
 
 **disputeController** — `openDispute`, `listDisputes`, `respondToDispute` (threaded), `resolveDispute` (manager; can link a `correctionJournalId`).
 
@@ -273,7 +276,11 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 
 **inviteController** (`controllers/inviteController.js`) — B3.1 hashed join codes: `joinByCode` (rate-limited, failure lockout), `createInviteCode` (admin, revokes all prior codes, returns plaintext once), `getInviteCodeMetadata` (prefix/expiry/usesLeft only — no plaintext).
 
-**routinesController** (`controllers/routinesController.js`) — B2 Routine & Notice Board: rosters (create/list/get/update/publish/extend-horizon), duties (list/mark-done/reassign), swaps (create/respond), menu (set/get), notes (create/list/get/update/delete/ack/claim/done), `boardToday`, `menuBazarSuggestions`, `dutyFairnessBoard`, `bazarSpendRotation`, `emergencyBroadcast`. Emits Socket.IO events (`roster-published`, `duty-updated`, `menu-updated`, `note-created`, `note-updated`).
+**routinesController** (`controllers/routinesController.js`) — B2 Routine & Notice Board: rosters (create/list/get/update/publish/extend-horizon), duties (list/mark-done/reassign), swaps (create/respond), menu (set/get), notes (create/list/get/update/delete/ack/claim/done), `boardToday`, `menuBazarSuggestions`, `dutyFairnessBoard` (weighted units, share vs equal split, Gini — `services/dutyFairnessRules.js`), `bazarSpendRotation`, `emergencyBroadcast`. Emits Socket.IO events (`roster-published`, `duty-updated`, `menu-updated`, `note-created`, `note-updated`).
+
+**budgetController** (`controllers/budgetController.js`) — S5.2: `listBudgets` (lines + category meta + variance), `upsertBudget` (per category or month total), `deleteBudget`, `budgetVariance`.
+
+**expenseImportController** (`controllers/expenseImportController.js`) — S5.7: `previewExpenseImport` (upload `.xlsx`/`.csv` or `rows[]` → validated drafts + dry-run diff vs existing expenses + `previewHash`), `applyExpenseImport` (re-runs the preview, refuses on hash mismatch, creates **draft** expenses). Parsing lives in `services/expenseImportFile.js` (ExcelJS / RFC-4180 CSV); validation and mapping in `services/expenseImportRules.js`.
 
 **kitchenInventoryController** (`controllers/kitchenInventoryController.js`) — B2: `listKitchenItems`, `createKitchenItem`, `updateKitchenItem`, `recordRefill`, `deleteKitchenItem` (archive).
 
@@ -300,14 +307,14 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | `userRoutes` | POST `/register`, `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`; GET `/verify-email/:token`; GET `/auth/google` + `/auth/google/callback`; (auth) GET/PUT `/profile`, POST `/change-password`, `/profile-pic` |
 | `messGroupRoutes` | POST `/create`, `/join-by-code`, `/join-request/:groupId`, `/approve/:groupId/:userId`, `/add-member/:groupId`, `/invite/:groupId`; GET `/my-groups`, `/:groupId`, `/entries/:groupId`, `/calculate/:groupId`, `/export/:groupId` (xlsx), `/pdf/:groupId`, `/extras/:groupId`, `/code/:groupId`; POST `/regenerate-code/:groupId`; DELETE `/remove-member/:groupId/:userId`; payment-notes CRUD; categories CRUD + `/categories/:groupId/seed` |
 | `mealRoutes` | POST `/:groupId` (slot entry), `/:groupId/guests`, `/:groupId/bulk/preview|apply`, `/:groupId/absence/preview|apply`; PUT/DELETE `/entry/:id`; GET `/:groupId` (filtered), `/:groupId/:month` |
-| `expenseRoutes` | Legacy: POST `/:groupId`, PUT/DELETE `/entry/:id`, GET `/:groupId(/:month)`. V2: GET/POST `/groups/:groupId/expenses`; POST `/:expenseId/submit|approve|reject|reverse` (approve/reverse idempotent, treasurer-gated) |
+| `expenseRoutes` | Legacy: POST `/:groupId`, PUT/DELETE `/entry/:id`, GET `/:groupId(/:month)`. V2: GET/POST `/groups/:groupId/expenses`; POST `/:expenseId/submit|approve|reject|reverse` (approve/reverse idempotent, treasurer-gated); POST `/groups/:groupId/expenses/import/preview|apply` (multer `file` ≤5 MB or `rows[]`, treasurer, rate-limited, idempotent) |
 | `moneyRoutes` | GET/POST `/groups/:groupId/money`; POST `/:txId/confirm|reject|reverse`; GET `/memberships/:membershipId/balance`; GET/POST `/groups/:groupId/funds`; POST `/funds/:fundId/custodian` |
 | `membershipRoutes` | GET `/groups/:groupId/memberships(/active,/month/:month)`; POST `/memberships`; PATCH `/:membershipId`; POST `/:membershipId/depart` (manager+) |
 | `policyRoutes` | GET/POST `/groups/:groupId/policies` |
 | `periodRoutes` | GET `/groups/:groupId/periods(/:month,/:month/preview,/:month/checklist)`; POST `/:month/begin-review`,`/:month/return-to-open`,`/:month/correct` |
-| `statementRoutes` | GET `/groups/:groupId/statements(/id/:statementId,/:month)`; POST `/groups/:groupId/statements/:month/finalize` (owner, idempotent) |
+| `statementRoutes` | GET `/groups/:groupId/statements(/id/:statementId,/:month)`; GET `/groups/:groupId/statements/:month/explain` (own item or treasurer+, `lang=en|bn`); POST `/groups/:groupId/statements/:month/finalize` (owner, idempotent), `/:month/reminders` (treasurer, idempotent) |
 | `recurringRoutes` | GET/POST `/groups/:groupId/recurring`; POST `/generate-all`; PUT/POST `/:ruleId(/generate)` |
-| `reconciliationRoutes` | GET `/groups/:groupId/reconciliations(/equation)`; POST `/reconciliations`, `/:recId/resolve` |
+| `reconciliationRoutes` | GET `/groups/:groupId/reconciliations(/equation,/suggestions)`; POST `/reconciliations`, `/:recId/resolve` |
 | `disputeRoutes` | GET/POST `/groups/:groupId/disputes`; POST `/:disputeId/respond`,`/:disputeId/resolve` |
 | `notificationRoutes` | **Public** GET/POST `/whatsapp/webhook`; (auth) PUT `/whatsapp/consent`; GET `/groups/:groupId/notifications(/:messageId)`; POST `/:messageId/resend`, `/manual-share` |
 | `sessionRoutes` | GET `/users/sessions`; DELETE `/users/sessions/:familyId`, `/users/sessions` |
@@ -322,6 +329,7 @@ Immutable month-end closing snapshot with versioning/supersession: corrections c
 | `shoppingListRoutes` | (auth + `requireGroupRoleV2`) GET `/groups/:groupId`, POST items, PATCH/DELETE items/:itemId, POST `/to-expense`, GET `/history` |
 | `kitchenInventoryRoutes` | (auth + `requireGroupRoleV2`) GET/POST `/groups/:groupId`, PATCH/DELETE `/groups/:groupId/:itemId`, POST `/:itemId/refill` |
 | `pollRoutes` | (auth + `requireGroupRoleV2`) GET/POST `/groups/:groupId`, POST `/:pollId/vote`, POST `/:pollId/close`, GET `/:pollId/results` |
+| `budgetRoutes` | (auth) GET `/groups/:groupId` + `/groups/:groupId/variance` (`?month=YYYY-MM`, member), POST `/groups/:groupId` (treasurer, upsert), DELETE `/groups/:groupId/:budgetId` (treasurer) |
 | `totpRoutes` | Mounted on `/api/users` **before** `userRoutes`: (auth) POST `/2fa/setup|verify|disable`; (public) POST `/login/2fa-challenge`, `/login/2fa` |
 | `inviteRoutes` | (auth) POST `/join-by-code`, POST `/codes`, GET `/codes/:groupId` |
 | `adminRoutes` | (auth + `requirePlatformAdmin` + `requireAdminAMR`) GET `/overview|/traffic|/audit`, GET/PATCH `/users/:userId`, GET `/users` (directory), GET `/jobs`, GET/DELETE `/groups/:groupId` |
@@ -382,7 +390,7 @@ Schema groups:
 - **`scripts/migrateInviteCodes.js`** — B3.1: hashes existing `MessGroup.code` values into `InviteCode` collection. Idempotent. Run: `node scripts/migrateInviteCodes.js`.
 - **`scripts/checkIndexes.js`** — asserts every expected index (including TTL indexes) exists across all collections. Run: `node scripts/checkIndexes.js`.
 - **`scripts/smoke/*.sh`** — smoke test scripts for B0 (`b0.sh`), B2 (`b2.sh`), B3 (`b3.sh`), B4 (`b4.sh`), and live-infrastructure gates (`live-infra-gates.sh`).
-- **`tests/`** — **176 unit tests** (all passing, no DB): `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules` plus the session/statement/outbox/idempotency/refs/export/schema guards added by the P11 hardening pass. **53 integration tests** (Supertest + disposable MongoDB, all passing): `b0.test.js`, `cookies.test.js`, `financial.test.js` (**replica set**), `routines.test.js`, `support.test.js`, `health.test.js`, `requestId.test.js`; `environment.js` is the shared harness. See README §10 for the per-file matrix and the last verified run.
+- **`tests/`** — **238 unit tests** (all passing, no DB): `goldenCalculation`, `moneyPrecision`, `journalBalance`, `acceptanceGates`, `scenarioGates`, `rosterGeneration`, `supportRules`, `totp`, `inviteCode`, `jobLockRules`, `anomalySweep`, `departedReassignment`, `legacyMealMigration`, `noteVisibility`, `privacyPayload`, `retention`, `inboxRules`, the session/statement/outbox/idempotency/refs/export/schema guards from the P11 hardening pass, and the P14 product-rule suites (`budgetRules`, `reminderRules`, `dutyFairness`, `reconciliationSuggestions`, `billExplanation`, `expenseImport`). **59 integration tests** (Supertest + disposable MongoDB, all passing): `b0.test.js`, `cookies.test.js`, `financial.test.js` (**replica set**), `routines.test.js`, `support.test.js`, `health.test.js`, `requestId.test.js`; `environment.js` is the shared harness. See README §10 for the per-file matrix and the last verified run.
 - **`scripts/importSmoke.mjs`** — imports every route/controller/service/model (also covered by `tests/moduleGuards.test.js`) so a file that cannot parse can never ship unnoticed. **`scripts/auditRoutes.mjs --write-table`** regenerates the generated route table block of `API_DOCUMENTATION.md`; `--check` fails on drift.
 - **CI** — `.github/workflows/ci.yml`: `node --check` on every file, import smoke, route/doc audit, unit suite and integration suite.
 
@@ -674,6 +682,7 @@ The original extension called for a user-facing inbox. InboxNotification and inb
 | ✅ outbox lease recovery | every worker tick (30 s) | Reclaim expired `leasedUntil` rows back to `pending`; `state: processing` is internal only |
 | ✅ receipt rescan | hourly | Re-scan attachments stuck in `scanStatus: pending` |
 | ✅ accounting equation | nightly | Recompute the accounting equation per group; alert the admin inbox when `balanced === false` |
+| ✅ debtor reminders (S5.3) | daily (after month close) | Queue payment reminders for owing statement items. One per statement revision + member + channel (`reminder:<group>:<month>:<v>:<membership>:<channel>`), skipping opted-out users, quiet hours (default 22:00–07:00) and placeholders; at most 3 cycles, 7 days apart. Manual trigger: `POST /api/statements/groups/:groupId/statements/:month/reminders` |
 | 🆕 roster horizon | daily 01:00 | Keep every published roster generated N days ahead |
 | 🆕 duty reminders | 20:00 (eve) and 07:00 (day) | `duty.reminder` inbox + outbox |
 | 🆕 mark missed | daily 00:10 | Yesterday's `scheduled` → `missed`, notify manager |
@@ -783,3 +792,4 @@ The existing hard rules (CSS variables only, react-icons only, zustand, shared c
 - `inboxRules.test.js` — inbox dedupe and expiry helpers.
 - Integration tests (`tests/integration/`, needs live server): `b0.test.js`, `cookies.test.js`, `routines.test.js`, `support.test.js`, `health.test.js` (readiness probe), `requestId.test.js` (correlation ids).
 - Hardening suites (P11, server): `sessionFamily`, `statementFrozenInputs`, `outboxTxn`, `outboxLease`, `idempotencyLease`, `shoppingListConversion`, `crossGroupRefs`, `accountingEquationJob`, `adminHealth`, `exportService`, `moneyBoundary`, `featureSchemas`, `moduleGuards`.
+- Product-rule suites (P14/S5, server): `budgetRules` (variance statuses, zero-divide guards), `reminderRules` (quiet hours wrap-around, consent/opt-out, dedupe key, cadence), `dutyFairness` (weights, weighted share, Gini, departed memberships), `reconciliationSuggestions` (severity/ranking/summary), `billExplanation` (poisha formatting, bn digits, frozen figures), `expenseImport` (poisha/date parsing incl. Excel serials, row validation, dry-run diff, preview hash, CSV quoting).
