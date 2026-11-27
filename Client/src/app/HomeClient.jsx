@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useT } from "@/lib/i18n/LangProvider";
 import Topbar from "@/components/shared/Topbar";
 import Card from "@/components/shared/Card";
-import { LuUtensils, LuReceipt, LuShieldCheck } from "react-icons/lu";
+import { LuUtensils, LuReceipt, LuShieldCheck, LuBookOpen, LuCalendarDays, LuShoppingBasket, LuPackage, LuWallet } from "react-icons/lu";
 
 // Source data keyed to the `landing` dictionary namespace.
 const STATS_SRC = [
@@ -72,8 +72,8 @@ export default function HomeClient() {
   }));
 
   const CONCEPTS = CONCEPTS_SRC.map((c) => ({
-    term: t(c.termKey),
-    def: t(c.defKey),
+    term: t(`landing.${c.termKey}`),
+    def: t(`landing.${c.defKey}`),
   }));
 
   const MONEY_RULES = MONEY_RULES_SRC.map((k) => t(`landing.${k}`));
@@ -82,41 +82,48 @@ export default function HomeClient() {
     <div className="min-h-[100dvh] overflow-x-clip bg-(--bg) text-(--tp)">
       <Topbar />
 
-      {/* Hero */}
-      <section className="relative border-b border-(--bd)">
-        {/* soft tint behind hero, built only from theme variables */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-full bg-gradient-to-b from-(--pale) to-transparent opacity-70"
-        />
-        <div className={`${SECTION_X} relative max-w-5xl pb-12 pt-10 sm:pb-20 sm:pt-16 lg:pt-24`}>
-          <div className="mx-auto max-w-3xl text-center">
-            <span className="mb-5 inline-flex min-h-8 items-center gap-2 rounded-full border border-(--bd) bg-(--bgs) px-3 text-xs font-semibold text-(--p) sm:text-sm">
-              <span className="size-2 rounded-full bg-(--p)" />
-              {t("landing.hero.badge")}
-            </span>
-
-            <h1 className="text-balance text-[2rem] font-extrabold leading-[1.15] tracking-tight text-(--tp) sm:text-5xl lg:text-6xl">
-              {t("landing.hero.title.part1")}
-              <span className="mt-1 block text-(--p)">{t("landing.hero.title.part2")}</span>
-            </h1>
-
-            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-(--ts) sm:mt-6 sm:text-lg">
-              {t("landing.hero.description")}
-            </p>
-
-            <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-              <Link href="/register" className={BTN_PRIMARY}>
-                {t("landing.hero.cta.create")}
-              </Link>
-              <Link href="/login" className={BTN_OUTLINE}>
-                {t("landing.hero.cta.signin")}
-              </Link>
+      <main>
+      <section className="bg-(--bgs)">
+        <div className={`${SECTION_X} max-w-6xl py-10 sm:py-16`}>
+          <div className="grid items-center gap-9 lg:grid-cols-[1.25fr_1fr] lg:gap-14">
+            <div>
+              <p className="mb-4 flex items-center gap-2 text-sm font-bold text-(--p)">
+                <LuUtensils aria-hidden="true" /> {t("landing.hero.badge")}
+              </p>
+              <h1 className="max-w-2xl text-balance text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-6xl">
+                {t("landing.hero.title.part1")}{" "}
+                <span className="block text-(--p)">{t("landing.hero.title.part2")}</span>
+              </h1>
+              <p className="mt-5 max-w-xl text-base leading-relaxed text-(--ts) sm:text-lg">{t("landing.hero.description")}</p>
+              <div className="mt-7 flex flex-col gap-2 sm:flex-row">
+                <Link href="/register" className={BTN_PRIMARY}>{t("landing.hero.cta.create")}</Link>
+                <Link href="/guide" className={BTN_OUTLINE}><LuBookOpen className="mr-2" />{t("shell.guide")}</Link>
+              </div>
             </div>
+
+            <aside className="overflow-hidden rounded-3xl bg-(--brand-bg) p-5 text-(--brand-fg) shadow-lg sm:p-8">
+              <div className="flex items-center justify-between gap-4 border-b border-(--brand-mute)/40 pb-4">
+                <h2 className="font-semibold">{t("landing.example.title")}</h2>
+                <LuReceipt size={24} className="shrink-0 text-(--brand-on)" />
+              </div>
+              <dl className="space-y-3 pt-6">
+                {[["food", "pool"], ["units", "units"]].map(([label, value]) => (
+                  <div key={label} className="flex items-baseline justify-between gap-4">
+                    <dt>{t(`guide.s6.f.${label}`)}</dt>
+                    <dd className="font-bold tabular-nums">{t(`landing.example.${value}`)}</dd>
+                  </div>
+                ))}
+                <div className="mt-6 border-t border-dashed border-(--brand-mute) pt-5">
+                  <dt className="text-sm">{t("guide.s6.f.rate")}</dt>
+                  <dd className="mt-1 text-5xl font-extrabold tracking-tight text-(--brand-on)">{t("landing.example.rate")}</dd>
+                </div>
+              </dl>
+              <p className="mt-4 text-sm leading-relaxed">{t("guide.s6.f.rateBody")}</p>
+            </aside>
           </div>
 
           {/* Stats band: 2×2 on phones, one row on md+ */}
-          <dl className="mx-auto mt-10 grid max-w-4xl grid-cols-2 overflow-hidden rounded-2xl border border-(--bd) bg-(--bgs) sm:mt-14 md:grid-cols-4">
+          <dl className="mx-auto mt-10 grid grid-cols-2 overflow-hidden rounded-2xl border border-(--bd) bg-(--bgs) sm:mt-14 md:grid-cols-4">
             {STATS.map((s, i) => (
               <div
                 key={s.key}
@@ -199,6 +206,25 @@ export default function HomeClient() {
           </div>
         </div>
       </section>
+      <section className="border-y border-(--bd) bg-(--pale) py-12 sm:py-16">
+        <div className={`${SECTION_X} grid max-w-6xl gap-8 lg:grid-cols-[1fr_2fr]`}>
+          <div>
+            <h2 className={H2}>{t("landing.daily.title")}</h2>
+            <Link href="/guide#features" className="mt-4 inline-flex min-h-11 items-center gap-2 font-semibold text-(--p) underline underline-offset-4">
+              <LuBookOpen />{t("shell.guide")}
+            </Link>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {[[LuCalendarDays, "menu"], [LuShoppingBasket, "shopping"], [LuPackage, "kitchen"], [LuWallet, "budgets"]].map(([Icon, key]) => (
+              <article key={key} className="border-t border-(--p)/30 pt-4">
+                <Icon size={22} className="mb-2 text-(--p)" />
+                <h3 className="font-bold">{t(`guide.s8.${key}`)}</h3>
+                <p className="mt-1 leading-relaxed text-(--ts)">{t(`guide.s8.${key}Body`)}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
       {/* Core concepts — a definition list, not a card grid */}
       <section id="concepts" className="scroll-mt-16 border-y border-(--bd) bg-(--bgs) py-14 sm:py-20">
         <div className={`${SECTION_X} max-w-5xl`}>
@@ -264,6 +290,7 @@ export default function HomeClient() {
           </Card>
         </div>
       </section>
+      </main>
     </div>
   );
 }

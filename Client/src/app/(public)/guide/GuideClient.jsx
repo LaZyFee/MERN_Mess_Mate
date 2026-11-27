@@ -50,70 +50,33 @@ function Fact({ term, children }) {
   );
 }
 
-/** Sticky table of contents (desktop) / horizontal chips (mobile). */
-function TableOfContents({ t, activeId, onJump, results }) {
+function TableOfContents({ t, activeId, onJump, sections }) {
+  if (!sections.length) return null;
   return (
-    <>
-      {/* Desktop rail */}
-      <nav
-        aria-label={t("guide.toc")}
-        className="sticky top-4 hidden max-h-[calc(100dvh-2rem)] overflow-y-auto lg:block"
+    <nav aria-label={t("guide.toc")} className="min-w-0 self-start rounded-2xl border border-(--bd) bg-(--bgs) p-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto">
+      <label htmlFor="guide-topic" className="font-bold text-(--tp)">{t("guide.toc")}</label>
+      <select
+        id="guide-topic"
+        value=""
+        onChange={(event) => onJump(event.target.value)}
+        className="mt-2 min-h-12 w-full rounded-xl border border-(--bd) bg-(--bg) px-3 text-base text-(--tp) lg:hidden"
       >
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("guide.toc")}</p>
-        <ol className="space-y-0.5">
-          {GUIDE_SECTIONS.map((section) => {
-            const Icon = section.icon;
-            const active = activeId === section.id;
-            const dim = results && !results.includes(section.id);
-            return (
-              <li key={section.id}>
-                <a
-                  href={`#${section.id}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    onJump(section.id);
-                  }}
-                  aria-current={active ? "location" : undefined}
-                  className={`flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm no-underline transition-colors ${active ? "bg-(--pale) font-bold text-(--p)" : "text-(--ts) hover:bg-(--bgm)"
-                    } ${dim ? "opacity-40" : ""}`}
-                >
-                  <span className={`grid size-6 shrink-0 place-items-center rounded-md text-[11px] font-bold ${active ? "bg-(--p) text-(--bgs)" : "bg-(--bgm) text-(--tm)"}`}>
-                    {section.number}
-                  </span>
-                  <Icon size={14} className="shrink-0" />
-                  <span className="min-w-0 truncate">{t(section.titleKey)}</span>
-                </a>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
-
-      {/* Mobile chips */}
-      <nav
-        aria-label={t("guide.toc")}
-        className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden"
-      >
-        {GUIDE_SECTIONS.map((section) => {
-          const active = activeId === section.id;
-          return (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              onClick={(event) => {
-                event.preventDefault();
-                onJump(section.id);
-              }}
-              className={`inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold no-underline ${active ? "border-(--p) bg-(--pale) text-(--p)" : "border-(--bd) bg-(--bgs) text-(--ts)"
-                }`}
-            >
-              <span className="tabular-nums">{section.number}</span>
-              {t(section.titleKey)}
+        <option value="">{t("guide.toc")}</option>
+        {sections.map((section) => (
+          <option key={section.id} value={section.id}>{section.number}. {t(section.titleKey)}</option>
+        ))}
+      </select>
+      <ol className="mt-3 hidden space-y-1 lg:block">
+        {sections.map((section) => (
+          <li key={section.id}>
+            <a href={`#${section.id}`} aria-current={activeId === section.id ? "location" : undefined}
+              className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-(--ts) no-underline hover:bg-(--bgm) aria-[current=location]:bg-(--pale) aria-[current=location]:font-bold aria-[current=location]:text-(--p)">
+              <section.icon size={16} className="shrink-0" />{t(section.titleKey)}
             </a>
-          );
-        })}
-      </nav>
-    </>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -121,7 +84,7 @@ function TableOfContents({ t, activeId, onJump, results }) {
 function SectionHead({ section, t }) {
   const Icon = section.icon;
   return (
-    <div className="mb-4 flex items-start gap-3">
+    <div className="mb-5 flex items-center gap-3 border-b border-(--bd) pb-4">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-(--pale) text-(--p)">
         <Icon size={19} />
       </span>
@@ -235,7 +198,7 @@ function SectionBody({ section, t }) {
           {ROLE_CARDS.map((role) => (
             <Card key={role} variant="outlined" padding="sm" className="rounded-xl">
               <Badge colorScheme="primary" size="sm" isRounded>{t(`grp.role.${role}`)}</Badge>
-              <p className="mt-2 text-xs leading-relaxed text-(--ts)">{t(`guide.s3.${role}Body`)}</p>
+              <p className="mt-2 text-sm leading-relaxed text-(--ts)">{t(`guide.s3.${role}Body`)}</p>
             </Card>
           ))}
         </div>
@@ -287,11 +250,11 @@ function SectionBody({ section, t }) {
             {SPLIT_MODES_GUIDE.map((mode) => (
               <div key={mode.value} className="rounded-lg border border-(--bd) bg-(--bgs) p-3">
                 <p className="text-sm font-bold text-(--p)">{t(mode.key)}</p>
-                <p className="mt-1 text-xs leading-relaxed text-(--ts)">{t(mode.descKey)}</p>
+                <p className="mt-1 text-sm leading-relaxed text-(--ts)">{t(mode.descKey)}</p>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-(--tm)">{t("guide.s5.splitsBody")}</p>
+          <p className="mt-2 text-sm leading-relaxed text-(--tm)">{t("guide.s5.splitsBody")}</p>
         </div>
       </div>
     );
@@ -305,7 +268,7 @@ function SectionBody({ section, t }) {
           {FORMULAS.map((formula) => (
             <Card key={formula.id} variant="outlined" padding="md" className="rounded-xl">
               <p className="text-sm font-bold text-(--tp)">{t(formula.titleKey)}</p>
-              <p className="mt-1 text-xs leading-relaxed text-(--ts)">{t(formula.bodyKey)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-(--ts)">{t(formula.bodyKey)}</p>
               <p className="mt-2 rounded-md bg-(--bgm) px-2 py-1.5 text-xs tabular-nums text-(--p)">
                 {t(formula.exampleKey)}
               </p>
@@ -313,8 +276,8 @@ function SectionBody({ section, t }) {
           ))}
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          <p className="rounded-lg border border-(--bd) bg-(--bgs) p-3 text-xs leading-relaxed text-(--tm)">{t("guide.s6.paidIn")}</p>
-          <p className="rounded-lg border border-(--bd) bg-(--bgs) p-3 text-xs leading-relaxed text-(--tm)">{t("guide.s6.explain")}</p>
+          <p className="rounded-lg border border-(--bd) bg-(--bgs) p-3 text-sm leading-relaxed text-(--tm)">{t("guide.s6.paidIn")}</p>
+          <p className="rounded-lg border border-(--bd) bg-(--bgs) p-3 text-sm leading-relaxed text-(--tm)">{t("guide.s6.explain")}</p>
         </div>
       </div>
     );
@@ -343,7 +306,7 @@ function SectionBody({ section, t }) {
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-(--tm)">{t("guide.s7.balancesBody")}</p>
+          <p className="mt-2 text-sm leading-relaxed text-(--tm)">{t("guide.s7.balancesBody")}</p>
         </div>
       </div>
     );
@@ -359,7 +322,7 @@ function SectionBody({ section, t }) {
               <LuChevronDown size={15} className="shrink-0 text-(--tm) group-open:hidden" />
               <LuChevronUp size={15} className="hidden shrink-0 text-(--tm) group-open:block" />
             </summary>
-            <p className="border-t border-(--bd) px-3 py-2 text-xs leading-relaxed text-(--ts)">
+            <p className="border-t border-(--bd) px-3 py-2 text-sm leading-relaxed text-(--ts)">
               {t(`guide.s8.${feature.key}Body`)}
             </p>
           </details>
@@ -423,7 +386,7 @@ function SectionBody({ section, t }) {
         {ROWS.map(([problem, action]) => (
           <div key={problem} className="rounded-lg border border-(--bd) bg-(--bgs) p-3">
             <p className="text-xs font-bold text-(--tp)">{t(`guide.s10.${problem}`)}</p>
-            <p className="mt-1 text-xs leading-relaxed text-(--ts)">{t(`guide.s10.${action}`)}</p>
+            <p className="mt-1 text-sm leading-relaxed text-(--ts)">{t(`guide.s10.${action}`)}</p>
           </div>
         ))}
       </div>
@@ -434,7 +397,7 @@ function SectionBody({ section, t }) {
   );
 }
 
-export default function GuideClient({ initialLang = "en" }) {
+export default function GuideClient() {
   const { lang, t } = useLang();
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState(GUIDE_SECTIONS[0].id);
@@ -467,13 +430,13 @@ export default function GuideClient({ initialLang = "en" }) {
     );
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, []);
+  }, [results]);
 
   const jump = (id) => {
     const element = document.getElementById(id);
     if (!element) return;
-    const top = element.getBoundingClientRect().top + window.scrollY - 72;
-    window.scrollTo({ top, behavior: "smooth" });
+    window.location.hash = id;
+    element.scrollIntoView({ block: "start" });
     setActiveId(id);
   };
 
@@ -482,29 +445,29 @@ export default function GuideClient({ initialLang = "en" }) {
     : GUIDE_SECTIONS;
 
   return (
-    <div className="min-w-0 px-4 pb-10 pt-4 sm:px-6" lang={initialLang === "bn" || lang === "bn" ? "bn" : "en"}>
+    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8" lang={lang}>
       {/* Hero */}
-      <header className="mb-4 rounded-2xl border border-(--bd) bg-(--bgs) p-4 sm:p-6">
+      <header className="mb-6 rounded-3xl bg-(--brand-bg) p-5 text-(--brand-fg) sm:p-9">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-(--p)">
+            <p className="inline-flex items-center gap-2 text-sm font-bold text-(--brand-on)">
               <LuBookOpen size={13} /> MealMate
             </p>
-            <h1 className="mt-1 text-xl font-extrabold tracking-tight text-(--tp) sm:text-2xl">
+            <h1 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-5xl">
               {t("guide.title")}
             </h1>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-(--ts)">{t("guide.subtitle")}</p>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed">{t("guide.subtitle")}</p>
           </div>
           <Link
             href="/support"
-            className="inline-flex min-h-10 items-center rounded-lg border border-(--bd) px-3 text-xs font-semibold text-(--p) no-underline hover:bg-(--pale)"
+            className="inline-flex min-h-11 items-center rounded-full border border-(--brand-mute) px-4 text-sm font-semibold text-(--brand-fg) no-underline hover:text-(--brand-on)"
           >
             {t("shell.support")}
           </Link>
         </div>
 
         {/* Search */}
-        <label className="mt-4 block">
+        <label className="mt-5 block max-w-2xl">
           <span className="sr-only">{t("guide.search")}</span>
           <span className="relative block">
             <LuSearch size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-(--tm)" />
@@ -513,7 +476,7 @@ export default function GuideClient({ initialLang = "en" }) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("guide.search")}
-              className="min-h-11 w-full rounded-lg border border-(--bd) bg-(--bg) pl-9 pr-10 text-sm text-(--tp) placeholder:text-(--tm) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
+              className="min-h-11 w-full rounded-lg border border-(--bd) bg-(--bg) pl-9 pr-10 text-base text-(--tp) placeholder:text-(--tm) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
             />
             {query && (
               <button
@@ -529,8 +492,8 @@ export default function GuideClient({ initialLang = "en" }) {
         </label>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <TableOfContents t={t} activeId={activeId} onJump={jump} results={results} />
+      <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+        <TableOfContents t={t} activeId={activeId} onJump={jump} sections={visibleSections} />
 
         <div className="min-w-0 space-y-4">
           {visibleSections.length === 0 ? (
@@ -544,7 +507,7 @@ export default function GuideClient({ initialLang = "en" }) {
                 key={section.id}
                 id={section.id}
                 aria-labelledby={`${section.id}-heading`}
-                className="scroll-mt-20 rounded-2xl border border-(--bd) bg-(--bgs) p-4 sm:p-5"
+                className="scroll-mt-20 rounded-2xl border border-(--bd) bg-(--bgs) p-4 sm:p-7"
               >
                 <SectionHead section={section} t={t} />
                 <SectionBody section={section} t={t} />

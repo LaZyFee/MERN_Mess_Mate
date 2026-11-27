@@ -3,6 +3,11 @@
 import { registerDictionary } from "@/lib/i18n/registry";
 
 registerDictionary("en", "landing", {
+  "example.title": "Example meal rate",
+  "example.pool": "৳8,000",
+  "example.units": "120",
+  "example.rate": "৳66.67",
+  "daily.title": "Around the shared kitchen",
   // Public navigation
   "nav.howItWorks": "How it works",
   "nav.features": "Features",
@@ -99,6 +104,11 @@ registerDictionary("en", "landing", {
 });
 
 registerDictionary("bn", "landing", {
+  "example.title": "মিল রেটের উদাহরণ",
+  "example.pool": "৳৮,০০০",
+  "example.units": "১২০",
+  "example.rate": "৳৬৬.৬৭",
+  "daily.title": "মেসের রান্নাঘরের দৈনন্দিন কাজ",
   // Public navigation
   "nav.howItWorks": "যেভাবে কাজ করে",
   "nav.features": "ফিচার",

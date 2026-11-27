@@ -27,7 +27,11 @@ export function middleware(request) {
   const isAuthPage = PUBLIC_AUTH_PAGES.includes(pathname);
 
   let response;
-  if (isProtected && !hasSession) {
+  if (pathname === "/" && hasSession) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    response = NextResponse.rewrite(url);
+  } else if (isProtected && !hasSession) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = `?next=${encodeURIComponent(pathname)}`;

@@ -1,141 +1,104 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import { cloneElement, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-/**
- * Tooltip component for displaying additional information on hover
- */
-const Tooltip = ({
- children,
- content,
- placement = "top",
- delay = 0,
- isDisabled = false,
- className = "",
- ...props
-}) => {
- const [isVisible, setIsVisible] = useState(false);
- const [position, setPosition] = useState({ top: 0, left: 0 });
- const targetRef = useRef(null);
- const tooltipRef = useRef(null);
- const timerRef = useRef(null);
-
- useEffect(() => {
-  return () => {
-   if (timerRef.current) clearTimeout(timerRef.current);
+function placeTip(anchor, tip, preferred) {
+  const gap = 8;
+  const room = {
+    top: anchor.top, bottom: window.innerHeight - anchor.bottom,
+    left: anchor.left, right: window.innerWidth - anchor.right,
   };
- }, []);
+  const opposite = { top: "bottom", bottom: "top", left: "right", right: "left" };
+  const vertical = preferred === "top" || preferred === "bottom";
+  const other = opposite[preferred];
+  const side = room[preferred] < (vertical ? tip.height : tip.width) + gap && room[other] > room[preferred]
+    ? other : preferred;
+  let left = anchor.left + (anchor.width - tip.width) / 2;
+  let top = anchor.top + (anchor.height - tip.height) / 2;
+  if (vertical) top = side === "top" ? anchor.top - tip.height - gap : anchor.bottom + gap;
+  else left = side === "left" ? anchor.left - tip.width - gap : anchor.right + gap;
+  return {
+    left: Math.max(gap, Math.min(left, window.innerWidth - tip.width - gap)),
+    top: Math.max(gap, Math.min(top, window.innerHeight - tip.height - gap)),
+  };
+}
 
- const updatePosition = () => {
-  if (!targetRef.current || !tooltipRef.current) return;
+export default function Tooltip({ children, content, placement = "top", delay = 0, isDisabled = false, className = "", style, id, ...props }) {
+  const generatedId = useId();
+  const tipId = id || generatedId;
+  const trigger = useRef(null);
+  const tip = useRef(null);
+  const timer = useRef(null);
+  const [open, setOpen] = useState(false);
+  const visible = open && !isDisabled;
 
-  const targetRect = targetRef.current.getBoundingClientRect();
-  const tooltipRect = tooltipRef.current.getBoundingClientRect();
-
-  const scrollTop = window.scrollY || document.documentElement.scrollTop;
-  const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-
-  let top = 0;
-  let left = 0;
-
-  switch (placement) {
-   case "top":
-    top = targetRect.top + scrollTop - tooltipRect.height - 8;
-    left =
-     targetRect.left +
-     scrollLeft +
-     targetRect.width / 2 -
-     tooltipRect.width / 2;
-    break;
-   case "bottom":
-    top = targetRect.bottom + scrollTop + 8;
-    left =
-     targetRect.left +
-     scrollLeft +
-     targetRect.width / 2 -
-     tooltipRect.width / 2;
-    break;
-   case "left":
-    top =
-     targetRect.top +
-     scrollTop +
-     targetRect.height / 2 -
-     tooltipRect.height / 2;
-    left = targetRect.left + scrollLeft - tooltipRect.width - 8;
-    break;
-   case "right":
-    top =
-     targetRect.top +
-     scrollTop +
-     targetRect.height / 2 -
-     tooltipRect.height / 2;
-    left = targetRect.right + scrollLeft + 8;
-    break;
-   default:
-    break;
+  function show() {
+    clearTimeout(timer.current);
+    if (!isDisabled) timer.current = setTimeout(() => setOpen(true), delay);
   }
 
-  if (left < 10) left = 10;
-  if (left + tooltipRect.width > window.innerWidth - 10) {
-   left = window.innerWidth - tooltipRect.width - 10;
+  function close() {
+    clearTimeout(timer.current);
+    setOpen(false);
   }
 
-  if (top < 10) top = 10;
-  if (top + tooltipRect.height > window.innerHeight + scrollTop - 10) {
-   top = window.innerHeight + scrollTop - tooltipRect.height - 10;
+  function leave() {
+    clearTimeout(timer.current);
+    if (!trigger.current?.matches(":focus-within")) timer.current = setTimeout(close, 150);
   }
 
-  setPosition({ top, left });
- };
+  useEffect(() => () => clearTimeout(timer.current), []);
 
- const handleMouseEnter = () => {
-  if (isDisabled) return;
+  useLayoutEffect(() => {
+    if (!visible) return;
+    const anchor = trigger.current;
+    const bubble = tip.current;
+    function update() {
+      const rect = anchor.getBoundingClientRect();
+      const { left, top } = placeTip(rect, bubble.getBoundingClientRect(), placement);
+      bubble.style.left = left + "px";
+      bubble.style.top = top + "px";
+      bubble.style.visibility = rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth ? "hidden" : "visible";
+    }
+    function outside(event) {
+      if (!anchor.contains(event.target) && !bubble.contains(event.target)) close();
+    }
+    function escape(event) {
+      if (event.key === "Escape") close();
+    }
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(anchor);
+    observer.observe(bubble);
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [visible, placement]);
 
-  if (timerRef.current) clearTimeout(timerRef.current);
-
-  timerRef.current = setTimeout(() => {
-   setIsVisible(true);
-   setTimeout(updatePosition, 0);
-  }, delay);
- };
-
- const handleMouseLeave = () => {
-  if (timerRef.current) clearTimeout(timerRef.current);
-  setIsVisible(false);
- };
-
- const arrowClasses = {
-  top: "bottom-0 translate-y-full left-1/2 -translate-x-1/2 border-t-(--bgs) border-l-transparent border-r-transparent border-b-transparent",
-  bottom:
-   "top-0 -translate-y-full left-1/2 -translate-x-1/2 border-b-(--bgs) border-l-transparent border-r-transparent border-t-transparent",
-  left: "right-0 translate-x-full top-1/2 -translate-y-1/2 border-l-(--bgs) border-t-transparent border-b-transparent border-r-transparent",
-  right:
-   "left-0 -translate-x-full top-1/2 -translate-y-1/2 border-r-(--bgs) border-t-transparent border-b-transparent border-l-transparent",
- };
-
- return (
-  <div
-   className="inline-block relative"
-   onMouseEnter={handleMouseEnter}
-   onMouseLeave={handleMouseLeave}
-  >
-   <div ref={targetRef}>{children}</div>
-
-   {isVisible && (
-    <div
-     ref={tooltipRef}
-     
-     className={`absolute z-50 bg-(--bgs) text-(--ts) px-3 py-1.5 rounded-lg text-sm shadow-lg border border-(--bd) ${className} [top:var(--inline-top)] [left:var(--inline-left)]`} style={{ "--inline-top": `${position.top}px`, "--inline-left": `${position.left}px` }}
-     {...props}
-    >
-     {content}
-     <div
-      className={`absolute w-0 h-0 border-solid border-4 ${arrowClasses[placement]}`}
-     />
+  const child = isValidElement(children) && visible
+    ? cloneElement(children, { "aria-describedby": [children.props["aria-describedby"], tipId].filter(Boolean).join(" ") })
+    : children;
+  return (
+    <div ref={trigger} className="inline-flex max-w-full align-middle"
+      onPointerEnter={(event) => { if (event.pointerType !== "touch") show(); }}
+      onPointerLeave={leave} onFocus={show} onBlur={close}
+      onPointerUp={(event) => { if (event.pointerType === "touch") show(); }}>
+      {child}
+      {visible && createPortal(
+        <div {...props} ref={tip} id={tipId} role="tooltip" style={style}
+          onPointerEnter={() => clearTimeout(timer.current)} onPointerLeave={leave}
+          className={`fixed z-[1000] w-max max-w-[min(20rem,calc(100vw-1rem))] break-words rounded-xl bg-(--tp) px-3 py-2 text-sm leading-relaxed text-(--bgs) shadow-lg ${className}`}>
+          {content}
+        </div>, document.body)}
     </div>
-   )}
-  </div>
- );
-};
-
-export default Tooltip;
+  );
+}

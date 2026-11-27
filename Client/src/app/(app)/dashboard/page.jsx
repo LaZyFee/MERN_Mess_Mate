@@ -8,7 +8,7 @@ import { cookies } from "next/headers";
 import { LuBookOpen } from "react-icons/lu";
 import { getMyGroups } from "@/lib/actions/groups";
 import { LANG_COOKIE, normalizeLang, translate } from "@/lib/i18n";
-import HomeClient from "./HomeClient";
+import HomeClient from "../HomeClient";
 
 export const metadata = { title: "Home — MealMate" };
 
