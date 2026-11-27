@@ -11,6 +11,7 @@ registerDictionary("en", "shell", {
   "more": "More",
   "inbox": "Inbox",
   "profile": "Profile",
+  "sessions": "Device sessions",
   "support": "Support",
   "logout": "Sign out",
   "menu": "Menu",
@@ -42,6 +43,10 @@ registerDictionary("en", "shell", {
   "guide": "User guide",
   "builtFor": "Meal & cost tracker for shared living",
   "noResults": "Nothing here yet",
+  "settings": "Settings",
+  "profile.accountTitle": "MealMate account",
+  "profile.pageTitle": "Profile & preferences",
+  "profile.subtitle": "Manage your account details, sign-in security and notification preferences.",
 });
 
 registerDictionary("bn", "shell", {
@@ -53,6 +58,7 @@ registerDictionary("bn", "shell", {
   "more": "আরও",
   "inbox": "ইনবক্স",
   "profile": "প্রোফাইল",
+  "sessions": "ডিভাইস সেশন",
   "support": "সহায়তা",
   "logout": "লগ আউট",
   "menu": "মেনু",
@@ -84,6 +90,10 @@ registerDictionary("bn", "shell", {
   "guide": "ব্যবহার নির্দেশিকা",
   "builtFor": "একসাথে থাকা মানুষের জন্য মিল ও খরচের হিসাব",
   "noResults": "এখনো কিছু নেই",
+  "settings": "সেটিংস",
+  "profile.accountTitle": "মিলমেট অ্যাকাউন্ট",
+  "profile.pageTitle": "প্রোফাইল ও পছন্দ",
+  "profile.subtitle": "আপনার অ্যাকাউন্টের বিবরণ, সাইন-ইন নিরাপত্তা এবং নোটিফিকেশন পছন্দ ব্যবস্থাপনা করুন।",
 });
 
 registerDictionary("en", "group", {

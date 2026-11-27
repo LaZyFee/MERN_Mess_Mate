@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { LuTriangleAlert } from "react-icons/lu";
-import Alert from "@/components/shared/Alert";
 import Button from "@/components/shared/Button";
 import Checkbox from "@/components/shared/Checkbox";
 import Input from "@/components/shared/Input";
@@ -129,22 +128,18 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
   return (
     <div className="min-w-0 space-y-4">
       {warnings.length > 0 && (
-        <Alert
-          status="warning"
-          title={t("exp.duplicateTitle")}
-          isDismissible
-          onDismiss={() => setWarnings([])}
-        >
-          <ul className="list-disc space-y-1 pl-4 text-xs">
-            {warnings.map((warning, index) => (
-              <li key={index}>
-                {typeof warning === "string"
-                  ? warning
-                  : `${warning.message || warning.reason || t("exp.similarExpense")}${warning.expenseId ? ` (${warning.expenseId})` : ""}`}
-              </li>
-            ))}
-          </ul>
-        </Alert>
+        showToast({
+          status: "warning",
+          title: t("exp.duplicateTitle"),
+          description: warnings
+            .map((w) =>
+              typeof w === "string"
+                ? w
+                : `${w.message || w.reason || t("exp.similarExpense")}${w.expenseId ? ` (${w.expenseId})` : ""}`
+            )
+            .join(" · "),
+          duration: 8000,
+        })
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

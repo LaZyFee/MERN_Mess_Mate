@@ -17,7 +17,6 @@ import Input from "@/components/shared/Input";
 import Badge from "@/components/shared/Badge";
 import Modal from "@/components/modals/Modal";
 import ConfirmationModal from "@/components/modals/ConfirmationModal";
-import Alert from "@/components/shared/Alert";
 import Card from "@/components/shared/Card";
 import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
@@ -150,9 +149,12 @@ function InviteSection({ groupId, initialMeta }) {
       >
         {reveal && (
           <div className="space-y-3">
-            <Alert status="warning" title={t("more.copyNow")}>
-              {t("more.copyNowBody")}
-            </Alert>
+            {showToast({
+              status: "warning",
+              title: t("more.copyNow"),
+              description: t("more.copyNowBody"),
+              duration: 6000,
+            })}
             <code className="block break-all rounded-[var(--r-md)] bg-(--bgm) px-3 py-2 text-center font-mono text-lg font-bold text-(--p)">
               {reveal.code}
             </code>

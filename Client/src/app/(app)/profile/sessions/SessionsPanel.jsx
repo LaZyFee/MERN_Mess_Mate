@@ -49,11 +49,12 @@ export default function SessionsPanel({ initialSessions = [] }) {
   async function revoke(familyId) {
     setRevoking(familyId);
     try {
-      await authApi.revokeSession(familyId);
+      const result = await authApi.revokeSession(familyId);
+      if (result?.error) throw new Error(result.error);
       setSessions((s) => s.filter((x) => x.familyId !== familyId));
       showToast({ status: "success", title: "Session revoked", description: "That device is signed out now." });
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.message });
+      showToast({ status: "error", title: "Could not revoke session", description: ex?.data?.msg || ex?.message });
     } finally {
       setRevoking(null);
     }
@@ -63,8 +64,10 @@ export default function SessionsPanel({ initialSessions = [] }) {
     setConfirmAll(false);
     setLoading(true);
     try {
-      await authApi.revokeAllSessions();
-      setSessions([]);
+      const current = sessions.find((session) => session.isCurrent)?.familyId;
+      if (!current) throw new Error("Could not identify this device. Refresh the session list and try again.");
+      await authApi.revokeAllSessions(current);
+      setSessions((previous) => previous.filter((session) => session.isCurrent));
       showToast({ status: "success", title: "All other sessions revoked", description: "Those devices are signed out now." });
     } catch (ex) {
       showToast({ status: "error", title: "Error", description: ex?.message });
@@ -75,12 +78,12 @@ export default function SessionsPanel({ initialSessions = [] }) {
 
   return (
     <div>
-      <p className="mb-3 rounded-lg border border-(--bd) bg-(--bgm) px-3 py-2 text-xs text-(--tm)">
+      <p className="mb-4 rounded-2xl border border-(--info)/20 bg-(--info-bg) px-4 py-3 text-sm leading-relaxed text-(--ts)">
         Revoking a session signs that device out immediately — its refresh token stops working.
       </p>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-base font-bold [color:var(--tp)]">Active Sessions</h2>
-        <div className="flex gap-2">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-bold text-(--tp)">Active sessions</h2>
+        <div className="grid grid-cols-2 gap-2">
           <Button variant="ghost" size="sm" leftIcon={<LuRefreshCw size={15} />} onClick={load} isDisabled={loading}>
             Refresh
           </Button>
@@ -97,38 +100,37 @@ export default function SessionsPanel({ initialSessions = [] }) {
           {[1, 2, 3].map((i) => <Skeleton key={i} variant="rect" height={72} />)}
         </div>
       ) : sessions.length === 0 ? (
-        <p className="[color:var(--tm)] text-sm text-center p-8">
-          No active sessions found.
-        </p>
+        <div className="rounded-2xl border border-dashed border-(--bd2) bg-(--bgs) px-5 py-10 text-center text-sm text-(--tm)">No active sessions found.</div>
       ) : (
         <div className="flex flex-col gap-3">
           {sessions.map((s) => (
             <div
               key={s.familyId || s._id}
-              className="flex items-center gap-3 p-4 [background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-md)]"
+              className="flex min-w-0 flex-col items-start gap-3 rounded-2xl border border-(--bd) bg-(--bgs) p-4 shadow-sm sm:flex-row sm:items-center sm:p-5"
             >
               <span className="[color:var(--tm)] shrink-0">{deviceIcon(s.userAgent)}</span>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold [color:var(--tp)] whitespace-nowrap">
-                    {s.deviceName || s.userAgent?.slice(0, 40) || "Unknown device"}
+              <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-(--tp)">
+                    {s.deviceName || s.userAgent?.slice(0, 64) || "Unknown device"}
                   </span>
                   {s.isCurrent && (
-                    <Badge colorScheme="success" size="sm" isRounded>This device</Badge>
+                <Badge variant="success" colorScheme="subtle" size="sm" isRounded>This device</Badge>
                   )}
                 </div>
-                <div className="text-xs [color:var(--tl)] mt-0.5">
-                  Last seen: {relativeTime(s.lastUsedAt || s.createdAt)} · {s.ipAddress || "IP unknown"}
+                <div className="mt-1 break-all text-xs text-(--tm)">
+                  Started {relativeTime(s.createdAt)} · {s.ip || "IP unknown"}
                 </div>
               </div>
               {!s.isCurrent && (
                 <Button
-                  variant="outline"
+                  variant="danger"
                   size="sm"
                   isLoading={revoking === s.familyId}
                   isDisabled={!!revoking}
                   onClick={() => revoke(s.familyId)}
                   ariaLabel="Revoke session"
+                  className="min-h-11 w-full sm:w-auto"
                 >
                   Revoke
                 </Button>
@@ -144,7 +146,7 @@ export default function SessionsPanel({ initialSessions = [] }) {
         onConfirm={revokeAll}
         title="Revoke All Other Sessions"
         message="This signs out every other device immediately. Your current session stays active."
-        confirmLabel="Revoke All"
+        confirmText="Revoke All"
       />
     </div>
   );

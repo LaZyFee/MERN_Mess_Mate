@@ -26,5 +26,8 @@ export const authApi = {
     return apiClient.request("/users/profile-pic", { method: "POST", body: form, isFormData: true });
   },
   revokeSession: (familyId) => apiClient.delete(`/sessions/users/sessions/${familyId}`),
-  revokeAllSessions: () => apiClient.delete("/sessions/users/sessions"),
+  revokeAllSessions: (exceptFamilyId) => apiClient.request("/sessions/users/sessions", {
+    method: "DELETE",
+    body: exceptFamilyId ? { exceptFamilyId } : {},
+  }),
 };

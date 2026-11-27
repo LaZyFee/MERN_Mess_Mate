@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import Modal from "@/components/modals/Modal";
-import Alert from "@/components/shared/Alert";
 import Button from "@/components/shared/Button";
 import { FiX, FiCheck, FiAlertTriangle, FiCheckCircle } from "react-icons/fi";
 import { LuLoader } from "react-icons/lu";
+import { useToast } from "@/components/shared/ToastProvider";
 
 /**
  * Reusable Confirmation Modal that uses the custom Alert component
@@ -24,6 +24,19 @@ export default function ConfirmationModal({
  details = null,
 }) {
  const busy = isSubmitting || isLoading;
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    if (isOpen) {
+      showToast({
+        status,
+        title,
+        description: message,
+        duration: 0,
+      });
+    }
+  }, [isOpen, showToast, status, title, message]);
+
  return (
   <Modal
    isOpen={isOpen}
@@ -75,13 +88,9 @@ export default function ConfirmationModal({
    }
   >
    <div className="space-y-4">
-    <Alert status={status} title={title}>
-     <div className="text-xs leading-relaxed font-semibold whitespace-pre-line">
-      {message}
-     </div>
-    </Alert>
     {details ? <div className="pt-1">{details}</div> : null}
    </div>
   </Modal>
  );
 }
+

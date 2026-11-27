@@ -1,12 +1,19 @@
 ﻿import { listSessions, revokeSession, revokeAllSessions } from '../services/sessionService.js';
 import { audit } from '../models/AuditEvent.js';
+import { getCookie } from '../utils/tokens.js';
 
 // Session endpoints — device list + explicit revocation.
 
 /** GET /api/users/sessions — active devices */
 export const getSessions = async (req, res, next) => {
     try {
-        const sessions = await listSessions({ userId: req.user.id });
+        const sessions = await listSessions({
+            userId: req.user.id,
+            currentFamilyId: (() => {
+                const token = getCookie(req, 'refreshToken');
+                return token?.includes(':') ? token.slice(0, token.indexOf(':')) : null;
+            })(),
+        });
         res.json({ sessions });
     } catch (err) { next(err); }
 };

@@ -15,7 +15,7 @@
 - Radio · shared/Radio.jsx · isChecked,defaultChecked,name,label,size,validation props · single radio
 - RadioGroup · shared/RadioGroup.jsx · name,options*,value,orientation,onChange,label,validation props · radio group
 - Card · shared/Card.jsx · variant(elevated|outlined|filled|unstyled),padding,isHoverable,isClickable,header,footer · content containers. ⚠ uses literal bg-white/borders → fix to vars in T0.8
-- Alert · shared/Alert.jsx · status(info|success|warning|error),title,isDismissible,onDismiss · inline notices [FLAG SVG icons]
+- Alert · ~~shared/Alert.jsx~~ REMOVED — replaced by `ToastProvider` (`useToast().showToast()`) for all inline notices · status(info|success|warning|error),title,isDismissible,onDismiss — **do not use; use toasts instead**
 - Badge · shared/Badge.jsx · variant,colorScheme,size,isRounded,icon · generic chips
 - StatusBadge · shared/StatusBadge.js · status, configs in STATUS_CONFIGS (driver/document/payment/online/expense/money/period/statement_item/outbox/ticket/**asset**) · status chips with icon+color
 - Avatar · shared/Avatar.jsx · src,alt,name(initials fallback),size,hasBorder,status,isSquare,bgColor · user images
@@ -37,7 +37,7 @@
 - ScrollReveal · shared/ScrollReveal.js · children,animation,delay,threshold · scroll-in animation
 - Sectionheader · shared/Sectionheader.js · rotatedLabel,eyebrow,headingLines[],ctaLabel,ctaHref,description,accentFrom/To · marketing/section headers
 - BlockedFormOverlay · shared/BlockedFormOverlay.js · isBlocked,title,description,uploadHref,uploadButtonText · lock forms on prerequisites
-- ThemeToggle · shared/ThemeToggle.js · className,scrolled,topbar · light/dark toggle (uses uiStore + mm_theme cookie)
+- ThemeToggle · shared/ThemeToggle.jsx · className · light/dark toggle (uses uiStore + mm_theme cookie)
 - LanguageToggle · shared/LanguageToggle.jsx · className · EN/বাংলা switch; writes `mm_lang` cookie via `lib/i18n` and re-renders the tree (P14/T14.17a)
 - TurnstileWidget · shared/TurnstileWidget.jsx · onToken(token),isRequired,theme · Cloudflare Turnstile; renders nothing without `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; `hasTurnstile()` gates submit buttons (P14/T14.4)
 - RateLimitCatcher · shared/RateLimitCatcher.jsx · error,reset,onRetry,onClose,isOverlay · 429 full-screen UI (PREFERRED)

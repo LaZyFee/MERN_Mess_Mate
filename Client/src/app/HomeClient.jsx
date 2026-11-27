@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/LangProvider";
 import Topbar from "@/components/shared/Topbar";
 import Card from "@/components/shared/Card";
@@ -51,6 +52,7 @@ export default function HomeClient() {
   // Client read of the locale seeded by RootLayout from the `mm_lang` cookie.
   // Re-renders in real time when LanguageToggle (in Topbar) switches the language.
   const t = useT();
+  const router = useRouter();
 
   const STATS = STATS_SRC.map((s) => ({
     ...s,
@@ -96,8 +98,18 @@ export default function HomeClient() {
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-(--ts) sm:text-lg">{t("landing.hero.description")}</p>
               <div className="mt-7 flex flex-col gap-2 sm:flex-row">
-                <Link href="/register" className={BTN_PRIMARY}>{t("landing.hero.cta.create")}</Link>
-                <Link href="/guide" className={BTN_OUTLINE}><LuBookOpen className="mr-2" />{t("shell.guide")}</Link>
+                <button
+                  onClick={() => router.push("/register")}
+                  className={BTN_PRIMARY}
+                >
+                  {t("landing.hero.cta.create")}
+                </button>
+                <button
+                  onClick={() => router.push("/guide")}
+                  className={BTN_OUTLINE}
+                >
+                  <LuBookOpen className="mr-2" />{t("shell.guide")}
+                </button>
               </div>
             </div>
 
@@ -280,12 +292,18 @@ export default function HomeClient() {
               {t("landing.cta.description")}
             </p>
             <div className="mt-7 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-              <Link href="/register" className={BTN_PRIMARY}>
+              <button
+                onClick={() => router.push("/register")}
+                className={BTN_PRIMARY}
+              >
                 {t("landing.cta.create")}
-              </Link>
-              <Link href="/login" className={BTN_OUTLINE}>
+              </button>
+              <button
+                onClick={() => router.push("/login")}
+                className={BTN_OUTLINE}
+              >
                 {t("landing.cta.signin")}
-              </Link>
+              </button>
             </div>
           </Card>
         </div>

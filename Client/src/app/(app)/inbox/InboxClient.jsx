@@ -6,7 +6,7 @@
  */
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { LuCheckCheck, LuInbox, LuMailOpen, LuRefreshCw } from "react-icons/lu";
+import { LuCheckCheck, LuInbox, LuMailOpen, LuRefreshCw, LuBell } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Skeleton from "@/components/shared/Skeleton";
@@ -93,15 +93,14 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
   const unread = items.filter((item) => !item.readAt).length;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-9">
+      <div className="rounded-3xl bg-(--brand-bg) p-5 text-(--brand-fg) sm:p-8">
         <div className="min-w-0">
-          <h1 className="text-base font-bold text-(--tp)">{t("inbox.title")}</h1>
-          <p className="text-xs text-(--tm)">
-            {t("inbox.summary", { unread: n(unread), loaded: n(items.length) })}
-          </p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-(--brand-on)"><LuBell size={17} />MealMate inbox</p>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">{t("inbox.title")}</h1>
+          <p className="mt-2 text-sm text-(--brand-mute)">{t("inbox.summary", { unread: n(unread), loaded: n(items.length) })}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="mt-5 flex flex-wrap items-center gap-2">
           <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} isLoading={loading} onClick={() => load(filter)}>
             <LuRefreshCw size={15} />
           </Button>
@@ -111,20 +110,19 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 rounded-2xl border border-(--bd) bg-(--bgs) p-2">
         {FILTER_VALUES.map((value) => (
-          <button
-            key={value || "all"}
+          <Button
+            variant={filter === value ? "primary" : "outline"}
+            size="md"
             type="button"
+            key={value || "all"}
             onClick={() => applyFilter(value)}
             aria-pressed={filter === value}
-            className={`min-h-11 rounded-[var(--r-pill)] px-4 text-xs font-semibold transition-[var(--transition)] ${filter === value
-                ? "bg-(--p) text-(--bgs)"
-                : "border border-(--bd) bg-(--bgs) text-(--ts) hover:border-(--p) hover:text-(--p)"
-              }`}
+            className="!h-11 !rounded-xl !px-4"
           >
             {value ? t("inbox.unreadFilter") : t("inbox.all")}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -141,7 +139,7 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
           <p className="mt-1 text-xs text-(--tm)">{t("inbox.emptyHint")}</p>
         </Card>
       ) : (
-        <ul className="list-none space-y-2">
+        <ul className="list-none space-y-3">
           {items.map((item) => {
             const href = hrefFor(item);
             const body = (
@@ -161,7 +159,7 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
                   <Link
                     href={href}
                     onClick={() => markOne(item)}
-                    className={`flex min-h-11 items-start justify-between gap-2 rounded-lg border p-3 no-underline transition-[var(--transition)] hover:border-(--p) ${item.readAt ? "border-(--bd) bg-(--bgs)" : "border-(--p)/40 bg-(--pale)"
+                    className={`flex min-h-16 items-start justify-between gap-2 rounded-2xl border p-4 no-underline transition-[var(--transition)] hover:border-(--p) ${item.readAt ? "border-(--bd) bg-(--bgs)" : "border-(--p)/40 bg-(--pale)"
                       }`}
                   >
                     {body}
@@ -170,7 +168,7 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
                   <button
                     type="button"
                     onClick={() => markOne(item)}
-                    className={`flex min-h-11 w-full items-start justify-between gap-2 rounded-lg border p-3 text-left transition-[var(--transition)] hover:border-(--p) ${item.readAt ? "border-(--bd) bg-(--bgs)" : "border-(--p)/40 bg-(--pale)"
+                    className={`flex min-h-16 w-full items-start justify-between gap-2 rounded-2xl border p-4 text-left transition-[var(--transition)] hover:border-(--p) ${item.readAt ? "border-(--bd) bg-(--bgs)" : "border-(--p)/40 bg-(--pale)"
                       }`}
                   >
                     {body}

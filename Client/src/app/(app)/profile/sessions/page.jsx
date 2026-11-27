@@ -13,10 +13,12 @@ export default async function SessionsPage() {
     throw error;
   }
   return (
-    <main className="[max-width:640px] mx-auto [padding:var(--space-6)_var(--space-4)]">
-      <h1 className="text-xl font-extrabold [color:var(--tp)] mb-6">
-        Device Sessions
-      </h1>
+    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-9">
+      <header className="mb-6 rounded-3xl bg-(--brand-bg) px-5 py-7 text-(--brand-fg) sm:px-8">
+        <p className="text-sm font-semibold text-(--brand-on)">Account security</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Device sessions</h1>
+        <p className="mt-2 text-sm leading-relaxed text-(--brand-mute)">Review signed-in devices and revoke access you no longer recognize.</p>
+      </header>
       <SessionsPanel initialSessions={initialSessions} />
     </main>
   );

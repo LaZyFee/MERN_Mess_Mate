@@ -20,12 +20,12 @@ const PUBLIC_NAV = [
 ];
 
 const ACCOUNT_NAV = [
-  { href: "/dashboard", key: "home", icon: LuLayoutDashboard },
-  { href: "/groups", key: "groups", icon: LuUsers },
-  { href: "/inbox", key: "inbox", icon: LuBell },
-  { href: "/profile", key: "profile", icon: LuUser },
-  { href: "/support", key: "support", icon: LuLifeBuoy },
-  { href: "/guide", key: "guide", icon: LuBookOpen },
+  { href: "/dashboard", key: "home", icon: LuLayoutDashboard, label: "shell.home" },
+  { href: "/inbox", key: "inbox", icon: LuBell, label: "shell.inbox" },
+  { href: "/profile", key: "profile", icon: LuUser, label: "shell.profile" },
+  { href: "/profile/sessions", key: "sessions", icon: LuUsers, label: "shell.sessions" },
+  { href: "/support", key: "support", icon: LuLifeBuoy, label: "shell.support" },
+  { href: "/guide", key: "guide", icon: LuBookOpen, label: "shell.guide" },
 ];
 
 export default function Topbar() {
@@ -36,11 +36,40 @@ export default function Topbar() {
   const header = useRef(null);
   const [open, setOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const user = useUser();
+  const hydratedUser = useUser();
+  const [sessionUser, setSessionUser] = useState(null);
+  const user = hydratedUser || sessionUser;
   const clearAuth = useAuthStore((s) => s.clear);
 
   const toggleMenu = useCallback(() => setOpen((prev) => !prev), []);
   const closeMenu = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    setDropdownOpen(false);
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!dropdownOpen && !open) return;
+    const onPointerDown = (event) => {
+      if (!header.current?.contains(event.target)) {
+        setDropdownOpen(false);
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setDropdownOpen(false);
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [dropdownOpen, open]);
 
   const handleLogout = useCallback(async () => {
     setDropdownOpen(false);
@@ -52,6 +81,19 @@ export default function Topbar() {
     clearAuth();
     router.push("/");
   }, [clearAuth, router]);
+
+  useEffect(() => {
+    if (hydratedUser || pathname === "/login" || pathname === "/register") return;
+    let active = true;
+    authApi.getProfile()
+      .then((profile) => {
+        if (active && profile) setSessionUser(profile.user || profile);
+      })
+      .catch(() => {
+        if (active) setSessionUser(null);
+      });
+    return () => { active = false; };
+  }, [hydratedUser, pathname]);
 
   // Close on Escape, and when the viewport grows past the mobile breakpoint.
   useEffect(() => {
@@ -126,6 +168,7 @@ export default function Topbar() {
                   onClick={() => setDropdownOpen((d) => !d)}
                   aria-haspopup="menu"
                   aria-expanded={dropdownOpen}
+                  aria-controls="account-menu"
                   className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold text-(--tp) no-underline transition-colors hover:bg-(--pale)"
                 >
                   <Avatar
@@ -139,6 +182,7 @@ export default function Topbar() {
                 </Button>
                 {dropdownOpen && (
                   <div
+                    id="account-menu"
                     role="menu"
                     className="absolute right-0 top-full mt-2 w-60 rounded-2xl border border-(--bd) bg-(--bgs) p-2 shadow-xl"
                     onClick={(e) => e.stopPropagation()}
@@ -147,13 +191,13 @@ export default function Topbar() {
                     {ACCOUNT_NAV.map(({ href, key, icon: Icon }) => (
                       <Link key={key} href={href} role="menuitem" onClick={() => setDropdownOpen(false)}
                         className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-(--tp) no-underline hover:bg-(--pale) hover:text-(--p)">
-                        <Icon size={17} />{t(`shell.${key}`)}
+                        <Icon size={17} />{t(ACCOUNT_NAV.find((item) => item.key === key)?.label || `shell.${key}`)}
                       </Link>
                     ))}
                     <div className="my-2 border-t border-(--bd)" />
                     <Button
                       type="button"
-                      variant="danger-link"
+                      variant="danger"
                       size="md"
                       isFullWidth
                       role="menuitem"
@@ -222,13 +266,6 @@ export default function Topbar() {
             <div className="mt-4 grid grid-cols-2 gap-2">
               {user ? (
                 <>
-                  <Link
-                    href="/profile"
-                    onClick={closeMenu}
-                    className="flex min-h-12 items-center justify-center rounded-xl bg-(--pale) px-4 text-base font-semibold text-(--p) no-underline active:bg-(--bgm)"
-                  >
-                    <LuUser size={18} className="mr-1" /> {t("shell.profile")}
-                  </Link>
                   <Button
                     type="button"
                     variant="secondary"

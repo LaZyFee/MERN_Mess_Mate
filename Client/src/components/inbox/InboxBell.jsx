@@ -124,12 +124,12 @@ export default function InboxBell() {
   return (
     <div className="relative" ref={panelRef}>
       <Button
-        variant="ghost"
+        variant="outline"
         size="lg"
         isRound
         ariaLabel="Open notifications"
         onClick={() => setOpen((v) => !v)}
-        className="relative"
+        className="relative p-2"
       >
         <LuBell size={18} />
         {count > 0 && (

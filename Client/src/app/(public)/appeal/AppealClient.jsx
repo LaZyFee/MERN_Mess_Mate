@@ -7,7 +7,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { LuShieldAlert } from "react-icons/lu";
-import Alert from "@/components/shared/Alert";
 import Button from "@/components/shared/Button";
 import Input from "@/components/shared/Input";
 import Textarea from "@/components/shared/Textarea";
@@ -75,9 +74,7 @@ export default function AppealClient() {
         />
         <TurnstileWidget onToken={setCaptchaToken} isRequired={hasTurnstile()} />
         {state.note && (
-          <Alert status="info" title="Appeal received">
-            {state.note}
-          </Alert>
+          <p className="rounded-[var(--r-md)] bg-(--pale) px-3 py-2 text-sm text-(--ts)">{state.note}</p>
         )}
         <Button
           type="submit"

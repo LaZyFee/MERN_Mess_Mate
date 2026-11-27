@@ -9,7 +9,6 @@ import {
   LuRotateCcw,
   LuTriangleAlert,
 } from "react-icons/lu";
-import Alert from "@/components/shared/Alert";
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
@@ -47,7 +46,15 @@ function FinalizeModal({ month, period, isOpen, saving, onClose, onConfirm, unre
       }
     >
       {unresolved?.length > 0 && (
-        <Alert status="error" title={t("stmt.unresolvedTitle")} className="mb-3">
+        <>
+          {showToast({
+            status: "error",
+            title: t("stmt.unresolvedTitle"),
+            description: unresolved
+              .map((row) => `${row.date} · ${t(`meals.slot.${row.slot}`)}`)
+              .join(" · "),
+            duration: 8000,
+          })}
           <div className="mt-1 flex flex-wrap gap-1">
             {unresolved.map((row, index) => (
               <span
@@ -58,7 +65,7 @@ function FinalizeModal({ month, period, isOpen, saving, onClose, onConfirm, unre
               </span>
             ))}
           </div>
-        </Alert>
+        </>
       )}
       <p className="text-sm text-(--tm)">
         {t("stmt.finalizeBody", { month: formatMonth(month, lang), revision: n(period?.revision ?? 0) })}
@@ -270,9 +277,13 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
           </Button>
         )}
         {state === "finalized" && (
-          <Alert status="info" className="w-full">
-            {t("stmt.close.correctionNote")}
-          </Alert>
+          <>
+            {showToast({
+              status: "info",
+              title: t("stmt.close.correctionNote"),
+              duration: 6000,
+            })}
+          </>
         )}
       </div>
 

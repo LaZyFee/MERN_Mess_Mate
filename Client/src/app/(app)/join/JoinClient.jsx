@@ -1,17 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LuArrowLeft, LuLogIn } from "react-icons/lu";
 import Input from "@/components/shared/Input";
 import Button from "@/components/shared/Button";
 import Alert from "@/components/shared/Alert";
-import { useToast } from "@/components/shared/ToastProvider";
 import { groupsApi } from "@/lib/api/groups";
 
 function JoinForm({ initialCode }) {
-  const { showToast } = useToast();
-
   const [code, setCode] = useState(initialCode);
   const [groupId, setGroupId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,7 +24,6 @@ function JoinForm({ initialCode }) {
     setLoading(true);
     try {
       await groupsApi.joinByCode({ code: code.trim(), groupId: groupId.trim() });
-      showToast({ status: "success", title: "Join request sent!", description: "Waiting for approval." });
       setPending(true);
     } catch (ex) {
       const msg = ex?.data?.message || ex?.message || "Failed to join";
@@ -44,7 +41,7 @@ function JoinForm({ initialCode }) {
     return (
       <Alert status="success">
         Your join request was submitted! An admin will approve it soon. You can{" "}
-        <a href="/" className="[color:var(--p)] font-semibold">go home</a> while you wait.
+        <Link href="/" className="[color:var(--p)] font-semibold">go home</Link> while you wait.
       </Alert>
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   LuUsers,
@@ -15,7 +15,6 @@ import Skeleton from "@/components/shared/Skeleton";
 import Badge from "@/components/shared/Badge";
 import Avatar from "@/components/shared/Avatar";
 import { useToast } from "@/components/shared/ToastProvider";
-import Alert from "@/components/shared/Alert";
 import { groupsApi } from "@/lib/api/groups";
 import { useGroupStore } from "@/lib/store/groupStore";
 import { useT } from "@/lib/i18n/LangProvider";
@@ -79,7 +78,7 @@ function EmptyState({ onCreate, onJoin, t }) {
       <div
         className="flex gap-3 flex-wrap justify-center"
       >
-        <Button leftIcon={<LuPlus size={16} />} onClick={onCreate}>
+        <Button variant="primary" leftIcon={<LuPlus size={16} />} onClick={onCreate}>
           {t("home.create")}
         </Button>
         <Button variant="outline" leftIcon={<LuLogIn size={16} />} onClick={onJoin}>
@@ -120,6 +119,19 @@ export default function HomeClient({ initialGroups }) {
     }
   }, [showToast, t]);
 
+  // Ex-member notice: fire once when the user lands here after leaving a group,
+  // then clear it so a re-render (or a different route) cannot re-toast it.
+  useEffect(() => {
+    if (!leftNotice?.message) return;
+    showToast({
+      status: "info",
+      title: t("grp.leftNoticeTitle"),
+      description: leftNotice.message,
+      duration: 8000,
+    });
+    setLeftNotice(null);
+  }, [leftNotice, setLeftNotice, showToast, t]);
+
   const filteredGroups = groups
     .filter((group) => group.name?.toLowerCase().includes(query.trim().toLowerCase()))
     .slice()
@@ -129,14 +141,6 @@ export default function HomeClient({ initialGroups }) {
 
   return (
     <div>
-      {leftNotice?.message && (
-        <div className="mb-4">
-          <Alert status="info" title={t("grp.leftNoticeTitle")} isDismissible onDismiss={() => setLeftNotice(null)}>
-            {leftNotice.message}
-          </Alert>
-        </div>
-      )}
-
       {/* Header row */}
       <div
         className="mb-5 flex flex-col gap-4 rounded-2xl border border-(--bd) bg-(--bgs) p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
@@ -149,10 +153,10 @@ export default function HomeClient({ initialGroups }) {
           <Button size="sm" variant="outline" leftIcon={<LuRefreshCw size={15} />} onClick={refresh} isLoading={refreshing} className="w-full sm:w-fit">
             {t("shell.refresh")}
           </Button>
-          <Button size="sm" leftIcon={<LuPlus size={15} />} onClick={() => router.push("/groups/create")} className="w-full sm:w-fit">
+          <Button variant="primary" size="sm" leftIcon={<LuPlus size={15} />} onClick={() => router.push("/groups/create")} className="w-full sm:w-fit">
             {t("grp.create")}
           </Button>
-          <Button size="sm" variant="ghost" leftIcon={<LuLogIn size={15} />} onClick={() => router.push("/join")} className="col-span-2 w-full sm:w-fit">
+          <Button size="sm" variant="outline" leftIcon={<LuLogIn size={15} />} onClick={() => router.push("/join")} className="col-span-2 w-full sm:w-fit">
             {t("grp.join")}
           </Button>
         </div>

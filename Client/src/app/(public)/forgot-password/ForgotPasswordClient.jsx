@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import AuthShell from "@/components/auth/AuthShell";
-import Alert from "@/components/shared/Alert";
 import Button from "@/components/shared/Button";
 import Input from "@/components/shared/Input";
 import { authApi } from "@/lib/api/auth";
@@ -39,9 +38,9 @@ export default function ForgotPasswordClient() {
       }
     >
       {sent ? (
-        <Alert status="success" title="Check your inbox">
+        <p className="text-sm text-(--ts)">
           If that email is registered, a reset link is on its way. It can take a few minutes.
-        </Alert>
+        </p>
       ) : (
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
           <Input

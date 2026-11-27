@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import { cookies } from "next/headers";
 import { getProfile } from "@/lib/actions/auth";
 import { getInboxPreferences } from "@/lib/actions/inbox";
 import ProfileClient from "./ProfileClient";
 import NotificationPrefs from "@/components/inbox/NotificationPrefs";
+import { normalizeLang, translate, LANG_COOKIE } from "@/lib/i18n";
 
 export const metadata = { title: "Profile — MealMate" };
 
 export default async function ProfilePage() {
+  const cookieStore = await cookies();
+  const lang = normalizeLang(cookieStore.get(LANG_COOKIE)?.value);
+  const t = (key) => translate(lang, key);
+
   let profile;
   let prefs = null;
   try {
@@ -18,30 +23,16 @@ export default async function ProfilePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-6">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-extrabold text-(--tp)">My profile</h1>
-        <div className="flex gap-2">
-          <Link
-            href="/profile/sessions"
-            className="inline-flex min-h-11 items-center rounded-xl border border-(--bd2) px-3 text-sm font-semibold text-(--ts) hover:bg-(--pale) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
-          >
-            Device sessions
-          </Link>
-          <Link
-            href="/support"
-            className="inline-flex min-h-11 items-center rounded-xl border border-(--bd2) px-3 text-sm font-semibold text-(--ts) hover:bg-(--pale) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
-          >
-            Support
-          </Link>
-          <Link
-            href="/"
-            className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-(--p) hover:bg-(--pale) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
-          >
-            Home
-          </Link>
-        </div>
-      </div>
+    <main className="px-4 py-6 sm:px-6 sm:py-9">
+      <header className="mb-6 rounded-3xl bg-(--brand-bg) px-5 py-7 text-(--brand-fg) sm:px-8 sm:py-9">
+        <p className="text-sm font-semibold text-(--brand-on)">{t("profile.accountTitle")}</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
+          {t("profile.pageTitle")}
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-(--brand-mute) sm:text-base">
+          {t("profile.subtitle")}
+        </p>
+      </header>
       <ProfileClient
         initialProfile={profile}
         notificationPrefsSlot={<NotificationPrefs initialPreferences={prefs} />}

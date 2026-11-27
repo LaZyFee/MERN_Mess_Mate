@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth/AuthShell";
-import Alert from "@/components/shared/Alert";
 import Button from "@/components/shared/Button";
 import PasswordInput from "@/components/auth/PasswordInput";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
@@ -50,25 +48,28 @@ function ResetForm({ token }) {
     }
   }
 
-  if (!token) {
-    return (
-      <Alert status="error" title="This link isn't valid">
-        It may have expired or already been used.{" "}
-        <Link href="/forgot-password" className="font-semibold underline">
-          Request a new link
-        </Link>
-        .
-      </Alert>
-    );
-  }
+  // Toast once per state change — never during render (showToast sets state).
+  useEffect(() => {
+    if (!token) {
+      showToast({
+        status: "error",
+        title: "This link isn't valid",
+        description: "It may have expired or already been used.",
+        duration: 8000,
+      });
+    } else if (done) {
+      showToast({
+        status: "success",
+        title: "Password updated",
+        description: "Taking you to sign in...",
+        duration: 2500,
+      });
+    }
+  }, [token, done, showToast]);
 
-  if (done) {
-    return (
-      <Alert status="success" title="Password updated">
-        Taking you to sign inâ€¦
-      </Alert>
-    );
-  }
+  if (!token) return null;
+
+  if (done) return null;
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">

@@ -138,39 +138,41 @@ export default function SupportClient({ initialTickets = [], initialHasMore = fa
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex flex-col gap-4 px-4 py-6 sm:px-6 sm:py-9">
+      <div className="rounded-3xl bg-(--brand-bg) p-5 text-(--brand-fg) sm:p-7">
         <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-xl font-extrabold text-(--tp)">
-            <LuLifeBuoy size={20} className="text-(--p)" /> Support
+          <p className="flex items-center gap-2 text-sm font-semibold text-(--brand-on)">
+            <LuLifeBuoy size={17} /> MealMate support
+          </p>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Support
           </h1>
-          <p className="text-xs text-(--tm)">Track your tickets and replies from the MealMate team.</p>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-(--brand-mute)">Track tickets and replies from the MealMate team.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="mt-5 flex items-center gap-2">
           <Button size="sm" variant="ghost" isRound ariaLabel="Refresh" isLoading={loading} onClick={() => load()}>
             <LuRefreshCw size={15} />
           </Button>
-          <Button size="sm" leftIcon={<LuPlus size={14} />} onClick={() => setCreating(true)}>New ticket</Button>
+          <Button variant="primary" size="sm" leftIcon={<LuPlus size={14} />} onClick={() => setCreating(true)}>New ticket</Button>
         </div>
       </div>
 
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {STATUS_FILTERS.map((option) => (
-          <button
-            key={option.value || "all"}
+          <Button
+            variant={status === option.value ? "primary" : "outline"}
+            size="md"
             type="button"
+            key={option.value || "all"}
             onClick={() => {
               setStatus(option.value);
               load(option.value);
             }}
             aria-pressed={status === option.value}
-            className={`min-h-11 shrink-0 rounded-[var(--r-pill)] px-4 text-xs font-semibold transition-[var(--transition)] ${status === option.value
-                ? "bg-(--p) text-(--bgs)"
-                : "border border-(--bd) bg-(--bgs) text-(--ts) hover:border-(--p) hover:text-(--p)"
-              }`}
+            className="!h-11 shrink-0 !rounded-xl !px-4"
           >
             {option.label}
-          </button>
+          </Button>
         ))}
       </div>
 

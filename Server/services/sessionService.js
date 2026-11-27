@@ -89,8 +89,12 @@ export const revokeAllSessions = async ({ userId, exceptFamilyId = null }) => {
 };
 
 /** List active sessions for the account page. */
-export const listSessions = ({ userId }) =>
+export const listSessions = ({ userId, currentFamilyId = null }) =>
     Session.find({ userId, revokedAt: null, expiresAt: { $gt: new Date() } })
         .select('familyId deviceId userAgent ip createdAt expiresAt')
         .sort({ createdAt: -1 })
-        .lean();
+        .lean()
+        .then((sessions) => sessions.map((session) => ({
+            ...session,
+            isCurrent: Boolean(currentFamilyId && session.familyId === currentFamilyId),
+        })));

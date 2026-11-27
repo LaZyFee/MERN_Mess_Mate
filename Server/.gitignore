@@ -21,10 +21,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-*.mjs
 *.ps*
 # Receipt uploads (private files, never commit)
 /uploads/
 scripts/*
 tests/*
 !scripts/checkIndexes.js
+!scripts/importSmoke.mjs
+!scripts/auditRoutes.mjs

@@ -9,6 +9,7 @@ import { LuBellRing, LuMoonStar, LuSave } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
+import Checkbox from "@/components/shared/Checkbox";
 import { useToast } from "@/components/shared/ToastProvider";
 import { inboxApi } from "@/lib/api/platform";
 
@@ -71,40 +72,22 @@ export default function NotificationPrefs({ initialPreferences }) {
         </h2>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[320px] text-left text-xs">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-(--tm)">
-              <th className="py-1 font-semibold">Type</th>
-              <th className="py-1 text-center font-semibold">In-app</th>
-              <th className="py-1 text-center font-semibold">Email</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="py-4 text-center text-(--tm)">No notification types available.</td>
-              </tr>
-            ) : (
-              entries.map(([key, value]) => (
-                <tr key={key} className="border-t border-(--bd)">
-                  <td className="min-w-0 truncate py-2 pr-2 text-(--ts)">{key}</td>
-                  {["inApp", "email"].map((channel) => (
-                    <td key={channel} className="py-2 text-center">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(value[channel])}
-                        onChange={() => toggle(key, channel)}
-                        aria-label={`${key} ${channel}`}
-                        className="size-5 accent-(--p)"
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="space-y-2">
+        <div className="hidden grid-cols-[minmax(0,1fr)_5rem_5rem] gap-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-(--tm) sm:grid">
+          <span>Notification type</span><span className="text-center">In-app</span><span className="text-center">Email</span>
+        </div>
+        {entries.length === 0 ? (
+          <p className="rounded-xl bg-(--bgm) px-3 py-4 text-center text-sm text-(--tm)">No notification types available.</p>
+        ) : entries.map(([key, value]) => (
+          <div key={key} className="grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-2 rounded-xl border border-(--bd) px-3 py-2 sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
+            <span className="min-w-0 break-words text-sm text-(--ts)">{KNOWN_TYPES.find((entry) => entry.key === key)?.label || key.replaceAll(".", " ")}</span>
+            {["inApp", "email"].map((channel) => (
+              <span key={channel} className="flex justify-center">
+                <Checkbox isChecked={Boolean(value[channel])} onChange={() => toggle(key, channel)} aria-label={`${key} ${channel}`} />
+              </span>
+            ))}
+          </div>
+        ))}
       </div>
 
       <div className="mt-4 border-t border-(--bd) pt-3">
@@ -129,7 +112,7 @@ export default function NotificationPrefs({ initialPreferences }) {
         </div>
       </div>
 
-      <Button isFullWidth className="mt-4" leftIcon={<LuSave size={14} />} isLoading={saving} isDisabled={saving} onClick={save}>
+      <Button variant="primary" isFullWidth className="mt-4" leftIcon={<LuSave size={14} />} isLoading={saving} isDisabled={saving} onClick={save}>
         Save preferences
       </Button>
     </Card>
