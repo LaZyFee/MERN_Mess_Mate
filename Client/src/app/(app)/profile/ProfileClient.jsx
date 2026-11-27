@@ -173,7 +173,7 @@ export default function ProfileClient({ initialProfile, notificationPrefsSlot = 
             onRemove={() => setAvatarFile(null)}
           />
           {avatarFile && (
-            <Button className="mt-2" size="md" isLoading={uploadingAvatar} isDisabled={uploadingAvatar || !avatarFile} onClick={uploadAvatar}>
+            <Button variant="primary" className="mt-2" size="md" isLoading={uploadingAvatar} isDisabled={uploadingAvatar || !avatarFile} onClick={uploadAvatar}>
               Upload photo
             </Button>
           )}
@@ -235,7 +235,7 @@ export default function ProfileClient({ initialProfile, notificationPrefsSlot = 
               />
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setTwoFactorSetup(null)} isDisabled={twoFactorBusy}>Cancel</Button>
-                <Button className="flex-1" isLoading={twoFactorBusy} isDisabled={twoFactorBusy} onClick={verifyTwoFactor}>Enable 2FA</Button>
+                <Button variant="primary" className="flex-1" isLoading={twoFactorBusy} isDisabled={twoFactorBusy} onClick={verifyTwoFactor}>Enable 2FA</Button>
               </div>
             </div>
           ) : (
@@ -296,7 +296,7 @@ export default function ProfileClient({ initialProfile, notificationPrefsSlot = 
               autoComplete="new-password"
             />
             {newPassword && <PasswordStrengthMeter password={newPassword} />}
-            <Button size="lg" isFullWidth isLoading={savingPassword} isDisabled={savingPassword} onClick={changePassword}>
+            <Button variant="primary" size="lg" isFullWidth isLoading={savingPassword} isDisabled={savingPassword} onClick={changePassword}>
               Update password
             </Button>
           </div>

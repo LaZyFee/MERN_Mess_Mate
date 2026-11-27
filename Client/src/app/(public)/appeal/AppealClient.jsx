@@ -78,6 +78,7 @@ export default function AppealClient() {
         )}
         <Button
           type="submit"
+          variant="primary"
           size="lg"
           isFullWidth
           isLoading={state.status === "sending"}

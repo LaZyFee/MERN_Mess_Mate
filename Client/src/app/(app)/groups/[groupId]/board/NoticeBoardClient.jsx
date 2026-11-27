@@ -174,7 +174,7 @@ export default function NoticeBoardClient({ groupId, initialNotes = [], canManag
           <Button size="sm" variant="ghost" isRound ariaLabel="Refresh" isLoading={loading} onClick={load}>
             <LuRefreshCw size={14} />
           </Button>
-          <Button size="sm" leftIcon={<LuPlus size={14} />} onClick={() => setOpen(true)}>New notice</Button>
+          <Button variant="primary" size="sm" leftIcon={<LuPlus size={14} />} onClick={() => setOpen(true)}>New notice</Button>
         </div>
       </div>
 
@@ -203,7 +203,7 @@ export default function NoticeBoardClient({ groupId, initialNotes = [], canManag
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)} isDisabled={saving}>Cancel</Button>
-            <Button isLoading={saving} isDisabled={saving} onClick={create}>Publish</Button>
+            <Button variant="primary" isLoading={saving} isDisabled={saving} onClick={create}>Publish</Button>
           </div>
         }
       >

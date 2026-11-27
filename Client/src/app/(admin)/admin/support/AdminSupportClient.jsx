@@ -193,7 +193,7 @@ export default function AdminSupportClient({ initialTickets = [], initialCursor 
             >
               Overdue
             </Button>
-            <Button type="submit" size="sm" isLoading={loading} leftIcon={<LuSearch size={13} />} ariaLabel="Search queue">
+            <Button type="submit" variant="primary" size="sm" isLoading={loading} leftIcon={<LuSearch size={13} />} ariaLabel="Search queue">
               Go
             </Button>
             <Button type="button" size="sm" variant="ghost" isRound ariaLabel="Reload queue" onClick={() => load(filters)}>

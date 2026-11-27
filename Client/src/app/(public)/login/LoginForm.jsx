@@ -57,7 +57,7 @@ function TwoFAStep({ challengeToken, onBack }) {
         <Button variant="outline" onClick={onBack} isDisabled={loading} className="flex-1">
           {t("auth.login2fa.back")}
         </Button>
-        <Button type="submit" isLoading={loading} isDisabled={loading} className="flex-1">
+        <Button type="submit" variant="primary" isLoading={loading} isDisabled={loading} className="flex-1">
           {t("auth.login2fa.verify")}
         </Button>
       </div>

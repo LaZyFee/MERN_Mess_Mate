@@ -204,7 +204,7 @@ export default function BudgetsPanel({ groupId, categories = [], canEdit = false
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setEditing(null)} isDisabled={saving}>{t("shell.cancel")}</Button>
-            <Button onClick={save} isLoading={saving} isDisabled={saving}>{t("shell.save")}</Button>
+            <Button variant="primary" onClick={save} isLoading={saving} isDisabled={saving}>{t("shell.save")}</Button>
           </div>
         }
       >

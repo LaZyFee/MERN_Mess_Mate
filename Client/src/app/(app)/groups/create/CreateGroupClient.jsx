@@ -150,7 +150,7 @@ export default function CreateGroupPage() {
               label="Enable meals by default for new members"
             />
 
-            <Button type="submit" isFullWidth isLoading={loading} isDisabled={loading || selectedSlots.length === 0}>
+            <Button type="submit" variant="primary" isFullWidth isLoading={loading} isDisabled={loading || selectedSlots.length === 0}>
               Create Group
             </Button>
           </div>

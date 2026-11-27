@@ -61,7 +61,7 @@ export default function AdminAuditClient({ initialEvents = [] }) {
             helperText="Exact action key; leave empty for the latest 100 events."
           />
         </div>
-        <Button type="submit" isLoading={loading} leftIcon={<LuSearch size={14} />} ariaLabel="Filter audit feed">
+        <Button type="submit" variant="primary" isLoading={loading} leftIcon={<LuSearch size={14} />} ariaLabel="Filter audit feed">
           Filter
         </Button>
         <Button type="button" variant="ghost" isRound ariaLabel="Reload audit feed" onClick={() => load(action.trim())}>

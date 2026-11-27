@@ -101,7 +101,7 @@ export default function AdminGroupsClient({ initialGroups = [], initialQuery = "
             helperText="Archive keeps every ledger row; it only removes the group from the app."
           />
         </div>
-        <Button type="submit" isLoading={loading} leftIcon={<LuSearch size={14} />} ariaLabel="Search groups">
+        <Button type="submit" variant="primary" isLoading={loading} leftIcon={<LuSearch size={14} />} ariaLabel="Search groups">
           Search
         </Button>
         <Button type="button" variant="ghost" isRound ariaLabel="Reload groups" onClick={() => load(query.trim())}>

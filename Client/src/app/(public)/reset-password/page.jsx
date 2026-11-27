@@ -26,7 +26,7 @@ export default async function VerifyEmailPage({ params }) {
         ) : (
           <LuCircleX size={48} className="text-(--danger)" aria-hidden="true" />
         )}
-        <Button href={success ? "/login" : "/register"} size="lg" isFullWidth>
+        <Button variant="primary" href={success ? "/login" : "/register"} size="lg" isFullWidth>
           {success ? "Go to sign in" : "Back to sign up"}
         </Button>
       </div>

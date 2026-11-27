@@ -68,7 +68,7 @@ function JoinForm({ initialCode }) {
           helperText="Ask your group admin for the Group ID"
           autoComplete="off"
         />
-        <Button type="submit" isFullWidth isLoading={loading} isDisabled={loading} leftIcon={<LuLogIn size={16} />}>
+        <Button type="submit" variant="primary" isFullWidth isLoading={loading} isDisabled={loading} leftIcon={<LuLogIn size={16} />}>
           Join Group
         </Button>
       </div>

@@ -79,7 +79,7 @@ function NewTicketModal({ isOpen, onClose, groups, onCreated }) {
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} isDisabled={saving}>Cancel</Button>
-          <Button onClick={submit} isLoading={saving} isDisabled={saving || (hasTurnstile() && !captchaToken)}>Create ticket</Button>
+          <Button variant="primary" onClick={submit} isLoading={saving} isDisabled={saving || (hasTurnstile() && !captchaToken)}>Create ticket</Button>
         </div>
       }
     >
@@ -186,7 +186,7 @@ export default function SupportClient({ initialTickets = [], initialHasMore = fa
           <LuTicket size={26} className="mx-auto mb-2 text-(--tl)" />
           <p className="text-sm font-semibold text-(--tp)">No tickets yet</p>
           <p className="mt-1 text-xs text-(--tm)">Open a ticket if something looks wrong with your meals, money or account.</p>
-          <Button className="mt-3" size="sm" onClick={() => setCreating(true)} leftIcon={<LuPlus size={14} />}>New ticket</Button>
+          <Button variant="primary" className="mt-3" size="sm" onClick={() => setCreating(true)} leftIcon={<LuPlus size={14} />}>New ticket</Button>
         </Card>
       ) : (
         <ul className="list-none space-y-2">

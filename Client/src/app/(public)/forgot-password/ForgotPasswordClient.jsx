@@ -53,7 +53,7 @@ export default function ForgotPasswordClient() {
             autoComplete="email"
             inputMode="email"
           />
-          <Button type="submit" size="lg" isFullWidth isLoading={loading} isDisabled={loading || !email.trim()}>
+          <Button type="submit" variant="primary" size="lg" isFullWidth isLoading={loading} isDisabled={loading || !email.trim()}>
             Send reset link
           </Button>
         </form>

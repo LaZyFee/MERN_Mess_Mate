@@ -94,7 +94,7 @@ function ResetForm({ token }) {
         errorMessage={errors.confirm}
         autoComplete="new-password"
       />
-      <Button type="submit" size="lg" isFullWidth isLoading={loading} isDisabled={loading}>
+      <Button type="submit" variant="primary" size="lg" isFullWidth isLoading={loading} isDisabled={loading}>
         Save new password
       </Button>
     </form>

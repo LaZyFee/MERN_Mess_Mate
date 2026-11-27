@@ -133,7 +133,7 @@ export default function AdminUsersClient({ initialUsers = [], initialCursor = nu
             helperText="Sensitive reads are audit-logged."
           />
         </div>
-        <Button type="submit" isLoading={loading} leftIcon={<LuSearch size={14} />} ariaLabel="Search users">
+        <Button type="submit" variant="primary" isLoading={loading} leftIcon={<LuSearch size={14} />} ariaLabel="Search users">
           Search
         </Button>
         <Button type="button" variant="ghost" isRound ariaLabel="Reload users" onClick={() => load(query.trim())}>
