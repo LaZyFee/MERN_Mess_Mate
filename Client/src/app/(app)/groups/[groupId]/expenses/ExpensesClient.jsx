@@ -19,25 +19,13 @@ import { useToast } from "@/components/shared/ToastProvider";
 import { useGroupStore } from "@/lib/store/groupStore";
 import { useAuthStore } from "@/lib/store/authStore";
 import { expensesApi } from "@/lib/api/expenses";
+import { useT } from "@/lib/i18n/LangProvider";
 import ExpenseCard from "./ExpenseCard";
 import ExpenseDraftForm from "./ExpenseDraftForm";
 import LegacyExpensePanel from "./LegacyExpensePanel";
 import ExpenseImportWizard from "./ExpenseImportWizard";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "draft", label: "Draft" },
-  { value: "submitted", label: "Submitted" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "reversed", label: "Reversed" },
-];
-
-const PAYABLE_OPTIONS = [
-  { value: "", label: "All expenses" },
-  { value: "true", label: "Payable only" },
-];
-
+const STATUS_VALUES = ["", "draft", "submitted", "approved", "rejected", "reversed"];
 const TREASURER_ROLES = ["owner", "manager", "treasurer"];
 
 export default function ExpensesClient({
@@ -47,6 +35,7 @@ export default function ExpensesClient({
   initialCategories = [],
   initialMemberships = [],
 }) {
+  const t = useT();
   const { showToast } = useToast();
   const storeRole = useGroupStore((s) => s.myRole);
   const userId = useAuthStore((s) => s.user?._id);
@@ -68,6 +57,18 @@ export default function ExpensesClient({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+
+  const statusOptions = useMemo(
+    () => STATUS_VALUES.map((value) => ({ value, label: value ? t(`exp.${value}`) : t("exp.allStatuses") })),
+    [t],
+  );
+  const payableOptions = useMemo(
+    () => [
+      { value: "", label: t("exp.allExpenses") },
+      { value: "true", label: t("exp.payableOnly") },
+    ],
+    [t],
+  );
 
   const filters = useMemo(
     () => ({ status, costPeriod, payable: payable === "true" ? true : "", limit: 30 }),
@@ -91,7 +92,7 @@ export default function ExpensesClient({
       } catch (error) {
         showToast({
           status: "error",
-          title: "Could not load expenses",
+          title: t("exp.couldNotLoad"),
           description: error?.data?.msg || error?.message,
         });
       } finally {
@@ -99,7 +100,7 @@ export default function ExpensesClient({
         setLoadingMore(false);
       }
     },
-    [groupId, filters, nextCursor, showToast],
+    [groupId, filters, nextCursor, showToast, t],
   );
 
   const resetFilters = () => {
@@ -118,9 +119,9 @@ export default function ExpensesClient({
     <div className="min-w-0 space-y-4">
       <Tabs value={tab} onChange={setTab} variant="solid-rounded" size="lg" isFitted>
         <TabList className="overflow-x-auto">
-          <Tab value="list">All expenses</Tab>
-          <Tab value="new">New draft</Tab>
-          {canTreasurer && <Tab value="advanced">Advanced</Tab>}
+          <Tab value="list">{t("exp.all")}</Tab>
+          <Tab value="new">{t("exp.newDraft")}</Tab>
+          {canTreasurer && <Tab value="advanced">{t("exp.advanced")}</Tab>}
         </TabList>
 
         <TabPanels className="mt-4">
@@ -130,22 +131,22 @@ export default function ExpensesClient({
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <Select
                     size="lg"
-                    label="Status"
-                    options={STATUS_OPTIONS}
+                    label={t("exp.status")}
+                    options={statusOptions}
                     value={status}
                     onChange={(event) => setStatus(event.target.value)}
                   />
                   <Input
                     size="lg"
                     type="month"
-                    label="Cost period"
+                    label={t("exp.costPeriod")}
                     value={costPeriod}
                     onChange={(event) => setCostPeriod(event.target.value)}
                   />
                   <Select
                     size="lg"
-                    label="Payment"
-                    options={PAYABLE_OPTIONS}
+                    label={t("exp.payment")}
+                    options={payableOptions}
                     value={payable}
                     onChange={(event) => setPayable(event.target.value)}
                   />
@@ -159,7 +160,7 @@ export default function ExpensesClient({
                     isLoading={loading}
                     onClick={() => load(true)}
                   >
-                    Apply filters
+                    {t("exp.applyFilters")}
                   </Button>
                   {filtersActive && (
                     <Button
@@ -170,7 +171,7 @@ export default function ExpensesClient({
                         resetFilters();
                       }}
                     >
-                      Clear
+                      {t("exp.clear")}
                     </Button>
                   )}
                 </div>
@@ -186,13 +187,13 @@ export default function ExpensesClient({
                 <Card variant="outlined">
                   <div className="flex flex-col items-center py-8 text-center">
                     <LuReceipt size={28} className="mb-3 text-(--tm)" />
-                    <p className="font-semibold text-(--tp)">No expenses found</p>
+                    <p className="font-semibold text-(--tp)">{t("exp.none")}</p>
                     <p className="mt-1 text-sm text-(--tm)">
-                      {filtersActive ? "Try changing the filters." : "Create the first draft to get started."}
+                      {filtersActive ? t("exp.noneFiltered") : t("exp.noneEmpty")}
                     </p>
                     {!filtersActive && (
                       <Button size="md" className="mt-4" leftIcon={<LuPlus size={15} />} onClick={() => setTab("new")}>
-                        New draft
+                        {t("exp.newDraft")}
                       </Button>
                     )}
                   </div>
@@ -219,12 +220,12 @@ export default function ExpensesClient({
                   isLoading={loading}
                   onClick={() => load(true)}
                 >
-                  Refresh
+                  {t("exp.refresh")}
                 </Button>
                 <div className="flex items-center gap-2">
                   {canTreasurer && (
                     <Button variant="outline" size="sm" leftIcon={<LuFileSpreadsheet size={13} />} onClick={() => setImportOpen(true)}>
-                      Import
+                      {t("exp.import")}
                     </Button>
                   )}
                   {hasMore && (
@@ -234,7 +235,7 @@ export default function ExpensesClient({
                       isLoading={loadingMore}
                       onClick={() => load(false)}
                     >
-                      Load more
+                      {t("shell.loadMore")}
                     </Button>
                   )}
                 </div>
@@ -244,7 +245,7 @@ export default function ExpensesClient({
 
           <TabPanel value="new">
             <Card padding="md">
-              <h2 className="mb-3 text-base font-bold text-(--tp)">Expense draft</h2>
+              <h2 className="mb-3 text-base font-bold text-(--tp)">{t("exp.draftForm")}</h2>
               <ExpenseDraftForm
                 groupId={groupId}
                 categories={initialCategories}

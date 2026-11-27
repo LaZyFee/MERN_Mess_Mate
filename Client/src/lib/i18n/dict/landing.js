@@ -3,6 +3,10 @@
 import { registerDictionary } from "@/lib/i18n/registry";
 
 registerDictionary("en", "landing", {
+  // Public navigation
+  "nav.howItWorks": "How it works",
+  "nav.features": "Features",
+
   // Hero
   "hero.badge": "Built for Bangladeshi messes",
   "hero.title.part1": "Every meal counted.",
@@ -95,6 +99,10 @@ registerDictionary("en", "landing", {
 });
 
 registerDictionary("bn", "landing", {
+  // Public navigation
+  "nav.howItWorks": "যেভাবে কাজ করে",
+  "nav.features": "ফিচার",
+
   // Hero
   "hero.badge": "বাংলাদেশি মেসের জন্য তৈরি",
   "hero.title.part1": "প্রতিটি মিল গোনা হয়েছে",

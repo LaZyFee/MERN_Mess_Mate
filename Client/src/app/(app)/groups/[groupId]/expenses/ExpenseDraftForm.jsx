@@ -7,7 +7,9 @@ import Button from "@/components/shared/Button";
 import Checkbox from "@/components/shared/Checkbox";
 import Input from "@/components/shared/Input";
 import { useToast } from "@/components/shared/ToastProvider";
-import { parseTaka, dhakaToday, toMonthString } from "@/lib/utils/format";
+import { dhakaToday, toMonthString } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 import { expensesApi } from "@/lib/api/expenses";
 import ExpenseLineEditor from "./ExpenseLineEditor";
 import { EMPTY_LINE, memberKey, memberName } from "./expenseHelpers";
@@ -26,8 +28,12 @@ function emptyDraft(myMembershipId = "") {
   };
 }
 
-function serializeLine(line) {
-  const amount = parseTaka(line.amount);
+/**
+ * Serialize a UI line (Taka strings) into the API line shape (integer poisha).
+ * `toPoisha` is the strict parser from `useMoney()` — it returns an integer.
+ */
+function serializeLine(line, toPoisha) {
+  const amount = toPoisha(line.amount);
   const out = { categoryId: line.categoryId, amount };
   if (line.description?.trim()) out.description = line.description.trim();
   if (line.splitMode) out.splitMode = line.splitMode;
@@ -35,8 +41,8 @@ function serializeLine(line) {
   if (beneficiaries.length) out.beneficiaries = beneficiaries;
   if (line.splitMode === "fixed_amounts") {
     out.fixedAmounts = beneficiaries
-      .filter((id) => parseTaka(line.fixedAmounts?.[id]) > 0)
-      .map((id) => ({ membershipId: id, amount: parseTaka(line.fixedAmounts[id]) }));
+      .filter((id) => toPoisha(line.fixedAmounts?.[id]) > 0)
+      .map((id) => ({ membershipId: id, amount: toPoisha(line.fixedAmounts[id]) }));
   }
   if (line.splitMode === "weighted") {
     out.weights = beneficiaries
@@ -51,19 +57,26 @@ function serializeLine(line) {
   return out;
 }
 
-function validate(draft) {
-  if (!draft.date) return "Pick the expense date.";
-  const lines = draft.lines.map(serializeLine);
-  if (lines.some((line) => !line.categoryId)) return "Every line needs a category.";
-  if (lines.some((line) => line.amount <= 0)) return "Every line needs a positive ৳ amount.";
-  if (lines.some((line) => line.splitMode === "fixed_amounts" && !line.fixedAmounts.length)) {
-    return "Fixed-amount lines need at least one member amount.";
+function validate(draft, toPoisha, parse, t, errorText) {
+  if (!draft.date) return t("exp.err.date");
+  // Every line amount must parse as Taka (≤2 decimals) and be > 0.
+  for (const line of draft.lines) {
+    const result = parse(line.amount);
+    if (!result.ok) return `${t("exp.line")} ${t("exp.amount")}: ${errorText(result.reason)}`;
   }
-  if (!draft.payerId) return "Select who paid — the payer is required.";
+  const lines = draft.lines.map((line) => serializeLine(line, toPoisha));
+  if (lines.some((line) => !line.categoryId)) return t("exp.err.category");
+  if (lines.some((line) => line.amount <= 0)) return t("exp.err.amount");
+  if (lines.some((line) => line.splitMode === "fixed_amounts" && !line.fixedAmounts.length)) {
+    return t("exp.err.fixed");
+  }
+  if (!draft.payerId) return t("exp.err.payer");
   return null;
 }
 
 export default function ExpenseDraftForm({ groupId, categories, memberships, myMembershipId = "", onCreated }) {
+  const t = useT();
+  const { toPoisha, parse, errorText } = useMoney();
   const [draft, setDraft] = useState(() => emptyDraft(myMembershipId));
   const [saving, setSaving] = useState(false);
   const [warnings, setWarnings] = useState([]);
@@ -76,12 +89,12 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
   const togglePayer = (key) => update({ payerId: key });
 
   const submit = async () => {
-    const error = validate(draft);
+    const error = validate(draft, toPoisha, parse, t, errorText);
     if (error) {
-      showToast({ status: "warning", title: "Check the form", description: error });
+      showToast({ status: "warning", title: t("exp.checkForm"), description: error });
       return;
     }
-    const lines = draft.lines.map(serializeLine);
+    const lines = draft.lines.map((line) => serializeLine(line, toPoisha));
     const total = lines.reduce((sum, line) => sum + line.amount, 0);
     const payload = {
       date: `${draft.date}T00:00:00.000Z`,
@@ -98,7 +111,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
     setWarnings([]);
     try {
       const res = await expensesApi.createDraft(groupId, payload);
-      showToast({ status: "success", title: res?.msg || "Expense draft created" });
+      showToast({ status: "success", title: res?.msg || t("exp.draftCreated") });
       setWarnings(res?.duplicateWarnings || []);
       setDraft(emptyDraft(myMembershipId));
       onCreated?.(res?.expense);
@@ -107,7 +120,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
       const description = Array.isArray(fieldErrors) && fieldErrors.length
         ? fieldErrors.map((e) => `${e.field}: ${e.message}`).join(" · ")
         : ex?.data?.msg || ex?.message;
-      showToast({ status: "error", title: "Could not create draft", description });
+      showToast({ status: "error", title: t("exp.couldNotCreate"), description });
     } finally {
       setSaving(false);
     }
@@ -118,7 +131,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
       {warnings.length > 0 && (
         <Alert
           status="warning"
-          title="Possible duplicate — draft still created"
+          title={t("exp.duplicateTitle")}
           isDismissible
           onDismiss={() => setWarnings([])}
         >
@@ -127,7 +140,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
               <li key={index}>
                 {typeof warning === "string"
                   ? warning
-                  : `${warning.message || warning.reason || "Similar expense"}${warning.expenseId ? ` (${warning.expenseId})` : ""}`}
+                  : `${warning.message || warning.reason || t("exp.similarExpense")}${warning.expenseId ? ` (${warning.expenseId})` : ""}`}
               </li>
             ))}
           </ul>
@@ -136,7 +149,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input
-          label="Date"
+          label={t("exp.date")}
           isRequired
           size="lg"
           type="date"
@@ -144,38 +157,38 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
           onChange={(event) => update({ date: event.target.value })}
         />
         <Input
-          label="Cost period"
+          label={t("exp.costPeriod")}
           size="lg"
           type="month"
           value={draft.costPeriod}
           onChange={(event) => update({ costPeriod: event.target.value })}
         />
         <Input
-          label="Supplier"
+          label={t("exp.supplier")}
           size="lg"
-          placeholder="Bazar, LPG supplier…"
+          placeholder={t("exp.supplierPlaceholder")}
           value={draft.supplierName}
           onChange={(event) => update({ supplierName: event.target.value })}
         />
         <Input
-          label="Receipt / TrxID"
+          label={t("exp.receiptReference")}
           size="lg"
-          placeholder="Invoice or reference"
+          placeholder={t("exp.receiptReferencePlaceholder")}
           value={draft.receiptReference}
           onChange={(event) => update({ receiptReference: event.target.value })}
         />
       </div>
       <Input
-        label="Note"
+        label={t("exp.note")}
         size="lg"
-        placeholder="What is this expense for?"
+        placeholder={t("exp.notePlaceholder")}
         value={draft.description}
         onChange={(event) => update({ description: event.target.value })}
       />
 
       <div className="rounded-lg border border-(--bd) bg-(--bgm) p-3">
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">
-          <LuTriangleAlert size={13} /> Paid by <span className="text-(--danger)">*</span>
+          <LuTriangleAlert size={13} /> {t("exp.paidBy")} <span className="text-(--danger)">*</span>
         </p>
         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
           {payerOptions.map((option) => (
@@ -188,13 +201,11 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
             />
           ))}
         </div>
-        <p className="mt-2 text-[11px] text-(--tm)">
-          Required. The full amount is recorded against this member's pocket; for payable expenses it becomes a supplier debt.
-        </p>
+        <p className="mt-2 text-[11px] text-(--tm)">{t("exp.payerHelp")}</p>
       </div>
 
       <Checkbox
-        label="Payable to supplier (not yet paid)"
+        label={t("exp.payableToggle")}
         isChecked={draft.isPayable}
         onChange={() => update({ isPayable: !draft.isPayable })}
       />
@@ -208,7 +219,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
 
       <div className="sticky bottom-0 -mx-4 border-t border-(--bd) bg-(--bgs)/95 px-4 py-3 backdrop-blur-sm md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:backdrop-blur-none">
         <Button size="lg" isFullWidth isLoading={saving} isDisabled={saving || !draft.payerId} onClick={submit}>
-          Save draft
+          {t("exp.saveDraft")}
         </Button>
       </div>
     </div>

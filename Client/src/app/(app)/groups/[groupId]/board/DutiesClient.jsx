@@ -16,7 +16,8 @@ import Skeleton from "@/components/shared/Skeleton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useToast } from "@/components/shared/ToastProvider";
 import { routinesApi } from "@/lib/api/routines";
-import { formatDay, formatPoisha, toMonthString, addMonths, monthRange } from "@/lib/utils/format";
+import { formatDay, toMonthString, addMonths, monthRange } from "@/lib/utils/format";
+import { useMoney } from "@/lib/hooks/useMoney";
 import { onRealtime } from "@/components/realtime/RealtimeProvider";
 import { dutyAreaLabel, memberLabel } from "./boardHelpers";
 
@@ -48,6 +49,7 @@ function dutiesInMonth(duties, month) {
 }
 
 export default function DutiesClient({ groupId, memberships = [] }) {
+  const { fmt } = useMoney();
   const { showToast } = useToast();
   const [month, setMonth] = useState(() => toMonthString(new Date()));
   const [duties, setDuties] = useState([]);
@@ -295,7 +297,7 @@ export default function DutiesClient({ groupId, memberships = [] }) {
           <p className="text-xs text-(--tm)">
             Duty: <span className="font-semibold text-(--ts)">{dutyAreaLabel(swapFor)}</span>
             {swapFor?.localDate ? ` · ${formatDay(swapFor.localDate)}` : ""}
-            {swapFor?.estCostPoisha ? ` · ~${formatPoisha(swapFor.estCostPoisha)}` : ""}
+            {swapFor?.estCostPoisha ? ` · ~${fmt(swapFor.estCostPoisha)}` : ""}
           </p>
           <Select
             size="lg"

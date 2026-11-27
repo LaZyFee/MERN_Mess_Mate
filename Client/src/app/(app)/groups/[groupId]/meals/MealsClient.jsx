@@ -25,13 +25,10 @@ import {
   formatMonth,
   monthRange,
 } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 
-const SLOT_LABELS = {
-  breakfast: "Breakfast",
-  lunch: "Lunch",
-  snacks: "Snacks",
-  dinner: "Dinner",
-};
+const SLOT_KEYS = ["breakfast", "lunch", "snacks", "dinner"];
 
 const PORTIONS = [
   { label: "1/4", value: 250 },
@@ -64,6 +61,8 @@ export default function MealsClient({
   initialMemberships,
   initialPolicies,
 }) {
+  const t = useT();
+  const { lang, n } = useMoney();
   const [month, setMonth] = useState(initialMonth);
   const [selectedDate, setSelectedDate] = useState(dhakaToday());
   const [meals, setMeals] = useState(initialMeals ?? []);
@@ -75,8 +74,8 @@ export default function MealsClient({
     () =>
       (initialGroup?.mealSlots?.length
         ? initialGroup.mealSlots
-        : ["breakfast", "lunch", "snacks", "dinner"]
-      ).filter((slot) => SLOT_LABELS[slot]),
+        : SLOT_KEYS
+      ).filter((slot) => SLOT_KEYS.includes(slot)),
     [initialGroup],
   );
 
@@ -151,7 +150,7 @@ export default function MealsClient({
     if (isPastCutoff) {
       setToast({
         type: "error",
-        message: `Editing is locked after ${cutoffHour}:00 Dhaka time`,
+        message: t("meals.lockedToast", { hour: cutoffHour }),
       });
       return;
     }
@@ -159,11 +158,11 @@ export default function MealsClient({
     try {
       await mealsApi.upsert(groupId, { date: selectedDate, slots: draft });
       await refresh(month);
-      setToast({ type: "success", message: "Meal entry saved" });
+      setToast({ type: "success", message: t("meals.saved") });
     } catch (error) {
       setToast({
         type: "error",
-        message: error?.response?.data?.msg || error?.message || "Could not save meal entry",
+        message: error?.response?.data?.msg || error?.message || t("meals.couldNotSave"),
       });
     } finally {
       setSaving(false);
@@ -175,8 +174,8 @@ export default function MealsClient({
       setToast({
         type: "error",
         message: ownMeal?._id
-          ? `Editing is locked after ${cutoffHour}:00 Dhaka time`
-          : "No saved meal entry for this day",
+          ? t("meals.lockedToast", { hour: cutoffHour })
+          : t("meals.noEntry"),
       });
       return;
     }
@@ -184,13 +183,13 @@ export default function MealsClient({
     try {
       await mealsApi.deleteEntry(ownMeal._id);
       await refresh(month);
-      setToast({ type: "success", message: "Meal entry deleted" });
+      setToast({ type: "success", message: t("meals.deleted") });
     } catch (error) {
       setToast({
         type: error?.status === 410 ? "warning" : "error",
         message: error?.status === 410
-          ? "This entry can no longer be deleted — use the current meal grid to adjust today's meals instead."
-          : error?.message || "Could not delete meal entry",
+          ? t("meals.gone")
+          : error?.message || t("meals.couldNotDelete"),
       });
     } finally {
       setDeleting(false);
@@ -217,15 +216,15 @@ export default function MealsClient({
         header={
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-(--tm)">Monthly meals</p>
-              <h2 className="truncate text-lg font-bold text-(--tp)">{formatMonth(month)}</h2>
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--tm)">{t("meals.monthlyMeals")}</p>
+              <h2 className="truncate text-lg font-bold text-(--tp)">{formatMonth(month, lang)}</h2>
             </div>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="lg"
                 isRound
-                ariaLabel="Previous month"
+                ariaLabel={t("meals.prevMonth")}
                 onClick={() => changeMonth(addMonths(month, -1))}
               >
                 <LuChevronLeft size={18} />
@@ -234,7 +233,7 @@ export default function MealsClient({
                 variant="ghost"
                 size="lg"
                 isRound
-                ariaLabel="Next month"
+                ariaLabel={t("meals.nextMonth")}
                 onClick={() => changeMonth(addMonths(month, 1))}
               >
                 <LuChevronRight size={18} />
@@ -248,7 +247,7 @@ export default function MealsClient({
             <LuCalendarDays size={18} className="text-(--p)" />
             <Input
               type="month"
-              aria-label="Meal month"
+              aria-label={t("meals.mealMonth")}
               value={month}
               onChange={(event) => changeMonth(event.target.value)}
               className="min-w-0"
@@ -257,7 +256,7 @@ export default function MealsClient({
               variant="outline"
               size="lg"
               isRound
-              ariaLabel="Refresh meals"
+              ariaLabel={t("meals.refresh")}
               onClick={() => refresh()}
             >
               <LuRefreshCw size={18} />
@@ -267,7 +266,7 @@ export default function MealsClient({
           <div
             className="flex gap-2 overflow-x-auto pb-1"
             role="list"
-            aria-label="Days in selected month"
+            aria-label={t("meals.daysAria")}
           >
             {dateOptions.map((date) => (
               <button
@@ -281,12 +280,12 @@ export default function MealsClient({
                 }`}
               >
                 <span className="block text-xs">
-                  {new Intl.DateTimeFormat("en-GB", {
+                  {new Intl.DateTimeFormat(lang === "bn" ? "bn-BD" : "en-GB", {
                     weekday: "short",
                     timeZone: "Asia/Dhaka",
                   }).format(new Date(`${date}T12:00:00+06:00`))}
                 </span>
-                <span className="block text-sm font-bold">{Number(date.slice(-2))}</span>
+                <span className="block text-sm font-bold">{n(Number(date.slice(-2)))}</span>
               </button>
             ))}
           </div>
@@ -300,11 +299,11 @@ export default function MealsClient({
             <Card key={slot} variant="outlined" padding="sm">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-(--tp)">{SLOT_LABELS[slot]}</h3>
+                  <h3 className="font-bold text-(--tp)">{t(`meals.slot.${slot}`)}</h3>
                   {value.state === "consumed" && (
                     <span className="flex items-center gap-1 text-xs font-semibold text-(--p)">
                       <LuCheck size={14} />
-                      {PORTIONS.find((item) => item.value === value.portionSubunits)?.label || "Set"}
+                      {PORTIONS.find((item) => item.value === value.portionSubunits)?.label || t("meals.set")}
                     </span>
                   )}
                 </div>
@@ -314,7 +313,7 @@ export default function MealsClient({
                     size="lg"
                     onClick={() => setSlot(slot, { state: "unknown" })}
                   >
-                    Unknown
+                    {t("meals.unknown")}
                   </Button>
                   <Button
                     variant={value.state === "confirmed_zero" ? "secondary" : "outline"}
@@ -322,10 +321,10 @@ export default function MealsClient({
                     leftIcon={<LuMinus size={16} />}
                     onClick={() => setSlot(slot, { state: "confirmed_zero", portionSubunits: 0 })}
                   >
-                    Absent
+                    {t("meals.absent")}
                   </Button>
                 </div>
-                <div className="grid grid-cols-4 gap-1" aria-label={`${SLOT_LABELS[slot]} portions`}>
+                <div className="grid grid-cols-4 gap-1" aria-label={t("meals.portionsAria", { slot: t(`meals.slot.${slot}`) })}>
                   {PORTIONS.map((portion) => (
                     <button
                       key={portion.value}
@@ -363,7 +362,7 @@ export default function MealsClient({
       {isPastCutoff && (
         <div className="flex min-h-11 items-center gap-2 rounded-xl border border-(--warning)/30 bg-(--warning)/10 px-3 text-sm font-semibold text-(--warning)">
           <LuLockKeyhole size={16} />
-          Meal edits are locked after {cutoffHour}:00 Dhaka time.
+          {t("meals.lockedAfter", { hour: cutoffHour })}
         </div>
       )}
 
@@ -391,7 +390,7 @@ export default function MealsClient({
               isRound
               isLoading={deleting}
               isDisabled={isPastCutoff}
-              ariaLabel="Delete meal entry"
+              ariaLabel={t("meals.deleteEntry")}
               onClick={deleteOwnEntry}
             >
               <LuTrash2 size={18} />
@@ -405,7 +404,7 @@ export default function MealsClient({
             isDisabled={isPastCutoff}
             onClick={save}
           >
-            Save meal entry
+            {t("meals.saveEntry")}
           </Button>
         </div>
       </div>

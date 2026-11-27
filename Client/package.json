@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start -p 5174",
     "lint": "eslint .",
+    "verify:money": "node scripts/verify-money.mjs",
     "audit:colors": "powershell -NoProfile -Command \"Get-ChildItem src -Recurse -Include *.jsx,*.js,*.css | Where-Object { $_.Name -notin @('globals.css') } | Select-String -Pattern '#[0-9a-fA-F]{3,8}\\b|rgba?\\(|hsla?\\('\"",
     "audit:svg": "powershell -NoProfile -Command \"Get-ChildItem src,public -Recurse -Include *.jsx,*.js,*.html | Select-String -Pattern '<svg|\\.svg'\""
   },

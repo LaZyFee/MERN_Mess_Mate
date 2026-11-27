@@ -13,7 +13,7 @@ import Modal from "@/components/modals/Modal";
 import ModalStepper from "@/components/shared/ModalStepper";
 import { useToast } from "@/components/shared/ToastProvider";
 import { expensesApi } from "@/lib/api/expenses";
-import { formatPoisha } from "@/lib/utils/format";
+import { useMoney } from "@/lib/hooks/useMoney";
 
 const STEPS = [
   { id: 1, label: "Upload" },
@@ -24,6 +24,7 @@ const STEPS = [
 const MAX_BYTES = 5 * 1024 * 1024;
 
 export default function ExpenseImportWizard({ isOpen, onClose, groupId, onImported }) {
+  const { fmt } = useMoney();
   const { showToast } = useToast();
   const [step, setStep] = useState(1);
   const [file, setFile] = useState(null);
@@ -156,7 +157,7 @@ export default function ExpenseImportWizard({ isOpen, onClose, groupId, onImport
             </div>
             <div className="rounded-lg bg-(--bgm) p-2 text-center">
               <p className="text-[10px] uppercase text-(--tm)">Total</p>
-              <p className="text-sm font-bold tabular-nums text-(--tp)">{formatPoisha(preview.stats?.totalPoisha ?? 0)}</p>
+              <p className="text-sm font-bold tabular-nums text-(--tp)">{fmt(preview.stats?.totalPoisha ?? 0)}</p>
             </div>
           </div>
 
@@ -180,7 +181,7 @@ export default function ExpenseImportWizard({ isOpen, onClose, groupId, onImport
                   <span className="min-w-0 truncate text-(--ts)">
                     {row.date} · {row.supplierName || "—"}
                   </span>
-                  <span className="shrink-0 font-semibold tabular-nums text-(--tp)">{formatPoisha(row.amountPoisha)}</span>
+                  <span className="shrink-0 font-semibold tabular-nums text-(--tp)">{fmt(row.amountPoisha)}</span>
                 </li>
               ))}
               {(preview.toCreate || []).length === 0 && (

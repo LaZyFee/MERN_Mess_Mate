@@ -41,6 +41,12 @@ const TABS = [
   { key: "more", label: "More", icon: LuMenu, path: "/more" },
 ];
 
+/** Translate a tab label, falling back to the English literal. */
+function tabLabel(t, key, fallback) {
+  const translated = t(`group.tab.${key}`);
+  return translated === `group.tab.${key}` ? fallback : translated;
+}
+
 export default function GroupShell({ initialGroup, groupId, children }) {
   const { t } = useLang();
   const router = useRouter();
@@ -97,7 +103,7 @@ export default function GroupShell({ initialGroup, groupId, children }) {
           <button
             onClick={() => router.push("/")}
             className="bg-none border-0 cursor-pointer [color:var(--tm)] flex items-center p-0 [min-height:44px] [min-width:44px] justify-center"
-            aria-label="Back to home"
+            aria-label={t("shell.backHome")}
           >
             <LuArrowLeft size={20} />
           </button>
@@ -106,11 +112,11 @@ export default function GroupShell({ initialGroup, groupId, children }) {
               <h1
                 className="font-extrabold [font-size:1.0625rem] [color:var(--tp)] whitespace-nowrap [overflow:hidden] [text-overflow:ellipsis]"
               >
-                {group?.name || "Group"}
+                {group?.name || t("shell.groups")}
               </h1>
               {myRole && (
                 <span className="shrink-0 rounded-full bg-(--pale) px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-(--p)">
-                  {myRole}
+                  {t(`grp.role.${myRole}`)}
                 </span>
               )}
             </div>
@@ -126,8 +132,6 @@ export default function GroupShell({ initialGroup, groupId, children }) {
           {TABS.map(({ key, label, icon: Icon, path }) => {
             const href = base + path;
             const isActive = activeTab === key;
-            const translated = t(`group.tab.${key}`);
-            const tabLabel = translated === `group.tab.${key}` ? label : translated;
             return (
               <a
                 key={key}
@@ -135,7 +139,7 @@ export default function GroupShell({ initialGroup, groupId, children }) {
                 className={`flex flex-col items-center gap-0.5 p-3 whitespace-nowrap text-xs ${isActive ? "font-bold" : "font-medium"} ${isActive ? "[color:var(--p)]" : "[color:var(--tm)]"} ${isActive ? "[border-bottom:2px_solid_var(--p)]" : "[border-bottom:2px_solid_transparent]"} [text-decoration:none] [transition:var(--transition)] [min-width:60px] [min-height:48px] justify-center`}
               >
                 <Icon size={18} />
-                <span className="flex-1">{tabLabel}</span>
+                <span className="flex-1">{tabLabel(t, key, label)}</span>
               </a>
             );
           })}

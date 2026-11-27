@@ -10,19 +10,22 @@ import { LuReceiptText, LuLoaderCircle, LuTriangleAlert } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Modal from "@/components/modals/Modal";
 import { statementsApi } from "@/lib/api/statements";
-import { formatPoisha } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 
 const LANGS = [
   { value: "en", label: "English" },
   { value: "bn", label: "বাংলা" },
 ];
 
-function amountOf(row) {
-  // the server ships display strings; fall back to the poisha value
-  return row.display?.en || formatPoisha(row.amountPoisha || 0);
+function amountOf(row, fmt, lang) {
+  // the server ships display strings per language; fall back to the poisha value
+  return row.display?.[lang] || row.display?.en || fmt(row.amountPoisha || 0, { lang });
 }
 
 export default function ExplainBillDrawer({ groupId, month, membershipId = null, displayName = "", onClose }) {
+  const t = useT();
+  const { lang: uiLang, fmt } = useMoney();
   const [lang, setLang] = useState("en");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,14 +37,18 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
     try {
       setData(await statementsApi.explain(groupId, month, membershipId, targetLang));
     } catch (ex) {
-      setError(ex?.data?.msg || ex?.message || "Could not build the explanation");
+      setError(ex?.data?.msg || ex?.message || t("stmt.explainFailed"));
     } finally {
       setLoading(false);
     }
-  }, [groupId, month, membershipId, lang]);
+  }, [groupId, month, membershipId, lang, t]);
 
+  // Open in the language the user is reading the app in.
   useEffect(() => {
-    if (month) load();
+    if (!month) return;
+    const next = uiLang === "bn" ? "bn" : "en";
+    setLang(next);
+    load(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, membershipId]);
 
@@ -53,7 +60,7 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
       onClose={onClose}
       header={
         <span className="flex items-center gap-2">
-          <LuReceiptText size={16} /> {lang === "bn" ? "আমার বিল" : "Explain my bill"}
+          <LuReceiptText size={16} /> {t("stmt.explainMyBill")}
           {displayName ? <span className="text-xs font-normal text-(--tm)">· {displayName}</span> : null}
         </span>
       }
@@ -75,7 +82,7 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
 
       {loading ? (
         <p className="flex items-center justify-center gap-2 py-10 text-sm text-(--tm)">
-          <LuLoaderCircle size={16} className="animate-spin" /> Building the breakdown…
+          <LuLoaderCircle size={16} className="animate-spin" /> {t("stmt.buildingBreakdown")}
         </p>
       ) : error ? (
         <p className="flex items-center gap-2 rounded-lg border border-(--danger) bg-(--danger-bg) p-3 text-xs text-(--ts)">
@@ -98,7 +105,7 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
                   >
                     <span className="min-w-0">{pick(row)}</span>
                     <span className={`shrink-0 tabular-nums ${row.negative ? "text-(--danger)" : ""}`}>
-                      {row.amountPoisha == null ? "" : amountOf(row)}
+                      {row.amountPoisha == null ? "" : amountOf(row, fmt, lang)}
                     </span>
                   </li>
                 ))}
@@ -109,7 +116,7 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
       ) : null}
 
       <Button size="sm" variant="ghost" isFullWidth className="mt-3" onClick={onClose}>
-        {lang === "bn" ? "বন্ধ করুন" : "Close"}
+        {t("shell.close")}
       </Button>
     </Modal>
   );

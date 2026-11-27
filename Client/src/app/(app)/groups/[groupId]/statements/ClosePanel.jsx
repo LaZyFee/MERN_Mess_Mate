@@ -19,56 +19,57 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useToast } from "@/components/shared/ToastProvider";
 import { periodsApi, statementsApi } from "@/lib/api/statements";
 import { formatMonth, toMonthString, addMonths } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 
-const CHECK_LABELS = {
-  journals_balanced: "Journals balanced",
-  period_editable: "Period is editable (open/review)",
+const CHECK_KEYS = {
+  journals_balanced: "stmt.check.journalsBalanced",
+  period_editable: "stmt.check.periodEditable",
 };
 
-function FinalizeModal({ month, period, isOpen, saving, onClose, onConfirm, unresolved }) {
+function FinalizeModal({ month, period, isOpen, saving, onClose, onConfirm, unresolved, t, lang, n }) {
   const [reason, setReason] = useState("");
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       size="lg"
-      header={`Finalize ${formatMonth(month)}`}
+      header={t("stmt.finalizeTitle", { month: formatMonth(month, lang) })}
       footer={
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={onClose} isDisabled={saving}>
-            Cancel
+            {t("shell.cancel")}
           </Button>
           <Button isLoading={saving} isDisabled={saving} onClick={() => onConfirm(reason.trim(), period?.revision)}>
-            Finalize month
+            {t("stmt.close.finalize")}
           </Button>
         </div>
       }
     >
       {unresolved?.length > 0 && (
-        <Alert status="error" title="Unknown meal slots must be resolved first" className="mb-3">
+        <Alert status="error" title={t("stmt.unresolvedTitle")} className="mb-3">
           <div className="mt-1 flex flex-wrap gap-1">
             {unresolved.map((row, index) => (
               <span
                 key={`${row.userId}-${row.date}-${row.slot}-${index}`}
                 className="rounded-full bg-(--danger-bg) px-2 py-0.5 text-[11px] font-semibold text-(--danger)"
               >
-                {row.date} · {row.slot}
+                {row.date} · {t(`meals.slot.${row.slot}`)}
               </span>
             ))}
           </div>
         </Alert>
       )}
       <p className="text-sm text-(--tm)">
-        Finalizing locks {formatMonth(month)} and publishes a statement version. Data revision checked:{" "}
-        <span className="font-bold text-(--tp)">rev {period?.revision ?? 0}</span>.
+        {t("stmt.finalizeBody", { month: formatMonth(month, lang), revision: n(period?.revision ?? 0) })}
       </p>
       <div className="mt-3">
         <Textarea
-          label="Reason (optional)"
+          label={t("exp.reasonOptional")}
           rows={2}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Any note kept with the finalized version"
+          placeholder={t("stmt.reasonPlaceholder")}
         />
       </div>
     </Modal>
@@ -77,6 +78,8 @@ function FinalizeModal({ month, period, isOpen, saving, onClose, onConfirm, unre
 
 export default function ClosePanel({ groupId, initialPeriod, initialChecklist, initialMonth, onFinalized }) {
   const { showToast } = useToast();
+  const t = useT();
+  const { fmt, lang, n } = useMoney();
   const [month, setMonth] = useState(initialMonth || toMonthString(new Date()));
   const [period, setPeriod] = useState(initialPeriod);
   const [checklist, setChecklist] = useState(initialChecklist);
@@ -98,12 +101,12 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
         setPreview(null);
         setUnresolved([]);
       } catch (ex) {
-        showToast({ status: "error", title: "Could not load period", description: ex?.message });
+        showToast({ status: "error", title: t("stmt.couldNotLoadPeriod"), description: ex?.message });
       } finally {
         setBusy(null);
       }
     },
-    [groupId, showToast],
+    [groupId, showToast, t],
   );
 
   const changeMonth = (value) => {
@@ -117,7 +120,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
       const data = await periodsApi.preview(groupId, month);
       setPreview(data);
     } catch (ex) {
-      showToast({ status: "error", title: "Preview failed", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("stmt.previewFailed"), description: ex?.data?.msg || ex?.message });
     } finally {
       setBusy(null);
     }
@@ -130,10 +133,10 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
         kind === "review"
           ? await periodsApi.beginReview(groupId, month)
           : await periodsApi.returnToOpen(groupId, month, "Returned to open for corrections");
-      showToast({ status: "success", title: res?.msg || "Period updated" });
+      showToast({ status: "success", title: res?.msg || t("stmt.periodUpdated") });
       await loadMonth(month);
     } catch (ex) {
-      showToast({ status: "error", title: "State change failed", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("stmt.stateChangeFailed"), description: ex?.data?.msg || ex?.message });
     } finally {
       setBusy(null);
     }
@@ -146,7 +149,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
         reason: reason || undefined,
         expectedRevision,
       });
-      showToast({ status: "success", title: res?.msg || "Statement finalized" });
+      showToast({ status: "success", title: res?.msg || t("stmt.finalizedToast") });
       setFinalizeOpen(false);
       setPreview(null);
       await loadMonth(month);
@@ -155,17 +158,17 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
       if (ex?.status === 409) {
         showToast({
           status: "warning",
-          title: "Month data changed",
-          description: "Refresh and retry — another entry landed after you loaded this page.",
+          title: t("stmt.dataChanged"),
+          description: t("stmt.close.retry"),
         });
         await loadMonth(month);
       } else if (ex?.status === 422) {
         const list = ex?.data?.unresolved || [];
         setUnresolved(Array.isArray(list) ? list : []);
         setFinalizeOpen(true);
-        showToast({ status: "error", title: "Unknown meal slots remain" });
+        showToast({ status: "error", title: t("stmt.unresolvedTitle") });
       } else {
-        showToast({ status: "error", title: "Finalize failed", description: ex?.data?.msg || ex?.message });
+        showToast({ status: "error", title: t("stmt.finalizeFailed"), description: ex?.data?.msg || ex?.message });
       }
     } finally {
       setBusy(null);
@@ -182,25 +185,25 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
           <Input
             size="lg"
             type="month"
-            label="Month"
+            label={t("stmt.month")}
             value={month}
             onChange={(event) => changeMonth(event.target.value)}
           />
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="lg" onClick={() => changeMonth(addMonths(month, -1))}>
-            Prev
+            {t("stmt.prev")}
           </Button>
           <Button variant="ghost" size="lg" onClick={() => changeMonth(addMonths(month, 1))}>
-            Next
+            {t("stmt.next")}
           </Button>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <StatusBadge type="period" status={state} />
-        <span className="text-xs text-(--tm)">revision {period?.revision ?? 0}</span>
-        {period?.finalizedAt && <span className="text-xs text-(--tm)">finalized</span>}
+        <span className="text-xs text-(--tm)">{t("overview.revision", { n: n(period?.revision ?? 0) })}</span>
+        {period?.finalizedAt && <span className="text-xs text-(--tm)">{t("stmt.isFinalized")}</span>}
       </div>
 
       {checks.length > 0 && (
@@ -212,7 +215,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
               ) : (
                 <LuCircleAlert size={14} className="text-(--danger)" />
               )}
-              <span className="text-(--ts)">{CHECK_LABELS[check.name] || check.name}</span>
+              <span className="text-(--ts)">{CHECK_KEYS[check.name] ? t(CHECK_KEYS[check.name]) : check.name}</span>
               {check.state && <span className="text-(--tl)">({check.state})</span>}
             </li>
           ))}
@@ -228,7 +231,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
           isDisabled={Boolean(busy)}
           onClick={runPreview}
         >
-          Preview statement
+          {t("stmt.close.preview")}
         </Button>
         {state === "open" && (
           <Button
@@ -238,7 +241,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
             isDisabled={Boolean(busy)}
             onClick={() => move("review")}
           >
-            Begin review
+            {t("stmt.close.beginReview")}
           </Button>
         )}
         {state === "review" && (
@@ -250,7 +253,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
             isDisabled={Boolean(busy)}
             onClick={() => move("open")}
           >
-            Return to open
+            {t("stmt.close.returnOpen")}
           </Button>
         )}
         {state !== "finalized" && (
@@ -263,12 +266,12 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
               setFinalizeOpen(true);
             }}
           >
-            Finalize
+            {t("stmt.close.finalize")}
           </Button>
         )}
         {state === "finalized" && (
           <Alert status="info" className="w-full">
-            This month is finalized. Corrections create a new statement version.
+            {t("stmt.close.correctionNote")}
           </Alert>
         )}
       </div>
@@ -276,27 +279,25 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
       {preview && (
         <div className="mt-3 rounded-lg border border-(--bd) bg-(--bgm) p-3">
           <p className="mb-1 flex items-center gap-1 text-xs font-bold text-(--ts)">
-            <LuTriangleAlert size={13} /> Draft preview (not saved)
+            <LuTriangleAlert size={13} /> {t("stmt.draftPreview")}
           </p>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div>
-              <p className="text-(--tm)">Meals</p>
-              <p className="font-bold tabular-nums text-(--tp)">{preview.totalMeals ?? 0}</p>
+              <p className="text-(--tm)">{t("stmt.colMeals")}</p>
+              <p className="font-bold tabular-nums text-(--tp)">{n(preview.totalMeals ?? 0)}</p>
             </div>
             <div>
-              <p className="text-(--tm)">Total</p>
+              <p className="text-(--tm)">{t("exp.total")}</p>
+              <p className="font-bold tabular-nums text-(--tp)">{fmt(preview.totalExpenses || 0)}</p>
+            </div>
+            <div>
+              <p className="text-(--tm)">{t("members.title")}</p>
+              <p className="font-bold tabular-nums text-(--tp)">{n(preview.items?.length ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-(--tm)">{t("stmt.mealRate")}</p>
               <p className="font-bold tabular-nums text-(--tp)">
-                {((preview.totalExpenses || 0) / 100).toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <p className="text-(--tm)">Members</p>
-              <p className="font-bold tabular-nums text-(--tp)">{preview.items?.length ?? 0}</p>
-            </div>
-            <div>
-              <p className="text-(--tm)">Rate</p>
-              <p className="font-bold tabular-nums text-(--tp)">
-                {preview.mealRate != null ? (preview.mealRate / 100).toFixed(2) : "—"}
+                {preview.mealRate != null ? fmt(preview.mealRate) : "—"}
               </p>
             </div>
           </div>
@@ -311,6 +312,9 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
         unresolved={unresolved}
         onClose={() => setFinalizeOpen(false)}
         onConfirm={finalize}
+        t={t}
+        lang={lang}
+        n={n}
       />
     </Card>
   );

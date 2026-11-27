@@ -13,16 +13,18 @@ import {
   LuFileText,
   LuMenu,
   LuEarth,
+  LuBookOpen,
 } from "react-icons/lu";
 import ThemeToggle from "@/components/shared/ThemeToggle";
 import LanguageToggle from "@/components/shared/LanguageToggle";
 import InboxBell from "@/components/inbox/InboxBell";
+import { useT } from "@/lib/i18n/LangProvider";
 
 const NAV = [
   { key: "home", label: "Home", href: "/", icon: LuHouse },
   { key: "meals", label: "Meals", href: "/groups", icon: LuUtensils },
   { key: "expenses", label: "Expenses", href: "/groups", icon: LuReceipt },
-  { key: "statements", label: "Summary", href: "/groups", icon: LuFileText },
+  { key: "summary", label: "Summary", href: "/groups", icon: LuFileText },
   { key: "more", label: "More", href: "/profile", icon: LuMenu },
 ];
 
@@ -32,6 +34,7 @@ function isActive(pathname, href) {
 }
 
 export default function AppChrome({ children }) {
+  const t = useT();
   const pathname = usePathname();
   const inGroup = pathname?.startsWith("/groups/") && !pathname?.startsWith("/groups/create");
 
@@ -46,7 +49,7 @@ export default function AppChrome({ children }) {
             MealMate
           </Link>
           <nav className="flex items-center gap-1">
-            {NAV.slice(0, 4).map(({ key, label, href, icon: Icon }) => (
+            {NAV.slice(0, 4).map(({ key, href, icon: Icon }) => (
               <Link
                 key={key}
                 href={href}
@@ -55,14 +58,23 @@ export default function AppChrome({ children }) {
                   : "text-(--tm) hover:bg-(--bgm) hover:text-(--p)"
                   }`}
               >
-                <Icon size={15} /> {label}
+                <Icon size={15} /> {t(`shell.${key}`)}
               </Link>
             ))}
+            <Link
+              href="/guide"
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold no-underline transition-[var(--transition)] ${isActive(pathname, "/guide")
+                ? "bg-(--pale) text-(--p)"
+                : "text-(--tm) hover:bg-(--bgm) hover:text-(--p)"
+                }`}
+            >
+              <LuBookOpen size={15} /> {t("shell.guide")}
+            </Link>
             <Link
               href="/support"
               className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-(--tm) no-underline transition-[var(--transition)] hover:bg-(--bgm) hover:text-(--p)"
             >
-              <LuEarth size={15} /> Support
+              <LuEarth size={15} /> {t("shell.support")}
             </Link>
           </nav>
           <div className="flex items-center gap-1">
@@ -91,7 +103,7 @@ export default function AppChrome({ children }) {
           aria-label="Primary"
         >
           <ul className="mx-auto flex max-w-md list-none items-stretch justify-around">
-            {NAV.map(({ key, label, href, icon: Icon }) => {
+            {NAV.map(({ key, href, icon: Icon }) => {
               const active = isActive(pathname, href);
               return (
                 <li key={key} className="min-w-0 flex-1">
@@ -101,7 +113,7 @@ export default function AppChrome({ children }) {
                       }`}
                   >
                     <Icon size={19} />
-                    <span className="truncate">{label}</span>
+                    <span className="truncate">{t(`shell.${key}`)}</span>
                   </Link>
                 </li>
               );

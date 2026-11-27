@@ -21,11 +21,12 @@ import { useGroupStore } from "@/lib/store/groupStore";
 import { useT } from "@/lib/i18n/LangProvider";
 
 function GroupCard({ group, onClick }) {
+  const t = useT();
   const memberCount = group.memberCount || group.members?.length || 0;
   return (
     <button
       onClick={onClick}
-      
+
       className="hover:border-[var(--p)] hover:shadow-[var(--shadow-lg)] flex flex-col gap-3 [padding:var(--space-5)] [background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-lg)] [box-shadow:var(--shadow-md)] text-left w-full cursor-pointer [transition:var(--transition)]"
     >
       <div className="flex items-start gap-3">
@@ -41,11 +42,11 @@ function GroupCard({ group, onClick }) {
           >
             <span className="[font-size:0.8125rem] [color:var(--tm)]">
               <LuUsers size={13} className="inline [margin-right:3px]" />
-              {memberCount} member{memberCount !== 1 ? "s" : ""}
+              {t("grp.members", { count: memberCount })}
             </span>
             {group.myRole && (
               <Badge colorScheme="primary" size="sm" isRounded>
-                {group.myRole}
+                {t(`grp.role.${group.myRole}`)}
               </Badge>
             )}
           </div>
@@ -65,7 +66,7 @@ function EmptyState({ onCreate, onJoin, t }) {
       <div>
         <p className="font-bold text-lg [color:var(--tp)]">{t("home.empty")}</p>
         <p className="[color:var(--tm)] text-sm mt-1">
-          {t("home.create")} / {t("home.join")}
+          {t("grp.emptyHint")}
         </p>
       </div>
       <div
@@ -104,17 +105,17 @@ export default function HomeClient({ initialGroups }) {
       const data = await groupsApi.myGroups();
       setGroups(data?.groups || data || []);
     } catch (ex) {
-      showToast({ status: "error", title: "Could not refresh groups", description: ex?.message });
+      showToast({ status: "error", title: t("grp.couldNotRefresh"), description: ex?.message });
     } finally {
       setRefreshing(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   return (
     <div>
       {leftNotice?.message && (
         <div className="mb-4">
-          <Alert status="info" title="History is clamped to your membership window" isDismissible onDismiss={() => setLeftNotice(null)}>
+          <Alert status="info" title={t("grp.leftNoticeTitle")} isDismissible onDismiss={() => setLeftNotice(null)}>
             {leftNotice.message}
           </Alert>
         </div>
@@ -127,13 +128,13 @@ export default function HomeClient({ initialGroups }) {
         <h2 className="text-lg font-extrabold [color:var(--tp)]">{t("home.title")}</h2>
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" leftIcon={<LuRefreshCw size={15} />} onClick={refresh} isLoading={refreshing}>
-            Refresh
+            {t("shell.refresh")}
           </Button>
           <Button size="sm" leftIcon={<LuPlus size={15} />} onClick={() => router.push("/groups/create")}>
-            Create
+            {t("grp.create")}
           </Button>
           <Button size="sm" variant="outline" leftIcon={<LuLogIn size={15} />} onClick={() => router.push("/join")}>
-            Join
+            {t("grp.join")}
           </Button>
         </div>
       </div>

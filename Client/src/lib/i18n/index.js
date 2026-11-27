@@ -13,6 +13,9 @@ import { dictionaries, registerDictionary } from "./registry";
 // module, so it runs only after `registerDictionary` is defined (no TDZ error).
 import "./dict/common";
 import "./dict/landing";
+import "./dict/group";
+import "./dict/app";
+import "./dict/guide";
 
 export const LANGS = ["en", "bn"];
 export const DEFAULT_LANG = "en";

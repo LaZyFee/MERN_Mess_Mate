@@ -19,15 +19,10 @@ import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import { useToast } from "@/components/shared/ToastProvider";
 import { useGroupStore } from "@/lib/store/groupStore";
+import { useT } from "@/lib/i18n/LangProvider";
 import CoMemberDirectory from "./CoMemberDirectory";
 
-const ROLE_OPTIONS = [
-  { value: "member", label: "Member" },
-  { value: "auditor", label: "Auditor" },
-  { value: "treasurer", label: "Treasurer" },
-  { value: "manager", label: "Manager" },
-  { value: "owner", label: "Owner" },
-];
+const ROLE_VALUES = ["member", "auditor", "treasurer", "manager", "owner"];
 
 const ROLE_COLOR = {
   owner: "danger",
@@ -37,8 +32,8 @@ const ROLE_COLOR = {
   member: "default",
 };
 
-function MemberRow({ m, canEdit, onEdit, onDepart }) {
-  const name = m.displayName || m.userId?.username || "Member";
+function MemberRow({ m, canEdit, onEdit, onDepart, t }) {
+  const name = m.displayName || m.userId?.username || t("members.memberFallback");
   const isPlaceholder = m.isPlaceholder;
   return (
     <div
@@ -48,19 +43,19 @@ function MemberRow({ m, canEdit, onEdit, onDepart }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold [color:var(--tp)] [font-size:0.9rem]">{name}</span>
-          {isPlaceholder && <Badge colorScheme="default" size="sm" isRounded>Placeholder</Badge>}
+          {isPlaceholder && <Badge colorScheme="default" size="sm" isRounded>{t("members.placeholder")}</Badge>}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <Badge colorScheme={ROLE_COLOR[m.role] || "default"} size="sm" isRounded>{m.role}</Badge>
-          {m.room && <span className="text-xs [color:var(--tl)]">Room {m.room}</span>}
+          <Badge colorScheme={ROLE_COLOR[m.role] || "default"} size="sm" isRounded>{t(`grp.role.${m.role}`)}</Badge>
+          {m.room && <span className="text-xs [color:var(--tl)]">{t("members.roomLabel", { room: m.room })}</span>}
         </div>
       </div>
       {canEdit && (
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" ariaLabel="Edit membership" onClick={() => onEdit(m)}>
+          <Button size="sm" variant="ghost" ariaLabel={t("members.editMembership")} onClick={() => onEdit(m)}>
             <LuPencil size={15} />
           </Button>
-          <Button size="sm" variant="ghost" ariaLabel="Remove member" onClick={() => onDepart(m)}>
+          <Button size="sm" variant="ghost" ariaLabel={t("members.removeMember")} onClick={() => onDepart(m)}>
             <LuUserMinus size={15} />
           </Button>
         </div>
@@ -70,6 +65,7 @@ function MemberRow({ m, canEdit, onEdit, onDepart }) {
 }
 
 export default function MembersClient({ initialMembers = [], initialDirectory = null }) {
+  const t = useT();
   const { groupId } = useGroup() || {};
   const myRole = useGroupStore((s) => s.myRole);
   const { showToast } = useToast();
@@ -85,6 +81,8 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
 
   const canEdit = ["owner", "manager"].includes(myRole);
 
+  const roleOptions = ROLE_VALUES.map((value) => ({ value, label: t(`grp.role.${value}`) }));
+
   const load = useCallback(async () => {
     if (!groupId) return;
     try {
@@ -92,11 +90,11 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
       setMembers(data?.memberships || data || []);
       setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
-      showToast({ status: "error", title: "Could not load members", description: ex?.message });
+      showToast({ status: "error", title: t("members.couldNotLoad"), description: ex?.message });
     } finally {
       setLoading(false);
     }
-  }, [groupId, showToast]);
+  }, [groupId, showToast, t]);
 
   const loadMore = async () => {
     if (!groupId || !moreCursor) return;
@@ -110,7 +108,7 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
       });
       setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
-      showToast({ status: "error", title: "Could not load more members", description: ex?.message });
+      showToast({ status: "error", title: t("members.couldNotLoadMore"), description: ex?.message });
     } finally {
       setLoadingMore(false);
     }
@@ -137,10 +135,10 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
         weight: parseFloat(editWeight) || 1,
       });
       setEditing(null);
-      showToast({ status: "success", title: "Membership updated" });
+      showToast({ status: "success", title: t("members.updated") });
       load();
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.data?.message || ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.data?.message || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -151,10 +149,10 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
     try {
       await groupsApi.departMembership(departing._id, {});
       setDeparting(null);
-      showToast({ status: "success", title: "Member removed" });
+      showToast({ status: "success", title: t("members.removed") });
       load();
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.data?.message || ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.data?.message || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -172,10 +170,10 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
       setAddOpen(false);
       setNewName("");
       setNewRole("member");
-      showToast({ status: "success", title: "Member added" });
+      showToast({ status: "success", title: t("members.added") });
       load();
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.data?.message || ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.data?.message || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -184,10 +182,10 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-base font-bold [color:var(--tp)]">Members</h2>
+        <h2 className="text-base font-bold [color:var(--tp)]">{t("members.title")}</h2>
         {canEdit && (
           <Button size="sm" leftIcon={<LuUserPlus size={15} />} onClick={() => setAddOpen(true)}>
-            Add Member
+            {t("members.add")}
           </Button>
         )}
       </div>
@@ -199,7 +197,7 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
       ) : members.length === 0 ? (
         <div className="text-center p-8 [color:var(--tm)]">
           <LuUser size={40} className="[color:var(--tl)] mb-3" />
-          <p>No members yet.</p>
+          <p>{t("members.empty")}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -210,11 +208,12 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
               canEdit={canEdit}
               onEdit={openEdit}
               onDepart={setDeparting}
+              t={t}
             />
           ))}
           {moreCursor && (
             <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
-              Load more members
+              {t("members.loadMore")}
             </Button>
           )}
         </div>
@@ -224,23 +223,23 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
       <Modal
         isOpen={!!editing}
         onClose={() => setEditing(null)}
-        header="Edit Membership"
+        header={t("members.editModal")}
         footer={
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setEditing(null)} isDisabled={saving}>Cancel</Button>
-            <Button onClick={saveEdit} isLoading={saving} isDisabled={saving}>Save</Button>
+            <Button variant="outline" onClick={() => setEditing(null)} isDisabled={saving}>{t("shell.cancel")}</Button>
+            <Button onClick={saveEdit} isLoading={saving} isDisabled={saving}>{t("shell.save")}</Button>
           </div>
         }
       >
         <div className="flex flex-col gap-4">
           <Select
-            label="Role"
+            label={t("members.role")}
             value={editRole}
             onChange={(e) => setEditRole(e.target.value)}
-            options={ROLE_OPTIONS}
+            options={roleOptions}
           />
-          <Input label="Room" value={editRoom} onChange={(e) => setEditRoom(e.target.value)} />
-          <Input label="Weight" type="number" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} min={0} max={10} step={0.25} />
+          <Input label={t("members.rooms")} value={editRoom} onChange={(e) => setEditRoom(e.target.value)} />
+          <Input label={t("members.weight")} type="number" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} min={0} max={10} step={0.25} />
         </div>
       </Modal>
 
@@ -248,17 +247,17 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
       <Modal
         isOpen={addOpen}
         onClose={() => setAddOpen(false)}
-        header="Add Member / Placeholder"
+        header={t("members.addModal")}
         footer={
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setAddOpen(false)} isDisabled={saving}>Cancel</Button>
-            <Button onClick={addMember} isLoading={saving} isDisabled={saving || !newName.trim()}>Add</Button>
+            <Button variant="outline" onClick={() => setAddOpen(false)} isDisabled={saving}>{t("shell.cancel")}</Button>
+            <Button onClick={addMember} isLoading={saving} isDisabled={saving || !newName.trim()}>{t("shell.add")}</Button>
           </div>
         }
       >
         <div className="flex flex-col gap-4">
-          <Input label="Display Name" isRequired value={newName} onChange={(e) => setNewName(e.target.value)} />
-          <Select label="Role" value={newRole} onChange={(e) => setNewRole(e.target.value)} options={ROLE_OPTIONS} />
+          <Input label={t("members.displayName")} isRequired value={newName} onChange={(e) => setNewName(e.target.value)} />
+          <Select label={t("members.role")} value={newRole} onChange={(e) => setNewRole(e.target.value)} options={roleOptions} />
         </div>
       </Modal>
 
@@ -267,9 +266,9 @@ export default function MembersClient({ initialMembers = [], initialDirectory = 
         isOpen={!!departing}
         onClose={() => setDeparting(null)}
         onConfirm={confirmDepart}
-        title="Remove Member"
-        message={`Remove ${departing?.displayName || "this member"} from the group? Their historical data remains.`}
-        confirmText="Remove"
+        title={t("members.removeTitle")}
+        message={t("members.removeMessage", { name: departing?.displayName || t("members.memberFallback") })}
+        confirmText={t("members.remove")}
         isSubmitting={saving}
       />
 

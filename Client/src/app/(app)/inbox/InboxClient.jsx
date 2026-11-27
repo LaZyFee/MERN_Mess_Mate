@@ -13,11 +13,10 @@ import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
 import { inboxApi } from "@/lib/api/platform";
 import { formatDay } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 
-const FILTERS = [
-  { value: "", label: "All" },
-  { value: "unread", label: "Unread" },
-];
+const FILTER_VALUES = ["", "unread"];
 
 const LINK_TARGETS = {
   support_ticket: (id) => `/support/tickets/${id}`,
@@ -36,12 +35,14 @@ function hrefFor(item) {
   return build && id ? build(id, item.groupId) : null;
 }
 
-function dayOf(value) {
+function dayOf(value, lang) {
   if (!value) return "";
-  return formatDay(String(value).slice(0, 10));
+  return formatDay(String(value).slice(0, 10), lang);
 }
 
 export default function InboxClient({ initialNotifications = [], initialNextCursor = null, initialHasMore = false }) {
+  const t = useT();
+  const { lang, n } = useMoney();
   const { showToast } = useToast();
   const [items, setItems] = useState(initialNotifications || []);
   const [cursor, setCursor] = useState(initialNextCursor);
@@ -58,11 +59,11 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
       setCursor(data?.nextCursor || null);
       setHasMore(Boolean(data?.hasMore));
     } catch (ex) {
-      showToast({ status: "error", title: "Could not load inbox", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("inbox.couldNotLoad"), description: ex?.data?.msg || ex?.message });
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   const applyFilter = (value) => {
     setFilter(value);
@@ -73,9 +74,9 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
     try {
       await inboxApi.markRead({ all: true });
       setItems((prev) => prev.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })));
-      showToast({ status: "success", title: "Inbox cleared" });
+      showToast({ status: "success", title: t("inbox.cleared") });
     } catch (ex) {
-      showToast({ status: "error", title: "Could not mark read", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("inbox.couldNotMarkRead"), description: ex?.data?.msg || ex?.message });
     }
   };
 
@@ -95,32 +96,34 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
     <div className="flex flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-base font-bold text-(--tp)">Inbox</h1>
-          <p className="text-xs text-(--tm)">{unread} unread · {items.length} loaded</p>
+          <h1 className="text-base font-bold text-(--tp)">{t("inbox.title")}</h1>
+          <p className="text-xs text-(--tm)">
+            {t("inbox.summary", { unread: n(unread), loaded: n(items.length) })}
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" isRound ariaLabel="Refresh" isLoading={loading} onClick={() => load(filter)}>
+          <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} isLoading={loading} onClick={() => load(filter)}>
             <LuRefreshCw size={15} />
           </Button>
           <Button size="sm" variant="outline" leftIcon={<LuCheckCheck size={14} />} onClick={markAll} isDisabled={unread === 0}>
-            Mark all read
+            {t("inbox.markAllRead")}
           </Button>
         </div>
       </div>
 
       <div className="flex gap-2">
-        {FILTERS.map((option) => (
+        {FILTER_VALUES.map((value) => (
           <button
-            key={option.value || "all"}
+            key={value || "all"}
             type="button"
-            onClick={() => applyFilter(option.value)}
-            aria-pressed={filter === option.value}
-            className={`min-h-11 rounded-[var(--r-pill)] px-4 text-xs font-semibold transition-[var(--transition)] ${filter === option.value
+            onClick={() => applyFilter(value)}
+            aria-pressed={filter === value}
+            className={`min-h-11 rounded-[var(--r-pill)] px-4 text-xs font-semibold transition-[var(--transition)] ${filter === value
                 ? "bg-(--p) text-(--bgs)"
                 : "border border-(--bd) bg-(--bgs) text-(--ts) hover:border-(--p) hover:text-(--p)"
               }`}
           >
-            {option.label}
+            {value ? t("inbox.unreadFilter") : t("inbox.all")}
           </button>
         ))}
       </div>
@@ -134,10 +137,8 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
       ) : items.length === 0 ? (
         <Card padding="lg" variant="outlined" className="text-center">
           <LuInbox size={26} className="mx-auto mb-2 text-(--tl)" />
-          <p className="text-sm font-semibold text-(--tp)">Nothing here yet</p>
-          <p className="mt-1 text-xs text-(--tm)">
-            Group updates, statement notices and support replies will appear here.
-          </p>
+          <p className="text-sm font-semibold text-(--tp)">{t("shell.noResults")}</p>
+          <p className="mt-1 text-xs text-(--tm)">{t("inbox.emptyHint")}</p>
         </Card>
       ) : (
         <ul className="list-none space-y-2">
@@ -149,7 +150,7 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
                 <span className="min-w-0 flex-1">
                   <span className={`block truncate text-sm ${item.readAt ? "font-medium" : "font-bold"} text-(--tp)`}>{item.title}</span>
                   {item.body && <span className="mt-0.5 block text-xs text-(--ts)">{item.body}</span>}
-                  <span className="mt-1 block text-[11px] text-(--tl)">{dayOf(item.createdAt)}</span>
+                  <span className="mt-1 block text-[11px] text-(--tl)">{dayOf(item.createdAt, lang)}</span>
                 </span>
               </span>
             );
@@ -183,7 +184,7 @@ export default function InboxClient({ initialNotifications = [], initialNextCurs
 
       {hasMore && (
         <Button variant="outline" isFullWidth isLoading={loading} leftIcon={<LuMailOpen size={14} />} onClick={() => load(filter, cursor)}>
-          Load more
+          {t("shell.loadMore")}
         </Button>
       )}
     </div>

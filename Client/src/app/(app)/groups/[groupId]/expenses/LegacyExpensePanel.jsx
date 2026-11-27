@@ -11,10 +11,19 @@ import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import { useToast } from "@/components/shared/ToastProvider";
 import { expensesApi } from "@/lib/api/expenses";
-import { formatPoisha, parseTaka, dhakaToday } from "@/lib/utils/format";
+import { dhakaToday } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 import { activeCategories } from "./expenseHelpers";
 
+function AddLabel({ amount, fmt, parse, template, empty }) {
+  const parsed = parse(amount);
+  return parsed.ok ? template({ amount: fmt(parsed.poisha) }) : empty;
+}
+
 export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
+  const t = useT();
+  const { fmt, parse, errorText } = useMoney();
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(dhakaToday());
@@ -31,8 +40,8 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
       setRetired(true);
       showToast({
         status: "warning",
-        title: "Legacy entries were retired",
-        description: "Use the Expense draft tab instead — every new expense goes through the approved workflow.",
+        title: t("exp.legacyRetiredToast"),
+        description: t("exp.legacyRetiredBody"),
       });
       return true;
     }
@@ -45,25 +54,25 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
   }));
 
   const create = async () => {
-    const poisha = parseTaka(amount);
-    if (!categoryId || poisha <= 0) {
-      showToast({ status: "warning", title: "Category and a positive amount are required" });
+    const parsed = parse(amount);
+    if (!categoryId || !parsed.ok) {
+      showToast({ status: "warning", title: t("exp.legacyRequired"), description: parsed.ok ? undefined : errorText(parsed.reason) });
       return;
     }
     setSaving(true);
     try {
       await expensesApi.legacyCreate(groupId, {
         date: `${date}T00:00:00.000Z`,
-        amount: poisha,
+        amount: parsed.poisha,
         description: description.trim() || undefined,
         categoryId,
       });
-      showToast({ status: "success", title: "Legacy entry saved" });
+      showToast({ status: "success", title: t("exp.legacySaved") });
       setAmount("");
       setDescription("");
       onChanged?.();
     } catch (ex) {
-      if (!handleRetired(ex)) showToast({ status: "error", title: "Could not save", description: ex?.data?.msg || ex?.message });
+      if (!handleRetired(ex)) showToast({ status: "error", title: t("exp.couldNotSave"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -74,11 +83,11 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
     setSaving(true);
     try {
       await expensesApi.legacyDelete(entryId.trim());
-      showToast({ status: "success", title: "Legacy entry deleted" });
+      showToast({ status: "success", title: t("exp.legacyDeleted") });
       setEntryId("");
       onChanged?.();
     } catch (ex) {
-      if (!handleRetired(ex)) showToast({ status: "error", title: "Could not delete", description: ex?.data?.msg || ex?.message });
+      if (!handleRetired(ex)) showToast({ status: "error", title: t("exp.couldNotDelete"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -92,7 +101,7 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
         aria-expanded={open}
         className="flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
       >
-        <span className="text-xs font-bold uppercase tracking-wide text-(--tm)">Advanced · legacy entries</span>
+        <span className="text-xs font-bold uppercase tracking-wide text-(--tm)">{t("exp.legacyTitle")}</span>
         {open ? <LuChevronUp size={16} /> : <LuChevronDown size={16} />}
       </button>
 
@@ -100,49 +109,49 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
         <div className="space-y-3 border-t border-(--bd) p-3">
           {retired ? (
             <p className="rounded-lg border border-(--warning) bg-(--warning-bg) p-3 text-xs text-(--ts)">
-              Legacy direct-entry endpoints have passed their sunset date. Create expenses in the <strong>Expense draft</strong> tab — they are reviewed and approved before they reach the ledger.
+              {t("exp.legacyRetired")}
             </p>
           ) : (
           <>
           <p className="text-[11px] text-(--tm)">
-            Legacy entries post directly without approval. Use only to fix pre-ledger data.
+            {t("exp.legacyHint")}
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Input size="lg" type="date" label="Date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input size="lg" type="date" label={t("exp.date")} value={date} onChange={(e) => setDate(e.target.value)} />
             <Input
               size="lg"
               type="number"
               inputMode="decimal"
               min="0.01"
               step="0.01"
-              label="Amount (৳)"
+              label={t("exp.amount")}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
             <Select
               size="lg"
-              label="Category"
-              placeholder="Choose"
+              label={t("exp.category")}
+              placeholder={t("exp.chooseCategory")}
               options={categoryOptions}
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
             />
             <Input
               size="lg"
-              label="Description"
+              label={t("exp.description")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
           <Button size="md" isFullWidth leftIcon={<LuPlus size={15} />} isLoading={saving} isDisabled={saving} onClick={create}>
-            {amount ? `Add ${formatPoisha(parseTaka(amount))}` : "Add legacy entry"}
+            <AddLabel amount={amount} fmt={fmt} parse={parse} template={(vars) => t("exp.legacyAddAmount", vars)} empty={t("exp.legacyAdd")} />
           </Button>
 
           <div className="grid grid-cols-1 gap-2 border-t border-(--bd) pt-3 sm:grid-cols-[1fr_auto] sm:items-end">
             <Input
               size="lg"
-              label="Delete entry by ID"
-              placeholder="MongoDB entry id"
+              label={t("exp.deleteEntryById")}
+              placeholder={t("exp.entryIdPlaceholder")}
               value={entryId}
               onChange={(e) => setEntryId(e.target.value)}
             />
@@ -154,7 +163,7 @@ export default function LegacyExpensePanel({ groupId, categories, onChanged }) {
               isDisabled={saving || !entryId.trim()}
               onClick={remove}
             >
-              Delete
+              {t("shell.delete")}
             </Button>
           </div>
           </>

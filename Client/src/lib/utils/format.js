@@ -1,36 +1,44 @@
-// Money: all amounts are integer poisha (100 poisha = ৳1)
+// Locale-aware formatting helpers.
+//
+// Money is ALWAYS integer poisha in the API/database (100 poisha = ৳1) and is
+// ALWAYS shown/accepted in Taka. All conversion + currency formatting lives in
+// `@/lib/utils/money`; this module re-exports it so existing imports keep working.
 
-const bdTaka = new Intl.NumberFormat("en-BD", {
-  style: "currency",
-  currency: "BDT",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+import { formatTaka, takaToPoisha } from "./money";
 
-const BN_DIGITS = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
+export {
+  formatTaka,
+  takaToPoisha,
+  poishaToTaka,
+  toBengaliDigits,
+  formatNumber,
+  parseTakaInput,
+  MONEY_INPUT_ERROR,
+  POISHA_PER_TAKA,
+} from "./money";
 
-/** Latin digits → Bengali digits (locale-aware number rendering, T14.17a). */
-export function toBengaliDigits(value) {
-  return String(value).replace(/\d/g, (d) => BN_DIGITS[Number(d)]);
-}
+const localeOf = (lang) => (lang === "bn" ? "bn-BD" : "en-GB");
 
-/** integer poisha → "৳ ১,২৩৪.৫৬" when lang is 'bn', else "৳1,234.56". */
+/**
+ * integer poisha → "৳1,234.56" (en) / "১,২৩৪.৫৬৳" (bn).
+ * Kept for backwards compatibility with existing call sites.
+ */
 export function formatPoisha(poisha, lang = "en") {
-  if (poisha == null || Number.isNaN(Number(poisha))) return lang === "bn" ? "৳ ০.০০" : bdTaka.format(0);
-  const formatted = bdTaka.format(Number(poisha) / 100);
-  return lang === "bn" ? toBengaliDigits(formatted) : formatted;
+  return formatTaka(poisha, { lang });
 }
 
-/** plain number string for amount display without symbol */
+/** Plain Taka string without the currency symbol: "1234.56". */
 export function formatPoishaPlain(poisha) {
   return (Number(poisha || 0) / 100).toFixed(2);
 }
 
-/** ৳ amount (string/number) → integer poisha */
+/**
+ * Loose parser kept for backwards compatibility.
+ * @deprecated Prefer `parseTakaInput()` from `@/lib/utils/money`, which validates
+ * precision/negatives and returns a discriminated result.
+ */
 export function parseTaka(value) {
-  const n = parseFloat(String(value ?? "").replace(/[^\d.-]/g, ""));
-  if (Number.isNaN(n)) return 0;
-  return Math.round(n * 100);
+  return takaToPoisha(value);
 }
 
 // ---- Month helpers (YYYY-MM) ----
@@ -40,10 +48,12 @@ export function toMonthString(date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function formatMonth(monthString) {
+/** "2026-03" → "March 2026" (en) / "মার্চ ২০২৬" (bn). */
+export function formatMonth(monthString, lang = "en") {
   if (!monthString) return "";
   const [y, m] = monthString.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  if (!y || !m) return "";
+  return new Date(y, m - 1, 1).toLocaleDateString(localeOf(lang), { month: "long", year: "numeric" });
 }
 
 export function monthRange(monthString) {
@@ -73,14 +83,23 @@ export function toDhakaDate(date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: DHAKA }).format(date);
 }
 
-/** Pretty date label from "YYYY-MM-DD" */
-export function formatDay(dateString) {
+/** Pretty date label from "YYYY-MM-DD": "Mon, 5 Jan" (en) / "সোম, ৫ জানু" (bn). */
+export function formatDay(dateString, lang = "en") {
   if (!dateString) return "";
   const [y, m, d] = dateString.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-GB", {
+  if (!y || !m || !d) return "";
+  return new Date(y, m - 1, d).toLocaleDateString(localeOf(lang), {
     weekday: "short",
     day: "numeric",
     month: "short",
+  });
+}
+
+/** Weekday short label for a "YYYY-MM-DD" Dhaka date. */
+export function formatWeekday(dateString, lang = "en") {
+  return new Date(`${dateString}T12:00:00+06:00`).toLocaleDateString(localeOf(lang), {
+    weekday: "short",
+    timeZone: DHAKA,
   });
 }
 

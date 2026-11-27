@@ -5,7 +5,9 @@ import { LuArrowRight, LuBanknote, LuReceipt, LuUsers, LuWallet } from "react-ic
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { formatMonth, formatPoisha } from "@/lib/utils/format";
+import { formatMonth } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 import BoardWidget from "./BoardWidget";
 import BazarForecastCard from "./BazarForecastCard";
 
@@ -27,6 +29,8 @@ function MoneyStat({ icon: Icon, label, value, hint }) {
 }
 
 export default function GroupOverviewClient({ initialDash, groupId, initialBoard = null }) {
+  const t = useT();
+  const { lang, fmt, n } = useMoney();
   const dash = initialDash || {};
   const month = dash.month;
   const period = dash.period || {};
@@ -40,10 +44,12 @@ export default function GroupOverviewClient({ initialDash, groupId, initialBoard
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">
-            {month ? formatMonth(month) : "Current month"}
+            {month ? formatMonth(month, lang) : t("overview.currentMonth")}
           </p>
           <p className="truncate text-sm text-(--ts)">
-            {dash.activeMembersCount ?? 0} active member(s) · revision {period.revision ?? 0}
+            {t("overview.activeMembers", { count: n(dash.activeMembersCount ?? 0) })}
+            {" · "}
+            {t("overview.revision", { n: n(period.revision ?? 0) })}
           </p>
         </div>
         <StatusBadge type="period" status={period.state || "open"} />
@@ -52,39 +58,46 @@ export default function GroupOverviewClient({ initialDash, groupId, initialBoard
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <MoneyStat
           icon={LuReceipt}
-          label="Approved expenses"
-          value={formatPoisha(expenses.approved?.totalPoisha)}
-          hint={`${expenses.approved?.count ?? 0} approved`}
+          label={t("overview.approvedExpenses")}
+          value={fmt(expenses.approved?.totalPoisha)}
+          hint={t("overview.approvedCount", { count: n(expenses.approved?.count ?? 0) })}
         />
         <MoneyStat
           icon={LuBanknote}
-          label="Contributions"
-          value={formatPoisha(money.totalContributionsPoisha)}
-          hint={money.pendingTransactions?.count ? `${money.pendingTransactions.count} pending` : "All confirmed"}
+          label={t("overview.contributions")}
+          value={fmt(money.totalContributionsPoisha)}
+          hint={
+            money.pendingTransactions?.count
+              ? t("overview.pendingCount", { count: n(money.pendingTransactions.count) })
+              : t("overview.allConfirmed")
+          }
         />
         <MoneyStat
           icon={LuWallet}
-          label="Fund assets"
-          value={formatPoisha(funds.totalAssetsPoisha)}
-          hint={`${funds.accounts?.length ?? 0} fund account(s)`}
+          label={t("overview.fundAssets")}
+          value={fmt(funds.totalAssetsPoisha)}
+          hint={t("overview.fundAccounts", { count: n(funds.accounts?.length ?? 0) })}
         />
         <MoneyStat
           icon={LuUsers}
-          label="Payables outstanding"
-          value={formatPoisha(expenses.payablesOutstanding?.totalPoisha)}
-          hint={`${expenses.payablesOutstanding?.count ?? 0} supplier bill(s)`}
+          label={t("overview.payables")}
+          value={fmt(expenses.payablesOutstanding?.totalPoisha)}
+          hint={t("overview.payablesCount", { count: n(expenses.payablesOutstanding?.count ?? 0) })}
         />
         <MoneyStat
           icon={LuReceipt}
-          label="Awaiting approval"
-          value={formatPoisha(expenses.submitted?.totalPoisha)}
-          hint={`${expenses.submitted?.count ?? 0} submitted · ${expenses.draft?.count ?? 0} draft`}
+          label={t("overview.awaitingApproval")}
+          value={fmt(expenses.submitted?.totalPoisha)}
+          hint={t("overview.awaitingDetail", {
+            submitted: n(expenses.submitted?.count ?? 0),
+            draft: n(expenses.draft?.count ?? 0),
+          })}
         />
         <MoneyStat
           icon={LuWallet}
-          label="Meal rate"
-          value={settlement?.mealRatePoisha != null ? formatPoisha(settlement.mealRatePoisha) : "—"}
-          hint={`${settlement?.totalMeals ?? 0} meals`}
+          label={t("overview.mealRate")}
+          value={settlement?.mealRatePoisha != null ? fmt(settlement.mealRatePoisha) : "—"}
+          hint={t("overview.mealsCount", { count: n(settlement?.totalMeals ?? 0) })}
         />
       </div>
 
@@ -95,24 +108,26 @@ export default function GroupOverviewClient({ initialDash, groupId, initialBoard
       <Card padding="md" className="min-w-0">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold text-(--tp)">
-            {settlement?.isFinalized ? `Statement v${settlement.version}` : "Draft settlement"}
+            {settlement?.isFinalized
+              ? t("overview.statementVersion", { n: n(settlement.version) })
+              : t("overview.draftSettlement")}
           </h2>
           <Link
             href={`/groups/${groupId}/statements`}
             className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-(--p) hover:bg-(--pale) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p)"
           >
-            Statements <LuArrowRight size={13} />
+            {t("overview.statementsLink")} <LuArrowRight size={13} />
           </Link>
         </div>
         {(settlement?.items || []).length === 0 ? (
-          <p className="mt-2 text-xs text-(--tm)">No member charges computed for this month yet.</p>
+          <p className="mt-2 text-xs text-(--tm)">{t("overview.noCharges")}</p>
         ) : (
           <ul className="mt-2 divide-y divide-(--bd)">
             {settlement.items.slice(0, 6).map((item) => (
               <li key={item.membershipId} className="flex min-h-11 items-center justify-between gap-2 py-1.5">
                 <span className="min-w-0 truncate text-xs font-semibold text-(--tp)">{item.displayName}</span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs tabular-nums text-(--ts)">{formatPoisha(item.closingCreditPoisha)}</span>
+                  <span className="text-xs tabular-nums text-(--ts)">{fmt(item.closingCreditPoisha)}</span>
                   <StatusBadge type="statement_item" status={item.status || "settled"} />
                 </span>
               </li>
@@ -121,10 +136,10 @@ export default function GroupOverviewClient({ initialDash, groupId, initialBoard
         )}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button href={`/groups/${groupId}/expenses`} size="md" variant="secondary" leftIcon={<LuReceipt size={14} />}>
-            Expenses
+            {t("overview.expenses")}
           </Button>
           <Button href={`/groups/${groupId}/money`} size="md" variant="outline" leftIcon={<LuBanknote size={14} />}>
-            Money
+            {t("overview.money")}
           </Button>
         </div>
       </Card>

@@ -58,11 +58,11 @@ export const routinesApi = {
 
 export const shoppingApi = {
   list: (groupId) => apiClient.get(`/shopping-list/groups/${groupId}`),
-  addItem: (groupId, payload) => apiClient.request(`/shopping-list/groups/${groupId}`, { method: "POST", body: payload }),
+  addItem: (groupId, payload) => apiClient.request(`/shopping-list/groups/${groupId}/items`, { method: "POST", body: payload }),
   updateItem: (groupId, itemId, payload) =>
-    apiClient.request(`/shopping-list/groups/${groupId}/${itemId}`, { method: "PATCH", body: payload }),
+    apiClient.request(`/shopping-list/groups/${groupId}/items/${itemId}`, { method: "PATCH", body: payload }),
   deleteItem: (groupId, itemId) =>
-    apiClient.request(`/shopping-list/groups/${groupId}/${itemId}`, { method: "DELETE" }),
+    apiClient.request(`/shopping-list/groups/${groupId}/items/${itemId}`, { method: "DELETE" }),
   toExpense: (groupId, payload) =>
     apiClient.request(`/shopping-list/groups/${groupId}/to-expense`, { method: "POST", body: payload }),
   history: (groupId) => apiClient.get(`/shopping-list/groups/${groupId}/history`),

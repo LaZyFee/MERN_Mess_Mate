@@ -9,17 +9,16 @@ import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
 import { statsApi } from "@/lib/api/stats";
-import { formatMonth, formatPoisha, toMonthString } from "@/lib/utils/format";
+import { formatMonth, toMonthString } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 
 const ChartShell = dynamic(() => import("@/components/charts/ChartCanvas"), {
   ssr: false,
   loading: () => <Skeleton variant="rect" height={220} />,
 });
 
-const GRANULARITY = [
-  { value: "month", label: "This month" },
-  { value: "year", label: "Whole year" },
-];
+const GRANULARITY_VALUES = ["month", "year"];
 
 const CHART_VARS = ["--p", "--p2", "--p3", "--gold", "--warning", "--danger", "--info", "--success"];
 
@@ -29,6 +28,8 @@ function readVar(name) {
 }
 
 export default function ChartsClient({ groupId, initialStats, initialMonth }) {
+  const t = useT();
+  const { fmt, n, lang } = useMoney();
   const { showToast } = useToast();
   const [granularity, setGranularity] = useState("month");
   const [year, setYear] = useState(() => String(new Date().getFullYear()));
@@ -75,15 +76,15 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Select
             size="lg"
-            label="Range"
-            options={GRANULARITY}
+            label={t("charts.rangeLabel")}
+            options={GRANULARITY_VALUES.map((value) => ({ value, label: t(`charts.granularity.${value}`) }))}
             value={granularity}
             onChange={(event) => setGranularity(event.target.value)}
           />
-          <Select size="lg" label="Year" options={years} value={year} onChange={(event) => setYear(event.target.value)} />
+          <Select size="lg" label={t("charts.year")} options={years} value={year} onChange={(event) => setYear(event.target.value)} />
           {granularity === "month" && (
             <label className="flex flex-col gap-1 text-[13px] font-semibold text-(--ts)">
-              <span>Month</span>
+              <span>{t("charts.month")}</span>
               <input
                 type="month"
                 value={month}
@@ -109,19 +110,19 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
       {stats?.totals && (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Card padding="sm" variant="outlined">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">Meals</p>
-            <p className="text-lg font-extrabold tabular-nums text-(--tp)">{Number(stats.totals.totalMeals || 0)}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("meals.monthlyMeals")}</p>
+            <p className="text-lg font-extrabold tabular-nums text-(--tp)">{n(stats.totals.totalMeals || 0)}</p>
           </Card>
           <Card padding="sm" variant="outlined">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">Expenses (legacy float)</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("exp.total")}</p>
             <p className="text-lg font-extrabold tabular-nums text-(--tp)">
-              {formatPoisha(Math.round(Number(stats.totals.totalExpenses || 0) * 100))}
+              {fmt(stats.totals.totalExpensesPoisha ?? Math.round(Number(stats.totals.totalExpenses || 0) * 100))}
             </p>
           </Card>
           <Card padding="sm" variant="outlined">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">Meal rate</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("overview.mealRate")}</p>
             <p className="text-lg font-extrabold tabular-nums text-(--tp)">
-              {formatPoisha(Math.round(Number(stats.totals.mealRate || 0) * 100))}
+              {fmt(stats.totals.mealRatePoisha ?? Math.round(Number(stats.totals.mealRate || 0) * 100))}
             </p>
           </Card>
         </div>
@@ -129,17 +130,17 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
 
       <Card padding="md" className="min-w-0">
         <h2 className="mb-2 flex items-center gap-2 text-sm font-bold text-(--tp)">
-          <LuChartBar size={16} className="text-(--p)" /> Meals over time
+          <LuChartBar size={16} className="text-(--p)" /> {t("charts.mealsOverTime")}
         </h2>
         {mealSeries.length === 0 ? (
-          <p className="py-6 text-center text-xs text-(--tm)">No meal data for this range.</p>
+          <p className="py-6 text-center text-xs text-(--tm)">{t("charts.noMealData")}</p>
         ) : (
           <ChartShell
             type="bar"
             labels={mealSeries.map(labelOf)}
             datasets={[
               {
-                label: "Meals",
+                label: t("shell.meals"),
                 data: mealSeries.map((row) => Number(row.meals || 0)),
                 colorIndex: 0,
               },
@@ -150,17 +151,17 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
       </Card>
 
       <Card padding="md" className="min-w-0">
-        <h2 className="mb-2 text-sm font-bold text-(--tp)">Expenses over time</h2>
+        <h2 className="mb-2 text-sm font-bold text-(--tp)">{t("charts.expensesOverTime")}</h2>
         {expenseSeries.length === 0 ? (
-          <p className="py-6 text-center text-xs text-(--tm)">No expense data for this range.</p>
+          <p className="py-6 text-center text-xs text-(--tm)">{t("charts.noExpenseData")}</p>
         ) : (
           <ChartShell
             type="line"
             labels={expenseSeries.map(labelOf)}
             datasets={[
               {
-                label: "Expenses (৳)",
-                data: expenseSeries.map((row) => Number(row.amount || 0)),
+                label: `${t("shell.expenses")} (৳)`,
+                data: expenseSeries.map((row) => Number(row.amountPoisha ?? row.amount ?? 0)),
                 colorIndex: 1,
                 fill: true,
               },
@@ -172,9 +173,9 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
       </Card>
 
       <Card padding="md" className="min-w-0">
-        <h2 className="mb-2 text-sm font-bold text-(--tp)">Spending by category</h2>
+        <h2 className="mb-2 text-sm font-bold text-(--tp)">{t("charts.byCategory")}</h2>
         {categories.length === 0 ? (
-          <p className="py-6 text-center text-xs text-(--tm)">No categories with spending yet.</p>
+          <p className="py-6 text-center text-xs text-(--tm)">{t("charts.noCategoryData")}</p>
         ) : (
           <>
             <ChartShell
@@ -182,7 +183,7 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
               labels={categories.map((category) => category.name)}
               datasets={[
                 {
-                  data: categories.map((category) => Number(category.total || 0)),
+                  data: categories.map((category) => Number(category.totalPoisha ?? category.total ?? 0)),
                   multiColor: true,
                   colorIndex: 0,
                 },
@@ -198,7 +199,7 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
                     {category.name}
                   </span>
                   <span className="tabular-nums text-(--tp)">
-                    {formatPoisha(Math.round(Number(category.total || 0) * 100))}
+                    {fmt(category.totalPoisha ?? Math.round(Number(category.total || 0) * 100))}
                   </span>
                 </li>
               ))}
@@ -206,8 +207,8 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
           </>
         )}
         <p className="mt-2 text-[11px] text-(--tm)">
-          Legacy stats endpoint returns floats; amounts are converted with a single helper.
-          {granularity === "year" ? ` Range: ${formatMonth(`${year}-01`)}–${formatMonth(`${year}-12`)}` : ""}
+          {t("charts.rangeNote")}
+          {granularity === "year" ? ` ${t("charts.range", { from: formatMonth(`${year}-01`, lang), to: formatMonth(`${year}-12`, lang) })}` : ""}
         </p>
       </Card>
     </div>

@@ -6,17 +6,18 @@ import {
     getShoppingList, addItem, toggleItem, removeItem, toExpense, listHistory,
 } from '../controllers/shoppingListController.js';
 import {
-    shoppingItemSchema, shoppingItemCheckSchema, shoppingToExpenseSchema,
+    shoppingItemSchema, shoppingToExpenseSchema,
     shoppingItemIdParam, featureGroupParam,
 } from '../validation/featureSchemas.js';
 
 const router = express.Router();
 router.use(auth);
 
-// Shopping list
+// Shopping list. Item writes live under `/items` (matches the client API and
+// keeps the list-scoped routes unambiguous).
 router.get('/groups/:groupId', validate(featureGroupParam, 'params'), requireGroupRoleV2('member'), getShoppingList);
 router.post('/groups/:groupId/items', validate(featureGroupParam, 'params'), validate(shoppingItemSchema), requireGroupRoleV2('member'), addItem);
-router.patch('/groups/:groupId/items/:itemId', validate(featureGroupParam, 'params'), validate(shoppingItemIdParam, 'params'), validate(shoppingItemCheckSchema), requireGroupRoleV2('member'), toggleItem);
+router.patch('/groups/:groupId/items/:itemId', validate(featureGroupParam, 'params'), validate(shoppingItemIdParam, 'params'), requireGroupRoleV2('member'), toggleItem);
 router.delete('/groups/:groupId/items/:itemId', validate(featureGroupParam, 'params'), validate(shoppingItemIdParam, 'params'), requireGroupRoleV2('member'), removeItem);
 router.post('/groups/:groupId/to-expense', validate(featureGroupParam, 'params'), validate(shoppingToExpenseSchema), requireGroupRoleV2('member'), toExpense);
 router.get('/groups/:groupId/history', validate(featureGroupParam, 'params'), requireGroupRoleV2('member'), listHistory);

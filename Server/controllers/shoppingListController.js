@@ -8,7 +8,8 @@ import { notify } from '../services/inboxService.js';
 import { objectIdSchema } from '../validation/schemas.js';
 import {
     shoppingItemSchema as itemSchema, shoppingListCreateSchema as listCreateSchema,
-    shoppingItemCheckSchema as itemCheckSchema, shoppingToExpenseSchema as toExpenseSchema,
+    shoppingItemCheckSchema as itemCheckSchema, shoppingItemUpdateSchema as itemUpdateSchema,
+    shoppingToExpenseSchema as toExpenseSchema,
 } from '../validation/featureSchemas.js';
 import { withTransaction } from '../utils/transaction.js';
 
@@ -51,21 +52,28 @@ export const addItem = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-// PATCH /api/shopping-list/groups/:groupId/items/:itemId — check/uncheck item
+// PATCH /api/shopping-list/groups/:groupId/items/:itemId — check/uncheck or re-price
+// (the original route validated a legacy body and did not persist the change).
 export const toggleItem = async (req, res, next) => {
     try {
         const { groupId, itemId } = req.params;
-        const { checked } = itemCheckSchema.parse(req.body);
+        const updates = itemUpdateSchema.parse(req.body);
         const list = await ShoppingList.findOne({ groupId, status: 'open' });
         if (!list) return res.status(404).json({ msg: 'No open shopping list' });
 
         const item = list.items.id(itemId);
         if (!item) return res.status(404).json({ msg: 'Item not found' });
-        item.checked = checked;
-        item.checkedBy = checked ? req.user.id : null;
-        item.checkedAt = checked ? new Date() : null;
+
+        if (updates.checked !== undefined) {
+            item.checked = updates.checked;
+            item.checkedBy = updates.checked ? req.user.id : null;
+            item.checkedAt = updates.checked ? new Date() : null;
+        }
+        if (updates.estimatedPricePoisha !== undefined) item.estimatedPricePoisha = updates.estimatedPricePoisha;
+        if (updates.quantity !== undefined) item.quantity = updates.quantity;
+
         await list.save();
-        await audit({ groupId, actorId: req.user.id, action: 'shoppingList.itemToggled', targetType: 'shoppingList', targetId: list._id, after: { itemId, checked } });
+        await audit({ groupId, actorId: req.user.id, action: 'shoppingList.itemToggled', targetType: 'shoppingList', targetId: list._id, after: { itemId, ...updates } });
         emitGroup(req, 'shoppingList-updated', { groupId, listId: list._id });
         res.json({ list });
     } catch (err) { next(err); }
@@ -89,7 +97,7 @@ export const removeItem = async (req, res, next) => {
 export const toExpense = async (req, res, next) => {
     try {
         const { groupId } = req.params;
-        const { expenseDescription, categoryId, paidBy } = toExpenseSchema.parse(req.body);
+        const { expenseDescription, categoryId, paidBy, date, supplierName } = toExpenseSchema.parse(req.body);
         const idempotencyKey = req.header('Idempotency-Key');
         const sourceId = idempotencyKey || null;
 
@@ -141,9 +149,10 @@ export const toExpense = async (req, res, next) => {
                 createdBy: req.user.id,
                 status: 'draft',
                 description: expenseDescription,
-                date: new Date(),
-                costPeriod: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7),
-                month: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7),
+                supplierName: supplierName || '',
+                date: date ? new Date(date) : new Date(),
+                costPeriod: (date ? new Date(date) : new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7),
+                month: (date ? new Date(date) : new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' }).slice(0, 7),
                 amount: totalPoisha,
                 lines: checkedItems.map(i => ({
                     description: i.name,
@@ -196,4 +205,4 @@ export const listHistory = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-export const shoppingListSchemas = { itemSchema, listCreateSchema, itemCheckSchema, toExpenseSchema };
+export const shoppingListSchemas = { itemSchema, listCreateSchema, itemCheckSchema, itemUpdateSchema, toExpenseSchema };

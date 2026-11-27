@@ -6,11 +6,9 @@ import Button from "@/components/shared/Button";
 import Checkbox from "@/components/shared/Checkbox";
 import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
-import { SPLIT_MODES } from "@/lib/utils/money";
-import { parseTaka, formatPoisha } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 import { activeCategories, EMPTY_LINE, memberKey, memberName } from "./expenseHelpers";
-
-const SPLIT_OPTIONS = [{ value: "", label: "Use category default" }, ...SPLIT_MODES];
 
 function MemberPicker({ memberships, selected, onToggle, label }) {
   return (
@@ -34,7 +32,7 @@ function MemberPicker({ memberships, selected, onToggle, label }) {
   );
 }
 
-function PerMemberAmounts({ memberships, value, onAmountChange, title, poisha }) {
+function PerMemberAmounts({ memberships, value, onAmountChange, title, integer }) {
   return (
     <div className="min-w-0">
       <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-(--tm)">{title}</p>
@@ -48,7 +46,7 @@ function PerMemberAmounts({ memberships, value, onAmountChange, title, poisha })
               type="number"
               inputMode="decimal"
               min="0"
-              step={poisha ? "1" : "0.25"}
+              step={integer ? "1" : "0.25"}
               label={memberName(membership)}
               value={value?.[key] ?? ""}
               onChange={(event) => onAmountChange(key, event.target.value)}
@@ -61,6 +59,8 @@ function PerMemberAmounts({ memberships, value, onAmountChange, title, poisha })
 }
 
 export default function ExpenseLineEditor({ lines, memberships, categories, onChange }) {
+  const t = useT();
+  const { fmt, toPoisha } = useMoney();
   const categoryOptions = useMemo(
     () =>
       activeCategories(categories).map((category) => ({
@@ -68,6 +68,10 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
         label: `${category.icon ? `${category.icon} ` : ""}${category.name}`,
       })),
     [categories],
+  );
+  const splitOptions = useMemo(
+    () => [{ value: "", label: t("exp.useDefaultSplit") }, ...["meal_units", "equal_all", "equal_selected", "member_days", "fixed_amounts", "weighted", "usage", "personal"].map((value) => ({ value, label: t(`split.${value}`) }))],
+    [t],
   );
 
   const patch = (index, updates) => {
@@ -87,7 +91,8 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
     patch(index, { [field]: { ...(line[field] || {}), [key]: value } });
   };
 
-  const lineTotal = lines.reduce((sum, line) => sum + parseTaka(line.amount), 0);
+  // Line amounts are Taka strings; sum them as integer poisha.
+  const lineTotal = lines.reduce((sum, line) => sum + toPoisha(line.amount), 0);
 
   return (
     <div className="min-w-0 space-y-4">
@@ -100,12 +105,12 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
         return (
           <div key={index} className="min-w-0 rounded-lg border border-(--bd) bg-(--bgs) p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-(--tm)">Line {index + 1}</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-(--tm)">{t("exp.line")} {index + 1}</p>
               {lines.length > 1 && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  ariaLabel={`Remove line ${index + 1}`}
+                  ariaLabel={`${t("exp.line")} ${index + 1}`}
                   onClick={() => onChange(lines.filter((_, i) => i !== index))}
                 >
                   <LuTrash2 size={16} />
@@ -115,16 +120,16 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
 
             <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Select
-                label="Category"
+                label={t("exp.category")}
                 isRequired
                 size="lg"
                 options={categoryOptions}
-                placeholder="Choose category"
+                placeholder={t("exp.chooseCategory")}
                 value={line.categoryId}
                 onChange={(event) => patch(index, { categoryId: event.target.value })}
               />
               <Input
-                label="Amount (৳)"
+                label={t("exp.lineAmount")}
                 isRequired
                 size="lg"
                 type="number"
@@ -136,16 +141,16 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
                 onChange={(event) => patch(index, { amount: event.target.value })}
               />
               <Input
-                label="Description"
+                label={t("exp.description")}
                 size="lg"
-                placeholder="Rice, vegetables…"
+                placeholder={t("exp.descriptionPlaceholder")}
                 value={line.description}
                 onChange={(event) => patch(index, { description: event.target.value })}
               />
               <Select
-                label="Split mode"
+                label={t("exp.splitMode")}
                 size="lg"
-                options={SPLIT_OPTIONS}
+                options={splitOptions}
                 value={line.splitMode}
                 onChange={(event) => patch(index, { splitMode: event.target.value })}
               />
@@ -157,13 +162,13 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
                   memberships={memberships}
                   selected={line.beneficiaries}
                   onToggle={(key) => toggleBeneficiary(index, key)}
-                  label={mode === "personal" ? "Charged to (one member)" : "Beneficiaries"}
+                  label={mode === "personal" ? t("exp.chargedTo") : t("exp.beneficiary")}
                 />
                 {showFixed && (
                   <PerMemberAmounts
                     memberships={memberships.filter((m) => line.beneficiaries.includes(memberKey(m)))}
                     value={line.fixedAmounts}
-                    title="Fixed amount per member (৳)"
+                    title={t("exp.fixedPerMember")}
                     onAmountChange={(key, value) => setMap(index, "fixedAmounts", key, value)}
                   />
                 )}
@@ -171,8 +176,8 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
                   <PerMemberAmounts
                     memberships={memberships.filter((m) => line.beneficiaries.includes(memberKey(m)))}
                     value={mode === "weighted" ? line.weights : line.usageQuantities}
-                    title={mode === "weighted" ? "Weight per member" : "Usage quantity per member"}
-                    poisha={mode === "weighted"}
+                    title={mode === "weighted" ? t("exp.weightPerMember") : t("exp.usagePerMember")}
+                    integer={mode === "weighted"}
                     onAmountChange={(key, value) =>
                       setMap(index, mode === "weighted" ? "weights" : "usageQuantities", key, value)
                     }
@@ -192,10 +197,10 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
           onClick={() => onChange([...lines, { ...EMPTY_LINE }])}
           isFullWidth
         >
-          Add line
+          {t("exp.addLine")}
         </Button>
         <p className="text-sm font-bold tabular-nums text-(--tp)">
-          Total: {formatPoisha(lineTotal)}
+          {t("exp.total")}: {fmt(lineTotal)}
         </p>
       </div>
     </div>

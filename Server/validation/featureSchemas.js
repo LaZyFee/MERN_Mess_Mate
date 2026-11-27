@@ -45,6 +45,13 @@ export const shoppingItemCheckSchema = z.object({
     checked: z.boolean(),
 });
 
+// Partial item update (re-price / toggle). Only the poisha field is writable.
+export const shoppingItemUpdateSchema = z.object({
+    checked: z.boolean().optional(),
+    estimatedPricePoisha: z.number().int().nonnegative().optional(),
+    quantity: z.string().trim().max(40).optional(),
+});
+
 export const shoppingListCreateSchema = z.object({
     title: z.string().trim().min(1).max(100).optional().default('Bazar List'),
 });
@@ -53,6 +60,9 @@ export const shoppingToExpenseSchema = z.object({
     expenseDescription: z.string().trim().min(1).max(200).optional().default('Bazar (from shopping list)'),
     categoryId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid category id').optional(),
     paidBy: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid user id').optional(),
+    // Optional overrides sent by the client (date / supplier are passed through).
+    date: z.string().min(4).optional(),
+    supplierName: z.string().trim().max(100).optional(),
 });
 
 export const shoppingItemIdParam = z.object({ itemId: objectIdBody });

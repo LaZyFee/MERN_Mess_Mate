@@ -21,8 +21,9 @@ import Textarea from "@/components/shared/Textarea";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useToast } from "@/components/shared/ToastProvider";
 import { moneyApi } from "@/lib/api/money";
-import { formatPoisha, formatDay } from "@/lib/utils/format";
-import { MONEY_KIND_LABELS, MONEY_METHOD_LABELS } from "@/lib/utils/money";
+import { formatDay } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 
 /** Transaction kind icons (restricted to group-finance kinds). */
 const KIND_ICONS = {
@@ -40,17 +41,18 @@ function methodIcon() {
 }
 
 const RULES = {
-  confirm: { title: "Confirm transaction", verb: "Confirm", reason: false, danger: false },
-  reject: { title: "Reject transaction", verb: "Reject", reason: true, danger: true },
-  reverse: { title: "Reverse transaction", verb: "Reverse", reason: true, danger: true },
+  confirm: { titleKey: "money.confirmTitle", verbKey: "money.confirmVerb", reason: false, danger: false },
+  reject: { titleKey: "money.rejectTitle", verbKey: "money.rejectVerb", reason: true, danger: true },
+  reverse: { titleKey: "money.reverseTitle", verbKey: "money.reverseVerb", reason: true, danger: true },
 };
 
-function memberLabel(member) {
+function memberLabel(member, fallback) {
   if (!member) return null;
-  return member.displayName || member.username || "Member";
+  return member.displayName || member.username || fallback;
 }
 
 function ReasonModal({ action, saving, onClose, onConfirm }) {
+  const t = useT();
   const [reason, setReason] = useState("");
   const rule = RULES[action];
   if (!rule) return null;
@@ -59,11 +61,11 @@ function ReasonModal({ action, saving, onClose, onConfirm }) {
       isOpen
       onClose={onClose}
       size="lg"
-      header={rule.title}
+      header={t(rule.titleKey)}
       footer={
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={onClose} isDisabled={saving}>
-            Cancel
+            {t("shell.cancel")}
           </Button>
           <Button
             variant={rule.danger ? "danger" : "primary"}
@@ -71,19 +73,17 @@ function ReasonModal({ action, saving, onClose, onConfirm }) {
             isDisabled={saving || (rule.reason && !reason.trim())}
             onClick={() => onConfirm(reason.trim())}
           >
-            {rule.verb}
+            {t(rule.verbKey)}
           </Button>
         </div>
       }
     >
       <p className="text-sm text-(--tm)">
-        {action === "confirm"
-          ? "Confirming posts a balanced journal entry to the ledger."
-          : "This action is recorded in the audit log with your reason."}
+        {action === "confirm" ? t("money.confirmBody") : t("money.dangerBody")}
       </p>
       <div className="mt-4">
         <Textarea
-          label={rule.reason ? "Reason (required)" : "Reason (optional)"}
+          label={rule.reason ? t("exp.reasonRequired") : t("exp.reasonOptional")}
           rows={3}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
@@ -94,24 +94,26 @@ function ReasonModal({ action, saving, onClose, onConfirm }) {
 }
 
 export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }) {
+  const t = useT();
+  const { fmt, lang } = useMoney();
   const { showToast } = useToast();
   const [action, setAction] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const Icon = KIND_ICONS[tx.kind] || LuArrowLeftRight;
   const MethodIcon = methodIcon(tx.method);
-  const from = memberLabel(tx.fromMember);
-  const to = memberLabel(tx.toMember);
+  const from = memberLabel(tx.fromMember, t("money.member"));
+  const to = memberLabel(tx.toMember, t("money.member"));
 
   const run = async (fn) => {
     setBusy(true);
     try {
       const res = await fn();
-      showToast({ status: "success", title: res?.msg || "Done" });
+      showToast({ status: "success", title: res?.msg || t("money.done") });
       setAction(null);
       onChanged?.();
     } catch (ex) {
-      showToast({ status: "error", title: "Action failed", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("money.actionFailed"), description: ex?.data?.msg || ex?.message });
     } finally {
       setBusy(false);
     }
@@ -132,18 +134,18 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge type="money" status={tx.status} />
-            <span className="text-xs font-semibold text-(--ts)">{MONEY_KIND_LABELS[tx.kind] || tx.kind}</span>
+            <span className="text-xs font-semibold text-(--ts)">{t(`money.kind.${tx.kind}`)}</span>
           </div>
           <p className="mt-1 truncate text-xs text-(--tm)">
             {from ? `${from} → ` : ""}
             {to || tx.supplierName || ""}
-            {tx.paidAt ? ` · ${formatDay(String(tx.paidAt).slice(0, 10))}` : ""}
+            {tx.paidAt ? ` · ${formatDay(String(tx.paidAt).slice(0, 10), lang)}` : ""}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-(--tl)">
             <span className="inline-flex items-center gap-1 rounded-full bg-(--bgm) px-2 py-0.5 font-semibold">
-              <MethodIcon size={11} /> {MONEY_METHOD_LABELS[tx.method] || tx.method}
+              <MethodIcon size={11} /> {t(`money.method.${tx.method}`)}
             </span>
-            {tx.reference && <span className="truncate">TrxID {tx.reference}</span>}
+            {tx.reference && <span className="truncate">{t("money.trxId", { ref: tx.reference })}</span>}
             {tx.evidenceUrl && (
               <a
                 href={tx.evidenceUrl}
@@ -151,12 +153,12 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
                 rel="noopener noreferrer"
                 className="font-semibold text-(--p) underline"
               >
-                Evidence
+                {t("money.evidence")}
               </a>
             )}
           </div>
         </div>
-        <p className="shrink-0 text-right text-base font-bold tabular-nums text-(--tp)">{formatPoisha(tx.amount)}</p>
+        <p className="shrink-0 text-right text-base font-bold tabular-nums text-(--tp)">{fmt(tx.amount)}</p>
       </div>
 
       {canTreasurer && ["submitted", "confirmed"].includes(tx.status) && (
@@ -169,10 +171,10 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
                 isDisabled={busy}
                 onClick={() => setAction("confirm")}
               >
-                Confirm
+                {t("money.confirmVerb")}
               </Button>
               <Button size="sm" variant="danger" leftIcon={<LuX size={13} />} isDisabled={busy} onClick={() => setAction("reject")}>
-                Reject
+                {t("money.rejectVerb")}
               </Button>
             </>
           )}
@@ -184,7 +186,7 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
               isDisabled={busy}
               onClick={() => setAction("reverse")}
             >
-              Reverse
+              {t("money.reverseVerb")}
             </Button>
           )}
         </div>

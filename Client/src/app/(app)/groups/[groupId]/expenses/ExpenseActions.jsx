@@ -7,14 +7,16 @@ import Modal from "@/components/modals/Modal";
 import Textarea from "@/components/shared/Textarea";
 import { useToast } from "@/components/shared/ToastProvider";
 import { expensesApi } from "@/lib/api/expenses";
+import { useT } from "@/lib/i18n/LangProvider";
 
 const ACTIONS = {
-  approve: { title: "Approve expense", verb: "Approve", requiresReason: false, status: "success" },
-  reject: { title: "Reject expense", verb: "Reject", requiresReason: true, status: "error" },
-  reverse: { title: "Reverse expense", verb: "Reverse", requiresReason: true, status: "warning" },
+  approve: { titleKey: "exp.approveTitle", verbKey: "exp.approveVerb", requiresReason: false, status: "success" },
+  reject: { titleKey: "exp.rejectTitle", verbKey: "exp.rejectVerb", requiresReason: true, status: "error" },
+  reverse: { titleKey: "exp.reverseTitle", verbKey: "exp.reverseVerb", requiresReason: true, status: "warning" },
 };
 
 function ReasonModal({ action, onClose, onConfirm, saving }) {
+  const t = useT();
   const [reason, setReason] = useState("");
   const config = ACTIONS[action];
   if (!config) return null;
@@ -24,11 +26,11 @@ function ReasonModal({ action, onClose, onConfirm, saving }) {
       isOpen={Boolean(action)}
       onClose={onClose}
       size="lg"
-      header={config.title}
+      header={t(config.titleKey)}
       footer={
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={onClose} isDisabled={saving}>
-            Cancel
+            {t("shell.cancel")}
           </Button>
           <Button
             variant={config.status === "error" ? "danger" : "primary"}
@@ -36,23 +38,21 @@ function ReasonModal({ action, onClose, onConfirm, saving }) {
             isDisabled={saving || (config.requiresReason && !reason.trim())}
             onClick={() => onConfirm(reason.trim())}
           >
-            {config.verb}
+            {t(config.verbKey)}
           </Button>
         </div>
       }
     >
       <p className="text-sm text-(--tm)">
-        {selfApproval
-          ? "Approving posts the ledger entry. If you are also a beneficiary of this expense, add a reason to disclose the self-approval."
-          : "This action is recorded in the audit log with your reason."}
+        {selfApproval ? t("exp.approveBody") : t("exp.dangerBody")}
       </p>
       <div className="mt-4">
         <Textarea
-          label={config.requiresReason ? "Reason (required)" : "Reason (optional)"}
+          label={config.requiresReason ? t("exp.reasonRequired") : t("exp.reasonOptional")}
           rows={3}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Short explanation for the record"
+          placeholder={t("exp.reasonPlaceholder")}
         />
       </div>
     </Modal>
@@ -60,6 +60,7 @@ function ReasonModal({ action, onClose, onConfirm, saving }) {
 }
 
 export default function ExpenseActions({ groupId, expense, canTreasurer, onChanged }) {
+  const t = useT();
   const { showToast } = useToast();
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -73,7 +74,7 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
     } catch (ex) {
       showToast({
         status: "error",
-        title: "Action failed",
+        title: t("exp.actionFailed"),
         description: ex?.data?.msg || ex?.message,
       });
       return false;
@@ -82,7 +83,7 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
 
   const submit = async () => {
     setBusy("submit");
-    await run(() => expensesApi.submit(groupId, expense._id), "Expense submitted");
+    await run(() => expensesApi.submit(groupId, expense._id), t("exp.submitted"));
     setBusy(null);
   };
 
@@ -93,7 +94,7 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
       if (action === "approve") return expensesApi.approve(groupId, expense._id, reason);
       if (action === "reject") return expensesApi.reject(groupId, expense._id, reason);
       return expensesApi.reverse(groupId, expense._id, reason);
-    }, `${action} done`);
+    }, t("exp.done", { action: t(ACTIONS[action].verbKey) }));
     setBusy(null);
     if (done) setPending(null);
   };
@@ -110,7 +111,7 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
             isDisabled={Boolean(busy)}
             onClick={submit}
           >
-            Submit
+            {t("exp.submit")}
           </Button>
         )}
         {status === "submitted" && canTreasurer && (
@@ -121,7 +122,7 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
               isDisabled={Boolean(busy)}
               onClick={() => setPending("approve")}
             >
-              Approve
+              {t("exp.approve")}
             </Button>
             <Button
               size="sm"
@@ -130,7 +131,7 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
               isDisabled={Boolean(busy)}
               onClick={() => setPending("reject")}
             >
-              Reject
+              {t("exp.reject")}
             </Button>
           </>
         )}
@@ -142,7 +143,7 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
             isDisabled={Boolean(busy)}
             onClick={() => setPending("reverse")}
           >
-            Reverse
+            {t("exp.reverse")}
           </Button>
         )}
       </div>

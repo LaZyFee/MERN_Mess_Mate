@@ -23,15 +23,20 @@ import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
 import { useGroupStore } from "@/lib/store/groupStore";
-import { SPLIT_MODES } from "@/lib/utils/money";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 import NotificationsPanel from "./NotificationsPanel";
 import DisputesPanel from "./DisputesPanel";
 import ReconciliationPanel from "./ReconciliationPanel";
 import AssetsPanel from "./AssetsPanel";
 import BudgetsPanel from "./BudgetsPanel";
 
+const SPLIT_VALUES = ["meal_units", "equal_all", "equal_selected", "member_days", "fixed_amounts", "weighted", "usage", "personal"];
+
 // ── Invite Code Section ───────────────────────────────────────────────────────
 function InviteSection({ groupId, initialMeta }) {
+  const t = useT();
+  const { lang } = useMoney();
   const { showToast } = useToast();
   const [meta, setMeta] = useState(initialMeta);
   const [generating, setGenerating] = useState(false);
@@ -64,10 +69,10 @@ function InviteSection({ groupId, initialMeta }) {
         maxUses: payload?.maxUses,
       });
       setConfirmRegen(false);
-      showToast({ status: "success", title: "New invite code generated" });
+      showToast({ status: "success", title: t("more.inviteGenerated") });
       loadMeta();
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.data?.msg || ex?.message });
     } finally {
       setGenerating(false);
     }
@@ -78,26 +83,28 @@ function InviteSection({ groupId, initialMeta }) {
     setInviting(true);
     try {
       await groupsApi.inviteByEmail(groupId, { email: email.trim() });
-      showToast({ status: "success", title: "Invitation email sent" });
+      showToast({ status: "success", title: t("more.inviteEmailSent") });
       setEmail("");
     } catch (ex) {
-      showToast({ status: "error", title: "Could not send invite", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("more.couldNotSendInvite"), description: ex?.data?.msg || ex?.message });
     } finally {
       setInviting(false);
     }
   }
 
   function copy(text) {
-    navigator.clipboard?.writeText(text).then(() => showToast({ status: "success", title: "Copied!" }));
+    navigator.clipboard?.writeText(text).then(() => showToast({ status: "success", title: t("more.copied") }));
   }
 
   function share(url) {
     if (navigator.share) {
-      navigator.share({ title: "Join MealMate Group", url }).catch(() => { });
+      navigator.share({ title: t("more.shareTitle"), url }).catch(() => { });
     } else {
       copy(url);
     }
   }
+
+  const dateLabel = (value) => (value ? new Date(value).toLocaleDateString(lang === "bn" ? "bn-BD" : "en-GB") : "");
 
   return (
     <Card
@@ -105,7 +112,7 @@ function InviteSection({ groupId, initialMeta }) {
       header={
         <div className="flex items-center gap-2">
           <LuKey size={16} className="text-(--p)" />
-          <span className="text-sm font-bold text-(--tp)">Invite people</span>
+          <span className="text-sm font-bold text-(--tp)">{t("more.invitePeople")}</span>
         </div>
       }
     >
@@ -115,50 +122,48 @@ function InviteSection({ groupId, initialMeta }) {
             MM-{meta.prefix}…
           </code>
           <span className="text-xs text-(--tl)">
-            {meta.usesLeft !== undefined ? `${meta.usesLeft} uses left` : ""}
-            {meta.expiresAt ? ` · expires ${new Date(meta.expiresAt).toLocaleDateString("en-GB")}` : ""}
+            {meta.usesLeft !== undefined ? t("more.usesLeft", { count: meta.usesLeft }) : ""}
+            {meta.expiresAt ? ` · ${t("more.expiresOn", { date: dateLabel(meta.expiresAt) })}` : ""}
           </span>
         </div>
       ) : (
-        <p className="text-xs text-(--tm)">No active invite code. Generate one to share the group.</p>
+        <p className="text-xs text-(--tm)">{t("more.noInviteCode")}</p>
       )}
-      <p className="mt-2 text-[11px] text-(--tm)">
-        Codes are hashed — the plaintext is shown only once when generated. Regenerating kills every old link instantly.
-      </p>
+      <p className="mt-2 text-[11px] text-(--tm)">{t("more.inviteHint")}</p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" leftIcon={<LuRefreshCw size={14} />} isLoading={generating} isDisabled={generating} onClick={() => (meta ? setConfirmRegen(true) : regenerate())}>
-          {meta ? "Regenerate code" : "Generate code"}
+          {meta ? t("more.regenerateCode") : t("more.generateCode")}
         </Button>
       </div>
 
       <div className="mt-3 flex flex-col gap-2 border-t border-(--bd) pt-3 sm:flex-row sm:items-end">
-        <Input size="lg" type="email" label="Invite by email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="roommate@example.com" autoComplete="email" />
-        <Button size="sm" isLoading={inviting} isDisabled={inviting || !email.trim()} onClick={sendEmailInvite}>Send invite</Button>
+        <Input size="lg" type="email" label={t("more.inviteByEmail")} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="roommate@example.com" autoComplete="email" />
+        <Button size="sm" isLoading={inviting} isDisabled={inviting || !email.trim()} onClick={sendEmailInvite}>{t("more.sendInvite")}</Button>
       </div>
 
       <Modal
         isOpen={Boolean(reveal)}
         onClose={() => setReveal(null)}
-        header="Invite code (shown once)"
-        footer={<Button isFullWidth onClick={() => setReveal(null)}>Done</Button>}
+        header={t("more.revealTitle")}
+        footer={<Button isFullWidth onClick={() => setReveal(null)}>{t("more.done")}</Button>}
       >
         {reveal && (
           <div className="space-y-3">
-            <Alert status="warning" title="Copy it now">
-              This code will not be shown again. If you lose it, regenerate a new one.
+            <Alert status="warning" title={t("more.copyNow")}>
+              {t("more.copyNowBody")}
             </Alert>
             <code className="block break-all rounded-[var(--r-md)] bg-(--bgm) px-3 py-2 text-center font-mono text-lg font-bold text-(--p)">
               {reveal.code}
             </code>
             <p className="text-[11px] text-(--tm)">
-              {reveal.maxUses ? `${reveal.maxUses} uses` : "Limited uses"}
-              {reveal.expiresAt ? ` · expires ${new Date(reveal.expiresAt).toLocaleDateString("en-GB")}` : ""}
+              {reveal.maxUses ? t("more.maxUses", { count: reveal.maxUses }) : t("more.limitedUses")}
+              {reveal.expiresAt ? ` · ${t("more.expiresOn", { date: dateLabel(reveal.expiresAt) })}` : ""}
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <Button size="sm" variant="outline" leftIcon={<LuCopy size={14} />} onClick={() => copy(reveal.code)}>Copy code</Button>
-              <Button size="sm" variant="outline" leftIcon={<LuCopy size={14} />} onClick={() => copy(reveal.inviteLink)}>Copy link</Button>
-              <Button size="sm" variant="outline" leftIcon={<LuShare2 size={14} />} onClick={() => share(reveal.inviteLink)}>Share</Button>
+              <Button size="sm" variant="outline" leftIcon={<LuCopy size={14} />} onClick={() => copy(reveal.code)}>{t("more.copyCode")}</Button>
+              <Button size="sm" variant="outline" leftIcon={<LuCopy size={14} />} onClick={() => copy(reveal.inviteLink)}>{t("more.copyLink")}</Button>
+              <Button size="sm" variant="outline" leftIcon={<LuShare2 size={14} />} onClick={() => share(reveal.inviteLink)}>{t("more.share")}</Button>
             </div>
           </div>
         )}
@@ -168,10 +173,10 @@ function InviteSection({ groupId, initialMeta }) {
         isOpen={confirmRegen}
         onClose={() => setConfirmRegen(false)}
         onConfirm={regenerate}
-        title="Regenerate invite code?"
-        message="All existing invite links stop working immediately. Share the new code with anyone who still needs to join."
+        title={t("more.regenTitle")}
+        message={t("more.regenBody")}
         status="warning"
-        confirmText="Regenerate"
+        confirmText={t("more.regenerate")}
         isSubmitting={generating}
       />
     </Card>
@@ -180,6 +185,7 @@ function InviteSection({ groupId, initialMeta }) {
 
 // ── Categories Section ────────────────────────────────────────────────────────
 function CategoriesSection({ groupId, initialCategories }) {
+  const t = useT();
   const { showToast } = useToast();
   const [cats, setCats] = useState(initialCategories);
   const [loading, setLoading] = useState(false);
@@ -217,10 +223,10 @@ function CategoriesSection({ groupId, initialCategories }) {
         await groupsApi.createCategory(groupId, form);
         setAddOpen(false);
       }
-      showToast({ status: "success", title: "Category saved" });
+      showToast({ status: "success", title: t("more.categorySaved") });
       load();
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.message });
     } finally {
       setSaving(false);
     }
@@ -230,31 +236,33 @@ function CategoriesSection({ groupId, initialCategories }) {
     setSaving(true);
     try {
       await groupsApi.deleteCategory(groupId, c._id);
-      showToast({ status: "success", title: "Category archived" });
+      showToast({ status: "success", title: t("more.categoryArchived") });
       load();
     } catch (ex) {
-      showToast({ status: "error", title: "Error", description: ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.message });
     } finally {
       setSaving(false);
     }
   }
 
+  const splitOptions = SPLIT_VALUES.map((value) => ({ value, label: t(`split.${value}`) }));
+
   const catFormModal = (
     <Modal
       isOpen={!!editing || addOpen}
       onClose={() => { setEditing(null); setAddOpen(false); }}
-      header={editing ? "Edit Category" : "Add Category"}
+      header={editing ? t("more.editCategory") : t("more.addCategory")}
       footer={
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => { setEditing(null); setAddOpen(false); }} isDisabled={saving}>Cancel</Button>
-          <Button onClick={save} isLoading={saving} isDisabled={saving || !form.name.trim()}>Save</Button>
+          <Button variant="outline" onClick={() => { setEditing(null); setAddOpen(false); }} isDisabled={saving}>{t("shell.cancel")}</Button>
+          <Button onClick={save} isLoading={saving} isDisabled={saving || !form.name.trim()}>{t("shell.save")}</Button>
         </div>
       }
     >
       <div className="flex flex-col gap-4">
-        <Input label="Name" isRequired value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-        <Input label="Icon (emoji)" value={form.icon} onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))} placeholder="🍔" helperText="Optional emoji shown as icon" />
-        <Select label="Split Mode" value={form.splitMode} onChange={(e) => setForm((f) => ({ ...f, splitMode: e.target.value }))} options={SPLIT_MODES} />
+        <Input label={t("more.categoryName")} isRequired value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        <Input label={t("more.categoryIcon")} value={form.icon} onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))} placeholder="🍔" helperText={t("more.categoryIconHelp")} />
+        <Select label={t("exp.splitMode")} value={form.splitMode} onChange={(e) => setForm((f) => ({ ...f, splitMode: e.target.value }))} options={splitOptions} />
       </div>
     </Modal>
   );
@@ -264,21 +272,21 @@ function CategoriesSection({ groupId, initialCategories }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <LuTag size={16} className="[color:var(--p)]" />
-          <span className="font-bold [font-size:0.9375rem] [color:var(--tp)]">Expense Categories</span>
+          <span className="font-bold [font-size:0.9375rem] [color:var(--tp)]">{t("more.expenseCategories")}</span>
         </div>
-        <Button size="sm" leftIcon={<LuPlus size={14} />} onClick={openAdd}>Add</Button>
+        <Button size="sm" leftIcon={<LuPlus size={14} />} onClick={openAdd}>{t("shell.add")}</Button>
       </div>
       {loading ? <Skeleton variant="rect" height={80} /> : cats.length === 0 ? (
-        <p className="[color:var(--tm)] text-sm">No categories. Add one to get started.</p>
+        <p className="[color:var(--tm)] text-sm">{t("more.noCategories")}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {cats.map((c) => (
             <div key={c._id} className="flex items-center gap-3 [padding:var(--space-2)_var(--space-3)] [border-radius:var(--r-md)] [border:1px_solid_var(--bd)]">
               {c.icon && <span className="text-lg">{c.icon}</span>}
               <span className="flex-1 text-sm font-medium [color:var(--tp)]">{c.name}</span>
-              <Badge colorScheme="default" size="sm">{c.splitMode}</Badge>
-              <Button size="sm" variant="ghost" ariaLabel="Edit" onClick={() => openEdit(c)}><LuPencil size={14} /></Button>
-              <Button size="sm" variant="ghost" ariaLabel="Archive" onClick={() => archive(c)}><LuArchive size={14} /></Button>
+              <Badge colorScheme="default" size="sm">{t(`split.${c.splitMode}`)}</Badge>
+              <Button size="sm" variant="ghost" ariaLabel={t("shell.edit")} onClick={() => openEdit(c)}><LuPencil size={14} /></Button>
+              <Button size="sm" variant="ghost" ariaLabel={t("more.archive")} onClick={() => archive(c)}><LuArchive size={14} /></Button>
             </div>
           ))}
         </div>
@@ -290,6 +298,7 @@ function CategoriesSection({ groupId, initialCategories }) {
 
 // ── Main Settings Page ────────────────────────────────────────────────────────
 export default function GroupMoreClient({ initialInviteMeta = null, initialCategories = [] }) {
+  const t = useT();
   const myRole = useGroupStore((s) => s.myRole);
   const groupId = useGroupStore((s) => s.groupId);
   const isAdmin = ["owner", "manager"].includes(myRole);
@@ -298,16 +307,16 @@ export default function GroupMoreClient({ initialInviteMeta = null, initialCateg
   if (!groupId) return null;
   return (
     <div className="flex flex-col [gap:var(--space-5)]">
-      <h2 className="text-base font-bold [color:var(--tp)]">Group Settings</h2>
+      <h2 className="text-base font-bold [color:var(--tp)]">{t("more.groupSettings")}</h2>
       {isAdmin && <InviteSection groupId={groupId} initialMeta={initialInviteMeta} />}
       {isAdmin && <CategoriesSection groupId={groupId} initialCategories={initialCategories} />}
       <BudgetsPanel groupId={groupId} categories={initialCategories} canEdit={isTreasurer} />
       {isManager && <NotificationsPanel groupId={groupId} />}
       <DisputesPanel groupId={groupId} canManage={isManager} />
       {isTreasurer && <ReconciliationPanel groupId={groupId} />}
-      <AssetsPanel groupId={groupId} canManage={isTreasurer} />
+      {isTreasurer && <AssetsPanel groupId={groupId} canManage={isTreasurer} />}
       {!isAdmin && (
-        <p className="[color:var(--tm)] text-sm">Settings are only available to managers and owners.</p>
+        <p className="[color:var(--tm)] text-sm">{t("more.settingsRestricted")}</p>
       )}
     </div>
   );

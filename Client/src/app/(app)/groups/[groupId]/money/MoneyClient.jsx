@@ -11,21 +11,14 @@ import { useToast } from "@/components/shared/ToastProvider";
 import { useGroupStore } from "@/lib/store/groupStore";
 import { useAuthStore } from "@/lib/store/authStore";
 import { moneyApi } from "@/lib/api/money";
-import { MONEY_KINDS } from "@/lib/utils/money";
+import { useT } from "@/lib/i18n/LangProvider";
 import TransactionForm from "./TransactionForm";
 import TransactionCard from "./TransactionCard";
 import FundsPanel from "./FundsPanel";
 import MyBalanceCard from "./MyBalanceCard";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "submitted", label: "Submitted" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "rejected", label: "Rejected" },
-  { value: "reversed", label: "Reversed" },
-];
-
-const KIND_OPTIONS = [{ value: "", label: "All kinds" }, ...MONEY_KINDS];
+const STATUS_VALUES = ["", "submitted", "confirmed", "rejected", "reversed"];
+const KIND_VALUES = ["", "contribution", "payout", "supplier_payment", "member_settlement", "transfer", "fee"];
 
 const TREASURER_ROLES = ["owner", "manager", "treasurer"];
 
@@ -38,6 +31,7 @@ export default function MoneyClient({
   initialBalance,
   myMembershipId,
 }) {
+  const t = useT();
   const { showToast } = useToast();
   const role = useGroupStore((s) => s.myRole) || initialGroup?.myRole || "member";
   const userId = useAuthStore((s) => s.user?._id);
@@ -60,6 +54,15 @@ export default function MoneyClient({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const statusOptions = useMemo(
+    () => STATUS_VALUES.map((value) => ({ value, label: value ? t(`status.${value}`) : t("exp.allStatuses") })),
+    [t],
+  );
+  const kindOptions = useMemo(
+    () => KIND_VALUES.map((value) => ({ value, label: value ? t(`money.kind.${value}`) : t("money.allKinds") })),
+    [t],
+  );
+
   const filters = useMemo(() => ({ status, kind, limit: 25 }), [status, kind]);
 
   const refresh = useCallback(async (reset = true) => {
@@ -80,12 +83,12 @@ export default function MoneyClient({
         }
       }
     } catch (error) {
-      showToast({ status: "error", title: "Could not load transactions", description: error?.message });
+      showToast({ status: "error", title: t("money.couldNotLoadTransactions"), description: error?.message });
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [filters, groupId, membershipId, nextCursor, showToast]);
+  }, [filters, groupId, membershipId, nextCursor, showToast, t]);
 
   const afterChange = () => refresh(true);
 
@@ -95,9 +98,9 @@ export default function MoneyClient({
 
       <Tabs value={tab} onChange={setTab} variant="solid-rounded" size="lg" isFitted>
         <TabList className="overflow-x-auto">
-          <Tab value="list">Transactions</Tab>
-          <Tab value="new">New</Tab>
-          <Tab value="funds">Funds</Tab>
+          <Tab value="list">{t("money.transactions")}</Tab>
+          <Tab value="new">{t("money.new")}</Tab>
+          <Tab value="funds">{t("money.funds")}</Tab>
         </TabList>
 
         <TabPanels className="mt-4">
@@ -107,15 +110,15 @@ export default function MoneyClient({
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Select
                     size="lg"
-                    label="Status"
-                    options={STATUS_OPTIONS}
+                    label={t("exp.status")}
+                    options={statusOptions}
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
                   />
                   <Select
                     size="lg"
-                    label="Kind"
-                    options={KIND_OPTIONS}
+                    label={t("money.kind")}
+                    options={kindOptions}
                     value={kind}
                     onChange={(e) => setKind(e.target.value)}
                   />
@@ -129,7 +132,7 @@ export default function MoneyClient({
                   isLoading={loading}
                   onClick={() => refresh(true)}
                 >
-                  Apply filters
+                  {t("exp.applyFilters")}
                 </Button>
               </Card>
 
@@ -143,10 +146,10 @@ export default function MoneyClient({
                 <Card variant="outlined">
                   <div className="flex flex-col items-center py-8 text-center">
                     <LuBanknote size={28} className="mb-3 text-(--tm)" />
-                    <p className="font-semibold text-(--tp)">No transactions yet</p>
-                    <p className="mt-1 text-sm text-(--tm)">Contributions, payouts and settlements appear here.</p>
+                    <p className="font-semibold text-(--tp)">{t("money.noTransactions")}</p>
+                    <p className="mt-1 text-sm text-(--tm)">{t("money.noTransactionsHint")}</p>
                     <Button size="md" className="mt-4" leftIcon={<LuPlus size={15} />} onClick={() => setTab("new")}>
-                      New transaction
+                      {t("money.new")}
                     </Button>
                   </div>
                 </Card>
@@ -166,7 +169,7 @@ export default function MoneyClient({
 
               {hasMore && (
                 <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} onClick={() => refresh(false)}>
-                  Load more
+                  {t("shell.loadMore")}
                 </Button>
               )}
             </div>
@@ -175,7 +178,7 @@ export default function MoneyClient({
           <TabPanel value="new">
             <Card padding="md">
               <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-(--tp)">
-                <LuWallet size={17} className="text-(--p)" /> Submit transaction
+                <LuWallet size={17} className="text-(--p)" /> {t("money.submit")}
               </h2>
               <TransactionForm
                 groupId={groupId}

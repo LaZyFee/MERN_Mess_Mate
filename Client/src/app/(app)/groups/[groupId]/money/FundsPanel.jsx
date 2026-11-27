@@ -7,11 +7,14 @@ import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import { useToast } from "@/components/shared/ToastProvider";
 import { moneyApi } from "@/lib/api/money";
-import { formatPoisha, formatDay } from "@/lib/utils/format";
+import { formatDay } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 import { memberKey, memberName } from "../expenses/expenseHelpers";
 import { FUND_KINDS } from "./fundKinds";
 
 function CustodianPicker({ groupId, fund, memberships, onChanged }) {
+  const t = useT();
   const { showToast } = useToast();
   const [custodian, setCustodian] = useState("");
   const [saving, setSaving] = useState(false);
@@ -26,10 +29,10 @@ function CustodianPicker({ groupId, fund, memberships, onChanged }) {
     setSaving(true);
     try {
       await moneyApi.changeCustodian(groupId, fund._id, custodian);
-      showToast({ status: "success", title: "Custody transferred" });
+      showToast({ status: "success", title: t("money.custodyTransferred") });
       onChanged?.();
     } catch (ex) {
-      showToast({ status: "error", title: "Handover failed", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("money.handoverFailed"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -39,14 +42,14 @@ function CustodianPicker({ groupId, fund, memberships, onChanged }) {
     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
       <Select
         size="sm"
-        label="New custodian"
-        placeholder="Choose a member"
+        label={t("money.newCustodian")}
+        placeholder={t("money.member")}
         options={options}
         value={custodian}
         onChange={(event) => setCustodian(event.target.value)}
       />
       <Button size="md" variant="outline" isLoading={saving} isDisabled={saving || !custodian} onClick={handover}>
-        Hand over
+        {t("money.handOver")}
       </Button>
     </div>
   );
@@ -59,6 +62,8 @@ export default function FundsPanel({
   role,
   onChanged,
 }) {
+  const t = useT();
+  const { lang, fmt } = useMoney();
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -68,6 +73,11 @@ export default function FundsPanel({
 
   const canCreate = ["owner", "manager", "treasurer"].includes(role);
   const canHandover = role === "owner";
+
+  const fundKindOptions = useMemo(
+    () => FUND_KINDS.map((option) => ({ value: option.value, label: t(`money.fundKind.${option.value}`) })),
+    [t],
+  );
 
   const total = useMemo(
     () => funds.reduce((sum, fund) => sum + Number(fund.balancePoisha || 0), 0),
@@ -83,13 +93,13 @@ export default function FundsPanel({
         kind,
         maskedIdentifier: masked.trim() || undefined,
       });
-      showToast({ status: "success", title: "Fund account created" });
+      showToast({ status: "success", title: t("money.fundCreated") });
       setName("");
       setMasked("");
       setOpen(false);
       onChanged?.();
     } catch (ex) {
-      showToast({ status: "error", title: "Could not create fund", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("money.couldNotCreateFund"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -98,34 +108,34 @@ export default function FundsPanel({
   return (
     <div className="min-w-0">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-(--tp)">Fund accounts</h2>
+        <h2 className="text-sm font-bold text-(--tp)">{t("money.fundAccounts")}</h2>
         {canCreate && (
           <Button size="sm" variant="outline" leftIcon={<LuPlus size={14} />} onClick={() => setOpen((v) => !v)}>
-            New fund
+            {t("money.createFund")}
           </Button>
         )}
       </div>
 
       {open && canCreate && (
         <div className="mb-3 space-y-2 rounded-lg border border-(--bd) bg-(--bgm) p-3">
-          <Input size="lg" label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Main cash box" />
-          <Select size="lg" label="Kind" options={FUND_KINDS} value={kind} onChange={(e) => setKind(e.target.value)} />
+          <Input size="lg" label={t("money.fundName")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("money.fundNamePlaceholder")} />
+          <Select size="lg" label={t("money.kind")} options={fundKindOptions} value={kind} onChange={(e) => setKind(e.target.value)} />
           <Input
             size="lg"
-            label="Masked identifier"
+            label={t("money.maskedIdentifier")}
             value={masked}
             onChange={(e) => setMasked(e.target.value)}
             placeholder="•••• 1234"
           />
           <Button size="md" isFullWidth isLoading={saving} isDisabled={saving || !name.trim()} onClick={create}>
-            Create fund
+            {t("money.createFund")}
           </Button>
         </div>
       )}
 
       {funds.length === 0 ? (
         <p className="rounded-lg border border-(--bd) bg-(--bgs) p-3 text-xs text-(--tm)">
-          No fund accounts yet.
+          {t("money.noFunds")}
         </p>
       ) : (
         <div className="space-y-2">
@@ -139,13 +149,13 @@ export default function FundsPanel({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-(--tp)">{fund.name}</p>
                     <p className="truncate text-[11px] text-(--tm)">
-                      {fund.maskedIdentifier || "No identifier"}
-                      {fund.currentCustodian ? " · custody set" : ""}
+                      {fund.maskedIdentifier || t("money.noIdentifier")}
+                      {fund.currentCustodian ? ` · ${t("money.custodySet")}` : ""}
                     </p>
                   </div>
                 </div>
                 <p className="shrink-0 text-sm font-bold tabular-nums text-(--tp)">
-                  {formatPoisha(fund.balancePoisha)}
+                  {fmt(fund.balancePoisha)}
                 </p>
               </div>
 
@@ -160,12 +170,12 @@ export default function FundsPanel({
 
               {Array.isArray(fund.custodianHistory) && fund.custodianHistory.length > 0 && (
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-[11px] font-semibold text-(--tm)">Custody history</summary>
+                  <summary className="cursor-pointer text-[11px] font-semibold text-(--tm)">{t("money.custodyHistory")}</summary>
                   <ul className="mt-1 space-y-0.5 text-[11px] text-(--tl)">
                     {fund.custodianHistory.map((entry, index) => (
                       <li key={entry._id || index}>
-                        {entry.from ? formatDay(String(entry.from).slice(0, 10)) : "—"} →{" "}
-                        {entry.to ? formatDay(String(entry.to).slice(0, 10)) : "current"}
+                        {entry.from ? formatDay(String(entry.from).slice(0, 10), lang) : "—"} →{" "}
+                        {entry.to ? formatDay(String(entry.to).slice(0, 10), lang) : t("money.current")}
                       </li>
                     ))}
                   </ul>
@@ -174,7 +184,7 @@ export default function FundsPanel({
             </div>
           ))}
           <p className="text-right text-xs font-semibold text-(--tm)">
-            Total balance: <span className="tabular-nums text-(--tp)">{formatPoisha(total)}</span>
+            {t("money.totalBalance")}: <span className="tabular-nums text-(--tp)">{fmt(total)}</span>
           </p>
         </div>
       )}

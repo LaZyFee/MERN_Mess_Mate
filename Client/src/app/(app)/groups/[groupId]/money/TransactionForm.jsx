@@ -6,10 +6,11 @@ import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import { useToast } from "@/components/shared/ToastProvider";
 import { moneyApi } from "@/lib/api/money";
-import { parseTaka, dhakaToday } from "@/lib/utils/format";
+import { dhakaToday } from "@/lib/utils/format";
 import { MONEY_KINDS, MONEY_METHODS } from "@/lib/utils/money";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 import { memberKey, memberName } from "../expenses/expenseHelpers";
-import { FUND_KINDS } from "./fundKinds";
 
 const MEMBER_KEYS = {
   contribution: { from: true, to: false, toAccount: true },
@@ -25,9 +26,12 @@ function pickOptions(list, emptyLabel) {
 }
 
 export default function TransactionForm({ groupId, memberships = [], funds = [], onCreated }) {
+  const t = useT();
+  const { parse, errorText } = useMoney();
   const { showToast } = useToast();
   const [kind, setKind] = useState("contribution");
   const [amount, setAmount] = useState("");
+  const [amountError, setAmountError] = useState("");
   const [fromMember, setFromMember] = useState("");
   const [toMember, setToMember] = useState("");
   const [fromAccount, setFromAccount] = useState("");
@@ -41,16 +45,25 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
 
   const fields = MEMBER_KEYS[kind] || {};
   const memberOptions = useMemo(
-    () => pickOptions(memberships.map((m) => ({ value: memberKey(m), label: memberName(m) })), "Select member"),
-    [memberships],
+    () => pickOptions(memberships.map((m) => ({ value: memberKey(m), label: memberName(m) })), t("money.member")),
+    [memberships, t],
   );
   const fundOptions = useMemo(
-    () => pickOptions(funds.map((f) => ({ value: f._id, label: `${f.name}${f.maskedIdentifier ? ` · ${f.maskedIdentifier}` : ""}` })), "Select fund"),
-    [funds],
+    () => pickOptions(funds.map((f) => ({ value: f._id, label: `${f.name}${f.maskedIdentifier ? ` · ${f.maskedIdentifier}` : ""}` })), t("money.funds")),
+    [funds, t],
+  );
+  const kindOptions = useMemo(
+    () => MONEY_KINDS.map((k) => ({ value: k.value, label: t(`money.kind.${k.value}`) })),
+    [t],
+  );
+  const methodOptions = useMemo(
+    () => MONEY_METHODS.map((m) => ({ value: m.value, label: t(`money.method.${m.value}`) })),
+    [t],
   );
 
   const reset = () => {
     setAmount("");
+    setAmountError("");
     setReference("");
     setEvidenceUrl("");
     setSupplierName("");
@@ -60,15 +73,28 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
     setToAccount("");
   };
 
-  const submit = async () => {
-    const poisha = parseTaka(amount);
-    if (poisha < 1) {
-      showToast({ status: "warning", title: "Enter a positive amount" });
+  const onAmountChange = (value) => {
+    setAmount(value);
+    // Validate live, but stay quiet while the user is still typing.
+    if (!value.trim()) {
+      setAmountError("");
       return;
     }
+    const result = parse(value);
+    setAmountError(result.ok ? "" : errorText(result.reason));
+  };
+
+  const submit = async () => {
+    const result = parse(amount);
+    if (!result.ok) {
+      setAmountError(errorText(result.reason));
+      showToast({ status: "warning", title: errorText(result.reason) });
+      return;
+    }
+    setAmountError("");
     const payload = {
       kind,
-      amount: poisha,
+      amount: result.poisha, // Taka → integer poisha at the API boundary only
       method,
       paidAt: `${paidAt}T00:00:00.000Z`,
       reference: reference.trim() || undefined,
@@ -82,11 +108,11 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
     setSaving(true);
     try {
       const res = await moneyApi.create(groupId, payload);
-      showToast({ status: "success", title: res?.msg || "Transaction submitted" });
+      showToast({ status: "success", title: res?.msg || t("money.submitted") });
       reset();
       onCreated?.();
     } catch (ex) {
-      showToast({ status: "error", title: "Could not submit", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("money.couldNotSubmit"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -97,27 +123,32 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Select
           size="lg"
-          label="Kind"
-          options={MONEY_KINDS}
+          label={t("money.kind")}
+          options={kindOptions}
           value={kind}
           onChange={(event) => setKind(event.target.value)}
         />
-        <Input
-          size="lg"
-          type="number"
-          inputMode="decimal"
-          min="0.01"
-          step="0.01"
-          label="Amount (৳)"
-          isRequired
-          placeholder="0.00"
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-        />
+        <div>
+          <Input
+            size="lg"
+            type="number"
+            inputMode="decimal"
+            min="0.01"
+            step="0.01"
+            label={t("money.amount")}
+            isRequired
+            placeholder="0.00"
+            value={amount}
+            onChange={(event) => onAmountChange(event.target.value)}
+          />
+          {amountError && (
+            <p className="mt-1 text-xs font-semibold text-(--danger)" role="alert">{amountError}</p>
+          )}
+        </div>
         {fields.from && (
           <Select
             size="lg"
-            label="From member"
+            label={t("money.fromMember")}
             options={memberOptions}
             value={fromMember}
             onChange={(event) => setFromMember(event.target.value)}
@@ -126,7 +157,7 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
         {fields.to && (
           <Select
             size="lg"
-            label="To member"
+            label={t("money.toMember")}
             options={memberOptions}
             value={toMember}
             onChange={(event) => setToMember(event.target.value)}
@@ -135,7 +166,7 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
         {fields.fromAccount && (
           <Select
             size="lg"
-            label="From fund"
+            label={t("money.fromFund")}
             options={fundOptions}
             value={fromAccount}
             onChange={(event) => setFromAccount(event.target.value)}
@@ -144,7 +175,7 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
         {fields.toAccount && (
           <Select
             size="lg"
-            label="To fund"
+            label={t("money.toFund")}
             options={fundOptions}
             value={toAccount}
             onChange={(event) => setToAccount(event.target.value)}
@@ -153,47 +184,45 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
         {fields.supplier && (
           <Input
             size="lg"
-            label="Supplier"
+            label={t("money.supplier")}
             value={supplierName}
             onChange={(event) => setSupplierName(event.target.value)}
-            placeholder="Who was paid"
+            placeholder={t("money.supplierHint")}
           />
         )}
         <Select
           size="lg"
-          label="Method"
-          options={MONEY_METHODS}
+          label={t("money.method")}
+          options={methodOptions}
           value={method}
           onChange={(event) => setMethod(event.target.value)}
         />
         <Input
           size="lg"
-          label="Reference / TrxID"
+          label={t("money.reference")}
           value={reference}
           onChange={(event) => setReference(event.target.value)}
         />
         <Input
           size="lg"
           type="date"
-          label="Paid on"
+          label={t("money.paidOn")}
           value={paidAt}
           onChange={(event) => setPaidAt(event.target.value)}
         />
         <Input
           size="lg"
           type="url"
-          label="Evidence link"
+          label={t("money.evidenceLink")}
           placeholder="https://…"
           value={evidenceUrl}
           onChange={(event) => setEvidenceUrl(event.target.value)}
         />
       </div>
       <Button size="lg" isFullWidth isLoading={saving} isDisabled={saving} onClick={submit}>
-        Submit transaction
+        {t("money.submit")}
       </Button>
-      <p className="text-[11px] text-(--tm)">
-        Submitted transactions await treasurer confirmation before they post to the ledger.
-      </p>
+      <p className="text-[11px] text-(--tm)">{t("money.note")}</p>
     </div>
   );
 }

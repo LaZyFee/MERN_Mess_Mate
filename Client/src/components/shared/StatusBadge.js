@@ -9,6 +9,7 @@ import {
  FiRotateCcw,
 } from "react-icons/fi";
 import Badge from "./Badge";
+import { useLang } from "@/lib/i18n/LangProvider";
 
 // CONFIGURATION MAPS (Single source of truth)
 
@@ -154,6 +155,10 @@ export const StatusBadge = ({
  fallback = "pending",
  ...props
 }) => {
+ // Translate the workflow statuses that appear most often in MealMate UI.
+ // Other configs keep their literal label (they are legacy/unscoped).
+ const { t } = useLang();
+ const TRANSLATED_TYPES = new Set(["expense", "money", "period", "statement_item", "asset"]);
  // Use custom config or lookup from type
  const configMap =
   customConfig || STATUS_CONFIGS[type] || STATUS_CONFIGS.driver;
@@ -203,6 +208,11 @@ export const StatusBadge = ({
   };
  }
 
+ const label = !customConfig && key && TRANSLATED_TYPES.has(type)
+  ? t(`status.${key}`)
+  : cfg.label;
+ const safeLabel = label === `status.${key}` ? cfg.label : label;
+
  return (
   <Badge
    variant={cfg.variant}
@@ -212,7 +222,7 @@ export const StatusBadge = ({
    icon={showIcon ? cfg.icon : null}
    {...props}
   >
-   {cfg.label}
+   {safeLabel}
   </Badge>
  );
 };

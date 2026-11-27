@@ -10,13 +10,11 @@ import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
 import { reconciliationApi } from "@/lib/api/notifications";
 import { moneyApi } from "@/lib/api/money";
-import { formatPoisha, parseTaka, formatDay } from "@/lib/utils/format";
+import { formatDay } from "@/lib/utils/format";
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
 
-const RESOLUTIONS = [
-  { value: "adjusted", label: "Adjust ledger (missed entry)" },
-  { value: "accepted_shortage", label: "Accept shortage" },
-  { value: "found_cash", label: "Found cash (unrecorded)" },
-];
+const RESOLUTION_VALUES = ["adjusted", "accepted_shortage", "found_cash"];
 
 function varianceTone(variance) {
   if (variance === 0) return "text-(--success)";
@@ -24,6 +22,8 @@ function varianceTone(variance) {
 }
 
 export default function ReconciliationPanel({ groupId }) {
+  const t = useT();
+  const { lang, fmt, parse, errorText } = useMoney();
   const { showToast } = useToast();
   const [funds, setFunds] = useState([]);
   const [reconciliations, setReconciliations] = useState([]);
@@ -59,22 +59,23 @@ export default function ReconciliationPanel({ groupId }) {
   }, [load]);
 
   const create = async () => {
-    if (!accountId || !counted) {
-      showToast({ status: "warning", title: "Pick a fund and enter the counted amount" });
+    const parsed = parse(counted, { allowZero: true });
+    if (!accountId || !parsed.ok) {
+      showToast({ status: "warning", title: t("recon.pickAndCount"), description: parsed.ok ? undefined : errorText(parsed.reason) });
       return;
     }
     setSaving(true);
     try {
       const res = await reconciliationApi.create(groupId, {
         accountId,
-        actualBalance: parseTaka(counted),
+        actualBalance: parsed.poisha,
         asOf: asOf ? `${asOf}T00:00:00.000Z` : undefined,
       });
-      showToast({ status: "success", title: res?.msg || "Reconciliation saved" });
+      showToast({ status: "success", title: res?.msg || t("recon.saved") });
       setCounted("");
       load();
     } catch (ex) {
-      showToast({ status: "error", title: "Could not reconcile", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("recon.couldNotReconcile"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -86,10 +87,10 @@ export default function ReconciliationPanel({ groupId }) {
     setSaving(true);
     try {
       await reconciliationApi.resolve(groupId, recId, { resolution: choice });
-      showToast({ status: "success", title: "Reconciliation resolved" });
+      showToast({ status: "success", title: t("recon.resolved") });
       load();
     } catch (ex) {
-      showToast({ status: "error", title: "Resolve failed", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("recon.resolveFailed"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -97,8 +98,9 @@ export default function ReconciliationPanel({ groupId }) {
 
   const fundOptions = funds.map((fund) => ({
     value: fund._id,
-    label: `${fund.name} · ${formatPoisha(fund.balancePoisha)}`,
+    label: `${fund.name} · ${fmt(fund.balancePoisha)}`,
   }));
+  const resolutionOptions = RESOLUTION_VALUES.map((value) => ({ value, label: t(`recon.resolution.${value}`) }));
 
   if (loading) return <Skeleton variant="rect" height={180} />;
 
@@ -106,9 +108,9 @@ export default function ReconciliationPanel({ groupId }) {
     <Card padding="md" className="min-w-0">
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-bold text-(--tp)">
-          <LuScale size={16} className="text-(--p)" /> Cash reconciliation
+          <LuScale size={16} className="text-(--p)" /> {t("recon.title")}
         </h2>
-        <Button size="sm" variant="ghost" isRound ariaLabel="Refresh" onClick={load}>
+        <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} onClick={load}>
           <LuRefreshCw size={14} />
         </Button>
       </div>
@@ -116,13 +118,13 @@ export default function ReconciliationPanel({ groupId }) {
       {equation && (
         <div className="mt-2 rounded-lg border border-(--bd) bg-(--bgm) p-2 text-xs">
           <p className="font-bold text-(--ts)">
-            Accounting equation:{" "}
+            {t("recon.equation")}:{" "}
             <span className={equation.balanced ? "text-(--success)" : "text-(--danger)"}>
-              {equation.balanced ? "balanced" : "not balanced"}
+              {equation.balanced ? t("recon.balanced") : t("recon.notBalanced")}
             </span>
           </p>
           <p className="mt-0.5 text-[11px] text-(--tm)">
-            Debits {formatPoisha(equation.totalDebits)} · Credits {formatPoisha(equation.totalCredits)}
+            {t("recon.debitsCredits", { debits: fmt(equation.totalDebits), credits: fmt(equation.totalCredits) })}
           </p>
         </div>
       )}
@@ -130,16 +132,16 @@ export default function ReconciliationPanel({ groupId }) {
       {suggestions && (
         <div className="mt-3 rounded-lg border border-(--bd) bg-(--bgs) p-3">
           <p className="mb-1 flex items-center justify-between gap-2 text-xs font-bold text-(--ts)">
-            <span>Suggested checks</span>
+            <span>{t("recon.suggestedChecks")}</span>
             {suggestions.summary && (
               <span className="text-[10px] font-semibold text-(--tm)">
-                {suggestions.summary.total} item(s)
-                {suggestions.summary.atRiskPoisha > 0 ? ` · ${formatPoisha(suggestions.summary.atRiskPoisha)} at risk` : ""}
+                {t("recon.items", { count: suggestions.summary.total })}
+                {suggestions.summary.atRiskPoisha > 0 ? ` · ${t("recon.atRisk", { amount: fmt(suggestions.summary.atRiskPoisha) })}` : ""}
               </span>
             )}
           </p>
           {(suggestions.suggestions || []).length === 0 ? (
-            <p className="text-[11px] text-(--tm)">Nothing looks off — no unconfirmed payments, underpaid bills or missing receipts.</p>
+            <p className="text-[11px] text-(--tm)">{t("recon.nothingOff")}</p>
           ) : (
             <ul className="space-y-1">
               {(suggestions.suggestions || []).slice(0, 10).map((item, index) => (
@@ -150,7 +152,7 @@ export default function ReconciliationPanel({ groupId }) {
                   <p className="text-[11px] font-semibold text-(--ts)">{item.title}</p>
                   <p className="text-[10px] text-(--tm)">
                     {item.detail}
-                    {item.amountPoisha ? ` · ${formatPoisha(item.amountPoisha)}` : ""}
+                    {item.amountPoisha ? ` · ${fmt(item.amountPoisha)}` : ""}
                     {item.action ? ` · ${item.action}` : ""}
                   </p>
                 </li>
@@ -163,20 +165,20 @@ export default function ReconciliationPanel({ groupId }) {
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Select
           size="lg"
-          label="Fund"
-          placeholder="Choose fund"
+          label={t("money.funds")}
+          placeholder={t("recon.chooseFund")}
           options={fundOptions}
           value={accountId}
           onChange={(event) => setAccountId(event.target.value)}
         />
-        <Input size="lg" type="date" label="As of" value={asOf} onChange={(e) => setAsOf(e.target.value)} />
+        <Input size="lg" type="date" label={t("recon.asOf")} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
         <Input
           size="lg"
           type="number"
           inputMode="decimal"
           min="0"
           step="0.01"
-          label="Counted (৳)"
+          label={t("recon.counted")}
           value={counted}
           onChange={(e) => setCounted(e.target.value)}
         />
@@ -190,33 +192,36 @@ export default function ReconciliationPanel({ groupId }) {
         isDisabled={saving}
         onClick={create}
       >
-        Record count
+        {t("recon.recordCount")}
       </Button>
 
       <div className="mt-3 space-y-2">
         {reconciliations.length === 0 ? (
-          <p className="py-3 text-center text-xs text-(--tm)">No reconciliations recorded.</p>
+          <p className="py-3 text-center text-xs text-(--tm)">{t("recon.none")}</p>
         ) : (
           reconciliations.map((rec) => (
             <div key={rec._id} className="rounded-lg border border-(--bd) bg-(--bgs) p-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-(--tm)">
-                  {rec.asOf ? formatDay(String(rec.asOf).slice(0, 10)) : "—"} · expected {formatPoisha(rec.expectedBalance)} · counted{" "}
-                  {formatPoisha(rec.actualBalance)}
+                  {rec.asOf ? formatDay(String(rec.asOf).slice(0, 10), lang) : "—"}
+                  {" · "}{t("recon.expected", { amount: fmt(rec.expectedBalance) })}
+                  {" · "}{t("recon.countedLabel", { amount: fmt(rec.actualBalance) })}
                 </p>
                 <p className={`text-sm font-bold tabular-nums ${varianceTone(Number(rec.variance))}`}>
                   {Number(rec.variance) >= 0 ? "+" : ""}
-                  {formatPoisha(rec.variance)}
+                  {fmt(rec.variance)}
                 </p>
               </div>
               {rec.resolvedAt ? (
-                <p className="mt-1 text-[11px] text-(--success)">Resolved: {rec.resolution || "done"}</p>
+                <p className="mt-1 text-[11px] text-(--success)">
+                  {t("recon.resolvedLabel", { resolution: rec.resolution ? t(`recon.resolution.${rec.resolution}`) : t("more.done") })}
+                </p>
               ) : Number(rec.variance) !== 0 ? (
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
                   <Select
                     size="sm"
-                    placeholder="Resolution"
-                    options={RESOLUTIONS}
+                    placeholder={t("recon.resolutionLabel")}
+                    options={resolutionOptions}
                     value={resolving[rec._id] || ""}
                     onChange={(event) =>
                       setResolving((current) => ({ ...current, [rec._id]: event.target.value }))
@@ -228,11 +233,11 @@ export default function ReconciliationPanel({ groupId }) {
                     isDisabled={saving || !resolving[rec._id]}
                     onClick={() => resolve(rec._id)}
                   >
-                    Resolve
+                    {t("recon.resolve")}
                   </Button>
                 </div>
               ) : (
-                <p className="mt-1 text-[11px] text-(--success)">Matched exactly</p>
+                <p className="mt-1 text-[11px] text-(--success)">{t("recon.matched")}</p>
               )}
             </div>
           ))

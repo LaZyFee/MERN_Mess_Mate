@@ -13,14 +13,17 @@ import Link from "next/link";
 import { LuMenu, LuX, LuUtensils } from "react-icons/lu";
 import ThemeToggle from "./ThemeToggle";
 import LanguageToggle from "./LanguageToggle";
+import { useT } from "@/lib/i18n/LangProvider";
 
 const PUBLIC_NAV = [
-  { key: "home", label: "Home", href: "/" },
-  { key: "how-it-works", label: "How it works", href: "#how-it-works" },
-  { key: "features", label: "Features", href: "#features" },
+  { key: "home", tkey: "shell.home", href: "/" },
+  { key: "how-it-works", tkey: "landing.nav.howItWorks", href: "/#how-it-works" },
+  { key: "features", tkey: "landing.nav.features", href: "/#features" },
+  { key: "guide", tkey: "shell.guide", href: "/guide" },
 ];
 
 export default function Topbar() {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   const toggleMenu = useCallback(() => setOpen((prev) => !prev), []);
@@ -63,7 +66,7 @@ export default function Topbar() {
               href={item.href}
               className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-(--ts) no-underline transition-colors hover:bg-(--bgm) hover:text-(--p)"
             >
-              {item.label}
+              {t(item.tkey)}
             </Link>
           ))}
         </nav>
@@ -78,13 +81,13 @@ export default function Topbar() {
               href="/login"
               className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-(--p) no-underline transition-colors hover:bg-(--pale)"
             >
-              Sign in
+              {t("auth.login.title")}
             </Link>
             <Link
               href="/register"
               className="inline-flex min-h-10 items-center rounded-lg bg-(--p) px-4 text-sm font-semibold text-(--bgs) no-underline transition-colors hover:bg-(--p3)"
             >
-              Create account
+              {t("auth.register.title")}
             </Link>
           </div>
 
@@ -93,7 +96,7 @@ export default function Topbar() {
             onClick={toggleMenu}
             aria-expanded={open}
             aria-controls="mobile-menu"
-            aria-label={open ? "Close menu" : "Open menu"}
+            aria-label={open ? t("shell.closeMenu") : t("shell.openMenu")}
             className="inline-flex size-11 items-center justify-center rounded-lg border border-(--bd) text-(--tp) transition-colors hover:bg-(--bgm) md:hidden"
           >
             {open ? <LuX size={20} /> : <LuMenu size={20} />}
@@ -116,7 +119,7 @@ export default function Topbar() {
                     onClick={closeMenu}
                     className="flex min-h-12 items-center text-base font-medium text-(--tp) no-underline active:text-(--p)"
                   >
-                    {item.label}
+                    {t(item.tkey)}
                   </Link>
                 </li>
               ))}
@@ -127,14 +130,14 @@ export default function Topbar() {
                 onClick={closeMenu}
                 className="flex min-h-12 items-center justify-center rounded-xl bg-(--p) px-4 text-base font-semibold text-(--bgs) no-underline active:bg-(--p3)"
               >
-                Create account
+                {t("auth.register.title")}
               </Link>
               <Link
                 href="/login"
                 onClick={closeMenu}
                 className="flex min-h-12 items-center justify-center rounded-xl border border-(--bd) px-4 text-base font-semibold text-(--p) no-underline active:bg-(--pale)"
               >
-                Sign in
+                {t("auth.login.title")}
               </Link>
             </div>
           </nav>
