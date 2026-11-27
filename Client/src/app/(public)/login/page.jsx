@@ -1,12 +1,17 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import AuthShell from "@/components/auth/AuthShell";
 import Skeleton from "@/components/shared/Skeleton";
 import LoginForm from "./LoginForm";
+import { verifyToken } from "@/lib/auth/authHelpers";
 
 export const metadata = { title: "Sign In — MealMate" };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const user = await verifyToken();
+  if (user) redirect("/dashboard");
+
   return (
     <AuthShell
       title="Welcome back"

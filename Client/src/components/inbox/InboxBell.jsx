@@ -125,7 +125,7 @@ export default function InboxBell() {
     <div className="relative" ref={panelRef}>
       <Button
         variant="ghost"
-        size="md"
+        size="lg"
         isRound
         ariaLabel="Open notifications"
         onClick={() => setOpen((v) => !v)}

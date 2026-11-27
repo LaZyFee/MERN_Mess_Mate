@@ -19,15 +19,20 @@ import Alert from "@/components/shared/Alert";
 import { groupsApi } from "@/lib/api/groups";
 import { useGroupStore } from "@/lib/store/groupStore";
 import { useT } from "@/lib/i18n/LangProvider";
+import Input from "@/components/shared/Input";
+import Select from "@/components/shared/Select";
 
 function GroupCard({ group, onClick }) {
   const t = useT();
   const memberCount = group.memberCount || group.members?.length || 0;
   return (
-    <button
+    <Button
+      as="button"
+      type="button"
+      variant="outline"
+      isFullWidth
       onClick={onClick}
-
-      className="hover:border-[var(--p)] hover:shadow-[var(--shadow-lg)] flex flex-col gap-3 [padding:var(--space-5)] [background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-lg)] [box-shadow:var(--shadow-md)] text-left w-full cursor-pointer [transition:var(--transition)]"
+      className="group !h-auto !min-h-24 !w-full !justify-start !whitespace-normal !rounded-2xl !border-(--bd) !bg-(--bgs) !p-4 !text-left !text-(--tp) shadow-sm hover:!border-(--p) hover:shadow-lg sm:!p-5"
     >
       <div className="flex items-start gap-3">
         <Avatar name={group.name} size="lg" isSquare />
@@ -51,16 +56,18 @@ function GroupCard({ group, onClick }) {
             )}
           </div>
         </div>
-        <LuArrowRight size={18} className="[color:var(--tl)] shrink-0" />
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-(--pale) text-(--p) transition-transform group-hover:translate-x-0.5">
+          <LuArrowRight size={18} />
+        </span>
       </div>
-    </button>
+    </Button>
   );
 }
 
 function EmptyState({ onCreate, onJoin, t }) {
   return (
     <div
-      className="text-center [padding:var(--space-8)_var(--space-4)] flex flex-col items-center gap-4"
+      className="flex flex-col items-center gap-4 rounded-3xl border border-dashed border-(--bd2) bg-(--bgs) px-4 py-10 text-center sm:py-14"
     >
       <LuUtensilsCrossed size={56} className="[color:var(--tl)]" />
       <div>
@@ -95,6 +102,8 @@ export default function HomeClient({ initialGroups }) {
   // Seed from server â€” no useEffect re-fetch on mount
   const [groups, setGroups] = useState(initialGroups ?? []);
   const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState("name");
   // Ex-member notice: set by the leave flow; cleared once acknowledged.
   const leftNotice = useGroupStore((s) => s.leftNotice);
   const setLeftNotice = useGroupStore((s) => s.setLeftNotice);
@@ -111,6 +120,13 @@ export default function HomeClient({ initialGroups }) {
     }
   }, [showToast, t]);
 
+  const filteredGroups = groups
+    .filter((group) => group.name?.toLowerCase().includes(query.trim().toLowerCase()))
+    .slice()
+    .sort((a, b) => sortBy === "members"
+      ? (b.memberCount || b.members?.length || 0) - (a.memberCount || a.members?.length || 0)
+      : (a.name || "").localeCompare(b.name || ""));
+
   return (
     <div>
       {leftNotice?.message && (
@@ -123,25 +139,52 @@ export default function HomeClient({ initialGroups }) {
 
       {/* Header row */}
       <div
-        className="flex items-center justify-between mb-5 flex-wrap gap-3"
+        className="mb-5 flex flex-col gap-4 rounded-2xl border border-(--bd) bg-(--bgs) p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
       >
-        <h2 className="text-lg font-extrabold [color:var(--tp)]">{t("home.title")}</h2>
-        <div className="flex gap-2">
-          <Button size="sm" variant="ghost" leftIcon={<LuRefreshCw size={15} />} onClick={refresh} isLoading={refreshing}>
+        <div>
+          <h2 className="text-xl font-extrabold text-(--tp) sm:text-2xl">{t("shell.groups")}</h2>
+          <p className="mt-1 text-sm text-(--tm)">{t("home.groupsHint")}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          <Button size="sm" variant="outline" leftIcon={<LuRefreshCw size={15} />} onClick={refresh} isLoading={refreshing} className="w-full sm:w-fit">
             {t("shell.refresh")}
           </Button>
-          <Button size="sm" leftIcon={<LuPlus size={15} />} onClick={() => router.push("/groups/create")}>
+          <Button size="sm" leftIcon={<LuPlus size={15} />} onClick={() => router.push("/groups/create")} className="w-full sm:w-fit">
             {t("grp.create")}
           </Button>
-          <Button size="sm" variant="outline" leftIcon={<LuLogIn size={15} />} onClick={() => router.push("/join")}>
+          <Button size="sm" variant="ghost" leftIcon={<LuLogIn size={15} />} onClick={() => router.push("/join")} className="col-span-2 w-full sm:w-fit">
             {t("grp.join")}
           </Button>
         </div>
       </div>
 
+      {groups.length > 0 && (
+        <div className="mb-4 grid gap-3 rounded-2xl border border-(--bd) bg-(--bgs) p-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:p-4">
+          <Input
+            label={t("home.searchGroups")}
+            type="search"
+            size="md"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("home.searchGroups")}
+            aria-label={t("home.searchGroups")}
+          />
+          <Select
+            label={t("home.sortGroups")}
+            size="md"
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            options={[
+              { value: "name", label: t("home.sortName") },
+              { value: "members", label: t("home.sortMembers") },
+            ]}
+          />
+        </div>
+      )}
+
       {refreshing ? (
         <div
-          className="grid gap-4 [grid-template-columns:repeat(auto-fill,_minmax(280px,_1fr))]"
+          className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3"
         >
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} variant="rect" height={100} />
@@ -153,11 +196,15 @@ export default function HomeClient({ initialGroups }) {
           onCreate={() => router.push("/groups/create")}
           onJoin={() => router.push("/join")}
         />
+      ) : filteredGroups.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-(--bd2) bg-(--bgs) px-4 py-10 text-center text-sm text-(--tm)">
+          {t("home.noMatchingGroups")}
+        </div>
       ) : (
         <div
-          className="grid gap-4 [grid-template-columns:repeat(auto-fill,_minmax(280px,_1fr))]"
+          className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3"
         >
-          {groups.map((g) => (
+          {filteredGroups.map((g) => (
             <GroupCard
               key={g._id}
               group={g}

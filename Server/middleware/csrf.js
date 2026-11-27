@@ -18,9 +18,23 @@ export const csrfProtection = (req, res, next) => {
         return next();
     }
 
+    // Public auth endpoints (register/login/forgot-password/reset-password)
+    // create or reset sessions — there is no existing authenticated session
+    // to hijack, so CSRF double-submit is not applicable. Skip the check
+    // unconditionally even if auth cookies happen to be present.
+    const publicAuthPaths = [
+        '/api/users/register',
+        '/api/users/login',
+        '/api/users/forgot-password',
+        '/api/users/reset-password',
+    ];
+    if (publicAuthPaths.includes(req.path)) {
+        return next();
+    }
+
     // --- Cookie-authenticated path: require double-submit ---
-    // Requests carrying no auth cookies at all (login / register / refresh by
-    // body token) cannot ride someone else's cookies — skip the check.
+    // Requests carrying no auth cookies at all (refresh by body token)
+    // cannot ride someone else's cookies — skip the check.
     const hasAuthCookies = !!getCookie(req, 'mm_at') || !!getCookie(req, 'refreshToken');
     if (!hasAuthCookies) {
         return next();
