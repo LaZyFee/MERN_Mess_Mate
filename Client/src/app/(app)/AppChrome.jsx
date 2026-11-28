@@ -22,10 +22,8 @@ import { useT } from "@/lib/i18n/LangProvider";
 
 const SIDEBAR_NAV = [
   { key: "home", href: "/dashboard", icon: LuLayoutDashboard, labelKey: "shell.home" },
-  { key: "groups", href: "/groups", icon: LuUsers, labelKey: "shell.groups" },
   { key: "inbox", href: "/inbox", icon: LuBell, labelKey: "shell.inbox" },
   { key: "profile", href: "/profile", icon: LuUser, labelKey: "shell.profile" },
-  { key: "settings", href: "/profile", icon: LuSettings, labelKey: "shell.settings" },
   { key: "support", href: "/support", icon: LuLifeBuoy, labelKey: "shell.support" },
   { key: "guide", href: "/guide", icon: LuBookOpen, labelKey: "shell.guide" },
 ];
@@ -88,7 +86,10 @@ export default function AppChrome({ children }) {
       <div className="flex">
         {/* Sidebar — desktop only (lg+) */}
         <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-(--bd) bg-(--bgs)/95 backdrop-blur-xl">
-          <div className="sticky top-14 flex h-[calc(100dvh-3.5rem)] flex-col">
+          {/* sticky top-28 (7rem) clears the 3.5rem app header ALSO occupied by the
+              group shell header + tab bar (mobile/tablet), so the sidebar never sits
+              on top of the group's tab strip. */}
+          <div className="sticky top-28 flex max-h-[calc(100dvh-7rem)] flex-col">
             <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
               {SIDEBAR_NAV.map(({ key, href, icon: Icon, labelKey }) => {
                 const active = isActive(pathname, key);

@@ -1,6 +1,12 @@
 "use client";
 
+/**
+ * Submit a money transaction.
+ * Mobile-first: kind first (drives the fields), amount next, then only the
+ * fields that kind needs. The submit button sticks to the bottom.
+ */
 import { useMemo, useState } from "react";
+import { LuSend } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
@@ -49,7 +55,11 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
     [memberships, t],
   );
   const fundOptions = useMemo(
-    () => pickOptions(funds.map((f) => ({ value: f._id, label: `${f.name}${f.maskedIdentifier ? ` · ${f.maskedIdentifier}` : ""}` })), t("money.funds")),
+    () =>
+      pickOptions(
+        funds.map((f) => ({ value: f._id, label: `${f.name}${f.maskedIdentifier ? ` · ${f.maskedIdentifier}` : ""}` })),
+        t("money.funds"),
+      ),
     [funds, t],
   );
   const kindOptions = useMemo(
@@ -75,7 +85,6 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
 
   const onAmountChange = (value) => {
     setAmount(value);
-    // Validate live, but stay quiet while the user is still typing.
     if (!value.trim()) {
       setAmountError("");
       return;
@@ -94,7 +103,7 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
     setAmountError("");
     const payload = {
       kind,
-      amount: result.poisha, // Taka → integer poisha at the API boundary only
+      amount: result.poisha,
       method,
       paidAt: `${paidAt}T00:00:00.000Z`,
       reference: reference.trim() || undefined,
@@ -128,23 +137,20 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
           value={kind}
           onChange={(event) => setKind(event.target.value)}
         />
-        <div>
-          <Input
-            size="lg"
-            type="number"
-            inputMode="decimal"
-            min="0.01"
-            step="0.01"
-            label={t("money.amount")}
-            isRequired
-            placeholder="0.00"
-            value={amount}
-            onChange={(event) => onAmountChange(event.target.value)}
-          />
-          {amountError && (
-            <p className="mt-1 text-xs font-semibold text-(--danger)" role="alert">{amountError}</p>
-          )}
-        </div>
+        <Input
+          size="lg"
+          type="number"
+          inputMode="decimal"
+          min="0.01"
+          step="0.01"
+          label={t("money.amount")}
+          isRequired
+          placeholder="0.00"
+          value={amount}
+          isInvalid={Boolean(amountError)}
+          errorMessage={amountError}
+          onChange={(event) => onAmountChange(event.target.value)}
+        />
         {fields.from && (
           <Select
             size="lg"
@@ -219,10 +225,21 @@ export default function TransactionForm({ groupId, memberships = [], funds = [],
           onChange={(event) => setEvidenceUrl(event.target.value)}
         />
       </div>
-      <Button size="lg" isFullWidth isLoading={saving} isDisabled={saving} onClick={submit}>
-        {t("money.submit")}
-      </Button>
-      <p className="text-[11px] text-(--tm)">{t("money.note")}</p>
+
+      <div className="sticky bottom-2 z-20 rounded-2xl border border-(--bd) bg-(--glb) p-2 shadow-lg backdrop-blur-md sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
+        <Button
+          size="lg"
+          className="rounded-xl"
+          isFullWidth
+          leftIcon={<LuSend size={15} />}
+          isLoading={saving}
+          isDisabled={saving}
+          onClick={submit}
+        >
+          {t("money.submit")}
+        </Button>
+      </div>
+      <p className="text-[11px] leading-relaxed text-(--tm)">{t("money.note")}</p>
     </div>
   );
 }

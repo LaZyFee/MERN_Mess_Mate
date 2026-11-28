@@ -1,19 +1,23 @@
 "use client";
 
+/**
+ * One ledger transaction.
+ * Mobile-first: icon + title + amount on the first line, meta chips below,
+ * treasury actions as thumb-sized buttons.
+ */
 import { useState } from "react";
 import {
   LuArrowDownLeft,
   LuArrowLeftRight,
   LuArrowUpRight,
-  LuBadgeDollarSign,
   LuBanknote,
   LuHandCoins,
-  LuLoader,
   LuPercent,
   LuRotateCcw,
   LuStore,
   LuCheck,
   LuX,
+  LuExternalLink,
 } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Modal from "@/components/modals/Modal";
@@ -25,7 +29,6 @@ import { formatDay } from "@/lib/utils/format";
 import { useT } from "@/lib/i18n/LangProvider";
 import { useMoney } from "@/lib/hooks/useMoney";
 
-/** Transaction kind icons (restricted to group-finance kinds). */
 const KIND_ICONS = {
   contribution: LuArrowDownLeft,
   payout: LuArrowUpRight,
@@ -35,10 +38,7 @@ const KIND_ICONS = {
   fee: LuPercent,
 };
 
-/** method chip icon (methods share the same wallet glyph) */
-function methodIcon() {
-  return LuBanknote;
-}
+const INFLOW = new Set(["contribution"]);
 
 const RULES = {
   confirm: { titleKey: "money.confirmTitle", verbKey: "money.confirmVerb", reason: false, danger: false },
@@ -63,12 +63,14 @@ function ReasonModal({ action, saving, onClose, onConfirm }) {
       size="lg"
       header={t(rule.titleKey)}
       footer={
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={onClose} isDisabled={saving}>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" isFullWidth className="sm:!w-fit" onClick={onClose} isDisabled={saving}>
             {t("shell.cancel")}
           </Button>
           <Button
             variant={rule.danger ? "danger" : "primary"}
+            isFullWidth
+            className="sm:!w-fit"
             isLoading={saving}
             isDisabled={saving || (rule.reason && !reason.trim())}
             onClick={() => onConfirm(reason.trim())}
@@ -78,7 +80,7 @@ function ReasonModal({ action, saving, onClose, onConfirm }) {
         </div>
       }
     >
-      <p className="text-sm text-(--tm)">
+      <p className="text-sm leading-relaxed text-(--tm)">
         {action === "confirm" ? t("money.confirmBody") : t("money.dangerBody")}
       </p>
       <div className="mt-4">
@@ -101,9 +103,9 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
   const [busy, setBusy] = useState(false);
 
   const Icon = KIND_ICONS[tx.kind] || LuArrowLeftRight;
-  const MethodIcon = methodIcon(tx.method);
   const from = memberLabel(tx.fromMember, t("money.member"));
   const to = memberLabel(tx.toMember, t("money.member"));
+  const inflow = INFLOW.has(tx.kind);
 
   const run = async (fn) => {
     setBusy(true);
@@ -126,54 +128,73 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
   };
 
   return (
-    <div className="min-w-0 rounded-lg border border-(--bd) bg-(--bgs) p-3">
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-(--pale) text-(--p)">
-          <Icon size={17} />
+    <article className="min-w-0 overflow-hidden rounded-2xl border border-(--bd) bg-(--bgs) p-3">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <span
+          className={`grid size-9 shrink-0 place-items-center rounded-full ${inflow ? "bg-(--success-bg) text-(--success)" : "bg-(--pale) text-(--p)"
+            }`}
+        >
+          <Icon size={16} />
         </span>
+
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <StatusBadge type="money" status={tx.status} />
-            <span className="text-xs font-semibold text-(--ts)">{t(`money.kind.${tx.kind}`)}</span>
+            <span className="truncate text-[11.5px] font-semibold text-(--ts)">{t(`money.kind.${tx.kind}`)}</span>
           </div>
-          <p className="mt-1 truncate text-xs text-(--tm)">
+          <p className="mt-1 truncate text-[12.5px] text-(--tm)">
             {from ? `${from} → ` : ""}
             {to || tx.supplierName || ""}
             {tx.paidAt ? ` · ${formatDay(String(tx.paidAt).slice(0, 10), lang)}` : ""}
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-(--tl)">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-(--tm)">
             <span className="inline-flex items-center gap-1 rounded-full bg-(--bgm) px-2 py-0.5 font-semibold">
-              <MethodIcon size={11} /> {t(`money.method.${tx.method}`)}
+              <LuBanknote size={10} /> {t(`money.method.${tx.method}`)}
             </span>
-            {tx.reference && <span className="truncate">{t("money.trxId", { ref: tx.reference })}</span>}
+            {tx.reference && <span className="max-w-[46%] truncate">#{tx.reference}</span>}
             {tx.evidenceUrl && (
               <a
                 href={tx.evidenceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-(--p) underline"
+                className="inline-flex items-center gap-0.5 font-semibold text-(--p) no-underline"
               >
-                {t("money.evidence")}
+                {t("money.evidence")} <LuExternalLink size={10} />
               </a>
             )}
           </div>
         </div>
-        <p className="shrink-0 text-right text-base font-bold tabular-nums text-(--tp)">{fmt(tx.amount)}</p>
+
+        <p
+          className={`shrink-0 text-right text-[15px] font-extrabold tabular-nums ${inflow ? "text-(--success)" : "text-(--tp)"
+            }`}
+        >
+          {inflow ? "+" : ""}
+          {fmt(tx.amount)}
+        </p>
       </div>
 
       {canTreasurer && ["submitted", "confirmed"].includes(tx.status) && (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2.5 grid grid-cols-2 gap-2 border-t border-(--bd) pt-2.5">
           {tx.status === "submitted" && (
             <>
               <Button
                 size="sm"
-                leftIcon={busy ? <LuLoader size={13} className="animate-spin" /> : <LuCheck size={13} />}
+                className="rounded-lg"
+                leftIcon={<LuCheck size={13} />}
                 isDisabled={busy}
                 onClick={() => setAction("confirm")}
               >
                 {t("money.confirmVerb")}
               </Button>
-              <Button size="sm" variant="danger" leftIcon={<LuX size={13} />} isDisabled={busy} onClick={() => setAction("reject")}>
+              <Button
+                size="sm"
+                className="rounded-lg"
+                variant="danger"
+                leftIcon={<LuX size={13} />}
+                isDisabled={busy}
+                onClick={() => setAction("reject")}
+              >
                 {t("money.rejectVerb")}
               </Button>
             </>
@@ -181,6 +202,7 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
           {tx.status === "confirmed" && (
             <Button
               size="sm"
+              className="col-span-2 rounded-lg"
               variant="outline"
               leftIcon={<LuRotateCcw size={13} />}
               isDisabled={busy}
@@ -193,13 +215,8 @@ export default function TransactionCard({ groupId, tx, canTreasurer, onChanged }
       )}
 
       {action && (
-        <ReasonModal
-          action={action}
-          saving={busy}
-          onClose={() => setAction(null)}
-          onConfirm={confirmAction}
-        />
+        <ReasonModal action={action} saving={busy} onClose={() => setAction(null)} onConfirm={confirmAction} />
       )}
-    </div>
+    </article>
   );
 }

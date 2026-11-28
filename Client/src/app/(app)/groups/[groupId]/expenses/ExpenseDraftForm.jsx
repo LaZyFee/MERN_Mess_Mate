@@ -1,7 +1,12 @@
 "use client";
 
+/**
+ * New expense draft builder.
+ * Mobile-first: stacked fields, a payer "card list" instead of a dropdown, then
+ * the line editor; the save button sticks to the bottom of the viewport.
+ */
 import { useMemo, useState } from "react";
-import { LuTriangleAlert } from "react-icons/lu";
+import { LuUserRound, LuPlus, LuSparkles } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Checkbox from "@/components/shared/Checkbox";
 import Input from "@/components/shared/Input";
@@ -23,14 +28,10 @@ function emptyDraft(myMembershipId = "") {
     isPayable: false,
     receiptReference: "",
     lines: [{ ...EMPTY_LINE, fixedAmounts: {}, weights: {}, usageQuantities: {} }],
-    payerId: myMembershipId, // payers[] is required — default to me
+    payerId: myMembershipId,
   };
 }
 
-/**
- * Serialize a UI line (Taka strings) into the API line shape (integer poisha).
- * `toPoisha` is the strict parser from `useMoney()` — it returns an integer.
- */
 function serializeLine(line, toPoisha) {
   const amount = toPoisha(line.amount);
   const out = { categoryId: line.categoryId, amount };
@@ -58,7 +59,6 @@ function serializeLine(line, toPoisha) {
 
 function validate(draft, toPoisha, parse, t, errorText) {
   if (!draft.date) return t("exp.err.date");
-  // Every line amount must parse as Taka (≤2 decimals) and be > 0.
   for (const line of draft.lines) {
     const result = parse(line.amount);
     if (!result.ok) return `${t("exp.line")} ${t("exp.amount")}: ${errorText(result.reason)}`;
@@ -73,19 +73,30 @@ function validate(draft, toPoisha, parse, t, errorText) {
   return null;
 }
 
-export default function ExpenseDraftForm({ groupId, categories, memberships, myMembershipId = "", onCreated }) {
+export default function ExpenseDraftForm({
+  groupId,
+  categories,
+  memberships,
+  myMembershipId = "",
+  onCreated,
+}) {
   const t = useT();
-  const { toPoisha, parse, errorText } = useMoney();
+  const { fmt, toPoisha, parse, errorText } = useMoney();
   const [draft, setDraft] = useState(() => emptyDraft(myMembershipId));
   const [saving, setSaving] = useState(false);
-  const [warnings, setWarnings] = useState([]);
   const { showToast } = useToast();
 
-  const payerOptions = useMemo(() => memberships.map((m) => ({ value: memberKey(m), label: memberName(m) })), [memberships]);
+  const payerOptions = useMemo(
+    () => memberships.map((m) => ({ value: memberKey(m), label: memberName(m) })),
+    [memberships],
+  );
 
   const update = (patch) => setDraft((current) => ({ ...current, ...patch }));
 
-  const togglePayer = (key) => update({ payerId: key });
+  const total = useMemo(
+    () => draft.lines.reduce((sum, line) => sum + toPoisha(line.amount), 0),
+    [draft.lines, toPoisha],
+  );
 
   const submit = async () => {
     const error = validate(draft, toPoisha, parse, t, errorText);
@@ -94,7 +105,7 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
       return;
     }
     const lines = draft.lines.map((line) => serializeLine(line, toPoisha));
-    const total = lines.reduce((sum, line) => sum + line.amount, 0);
+    const sum = lines.reduce((acc, line) => acc + line.amount, 0);
     const payload = {
       date: `${draft.date}T00:00:00.000Z`,
       supplierName: draft.supplierName.trim() || undefined,
@@ -103,15 +114,27 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
       isPayable: draft.isPayable,
       receiptReference: draft.receiptReference.trim() || undefined,
       lines,
-      payers: [{ memberId: draft.payerId, amount: total, fundAccountId: null }],
+      payers: [{ memberId: draft.payerId, amount: sum, fundAccountId: null }],
     };
 
     setSaving(true);
-    setWarnings([]);
     try {
       const res = await expensesApi.createDraft(groupId, payload);
       showToast({ status: "success", title: res?.msg || t("exp.draftCreated") });
-      setWarnings(res?.duplicateWarnings || []);
+      if (res?.duplicateWarnings?.length) {
+        showToast({
+          status: "warning",
+          title: t("exp.duplicateTitle"),
+          description: res.duplicateWarnings
+            .map((w) =>
+              typeof w === "string"
+                ? w
+                : `${w.message || w.reason || t("exp.similarExpense")}${w.expenseId ? ` (${w.expenseId})` : ""}`,
+            )
+            .join(" · "),
+          duration: 8000,
+        });
+      }
       setDraft(emptyDraft(myMembershipId));
       onCreated?.(res?.expense);
     } catch (ex) {
@@ -127,47 +150,60 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
 
   return (
     <div className="min-w-0 space-y-4">
-      {warnings.length > 0 && (
-        showToast({
-          status: "warning",
-          title: t("exp.duplicateTitle"),
-          description: warnings
-            .map((w) =>
-              typeof w === "string"
-                ? w
-                : `${w.message || w.reason || t("exp.similarExpense")}${w.expenseId ? ` (${w.expenseId})` : ""}`
-            )
-            .join(" · "),
-          duration: 8000,
-        })
-      )}
+      {/* ── Who paid ─────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-(--bd) bg-(--bgm) p-3">
+        <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">
+          <LuUserRound size={13} /> {t("exp.paidBy")} <span className="text-(--danger)">*</span>
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          {payerOptions.map((option) => {
+            const active = draft.payerId === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => update({ payerId: option.value })}
+                aria-pressed={active}
+                className={`min-h-11 truncate rounded-xl border px-2.5 text-left text-[12.5px] font-semibold transition-colors ${active
+                    ? "border-(--p) bg-(--pale) text-(--p)"
+                    : "border-(--bd) bg-(--bgs) text-(--ts) hover:border-(--bd2)"
+                  }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-(--tm)">{t("exp.payerHelp")}</p>
+      </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* ── Header fields ────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-2">
         <Input
           label={t("exp.date")}
           isRequired
-          size="lg"
+          size="md"
           type="date"
           value={draft.date}
           onChange={(event) => update({ date: event.target.value })}
         />
         <Input
           label={t("exp.costPeriod")}
-          size="lg"
+          size="md"
           type="month"
           value={draft.costPeriod}
           onChange={(event) => update({ costPeriod: event.target.value })}
         />
         <Input
           label={t("exp.supplier")}
-          size="lg"
+          size="md"
           placeholder={t("exp.supplierPlaceholder")}
           value={draft.supplierName}
           onChange={(event) => update({ supplierName: event.target.value })}
         />
         <Input
           label={t("exp.receiptReference")}
-          size="lg"
+          size="md"
           placeholder={t("exp.receiptReferencePlaceholder")}
           value={draft.receiptReference}
           onChange={(event) => update({ receiptReference: event.target.value })}
@@ -175,29 +211,11 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
       </div>
       <Input
         label={t("exp.note")}
-        size="lg"
+        size="md"
         placeholder={t("exp.notePlaceholder")}
         value={draft.description}
         onChange={(event) => update({ description: event.target.value })}
       />
-
-      <div className="rounded-lg border border-(--bd) bg-(--bgm) p-3">
-        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">
-          <LuTriangleAlert size={13} /> {t("exp.paidBy")} <span className="text-(--danger)">*</span>
-        </p>
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {payerOptions.map((option) => (
-            <Checkbox
-              key={option.value}
-              size="sm"
-              label={option.label}
-              isChecked={draft.payerId === option.value}
-              onChange={() => togglePayer(option.value)}
-            />
-          ))}
-        </div>
-        <p className="mt-2 text-[11px] text-(--tm)">{t("exp.payerHelp")}</p>
-      </div>
 
       <Checkbox
         label={t("exp.payableToggle")}
@@ -212,10 +230,24 @@ export default function ExpenseDraftForm({ groupId, categories, memberships, myM
         onChange={(lines) => update({ lines })}
       />
 
-      <div className="sticky bottom-0 -mx-4 border-t border-(--bd) bg-(--bgs)/95 px-4 py-3 backdrop-blur-sm md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:backdrop-blur-none">
-        <Button size="lg" isFullWidth isLoading={saving} isDisabled={saving || !draft.payerId} onClick={submit}>
-          {t("exp.saveDraft")}
-        </Button>
+      <div className="sticky bottom-2 z-20 rounded-2xl border border-(--bd) bg-(--glb) p-2 shadow-lg backdrop-blur-md sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 px-1 sm:hidden">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-(--tm)">{t("exp.total")}</p>
+            <p className="truncate text-sm font-extrabold tabular-nums text-(--tp)">{fmt(total)}</p>
+          </div>
+          <Button
+            size="lg"
+            className="rounded-xl"
+            isFullWidth
+            isLoading={saving}
+            isDisabled={saving || !draft.payerId}
+            leftIcon={<LuSparkles size={15} />}
+            onClick={submit}
+          >
+            {t("exp.saveDraft")}
+          </Button>
+        </div>
       </div>
     </div>
   );

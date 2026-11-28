@@ -1,17 +1,21 @@
 "use client";
 
 /**
- * T14.9 — Group activity feed from `GET /messgroups/audit-log/:groupId`.
- * Filter by action family; cursor load-more; owner/manager/treasurer/auditor only.
+ * Group activity feed — audit events with an action-family filter and cursor
+ * load-more. Owner / manager / treasurer / auditor only.
+ *
+ * Mobile-first: a sticky filter row, then timeline entries grouped visually by
+ * tone (danger / success / warning) using CSS variables.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LuHistory, LuRefreshCw, LuShieldAlert } from "react-icons/lu";
+import { LuHistory, LuRefreshCw, LuShieldAlert, LuCircleDot } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
 import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
 import { auditApi } from "@/lib/api/groups";
+import { useT } from "@/lib/i18n/LangProvider";
+import { EmptyState, SectionCard } from "../GroupUI";
 import { useGroup } from "../GroupShell";
 
 const ACTION_FAMILIES = [
@@ -28,30 +32,32 @@ const ACTION_FAMILIES = [
 const VIEWER_ROLES = ["owner", "manager", "treasurer", "auditor"];
 
 const TONE = {
-  danger: "border-(--danger) bg-(--danger-bg)",
-  success: "border-(--success) bg-(--success-bg)",
-  warning: "border-(--warning) bg-(--warning-bg)",
+  danger: { rail: "bg-(--danger)", chip: "bg-(--danger-bg) text-(--danger)" },
+  success: { rail: "bg-(--success)", chip: "bg-(--success-bg) text-(--success)" },
+  warning: { rail: "bg-(--warning)", chip: "bg-(--warning-bg) text-(--warning)" },
+  default: { rail: "bg-(--bd3)", chip: "bg-(--bgm) text-(--ts)" },
 };
 
 function actionTone(action = "") {
   if (/(reject|reverse|delete|remove|suspend|archive|reversed)/.test(action)) return "danger";
   if (/(approve|finalize|confirm|resolve|created|upserted)/.test(action)) return "success";
   if (/(reminder|submitted|correct)/.test(action)) return "warning";
-  return "";
+  return "default";
 }
 
 function relativeTime(dateStr) {
   if (!dateStr) return "";
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
 }
 
 export default function ActivityClient({ initialEvents = [], initialAction = "" }) {
+  const t = useT();
   const { groupId, myRole } = useGroup();
   const { showToast } = useToast();
   const [events, setEvents] = useState(initialEvents);
@@ -62,19 +68,22 @@ export default function ActivityClient({ initialEvents = [], initialAction = "" 
 
   const canView = VIEWER_ROLES.includes(myRole);
 
-  const load = useCallback(async (nextAction = action) => {
-    if (!canView) return;
-    setLoading(true);
-    try {
-      const data = await auditApi.groupLog(groupId, { action: nextAction });
-      setEvents(data?.events || []);
-      setMoreCursor(data?.nextCursor || null);
-    } catch (ex) {
-      showToast({ status: "error", title: "Could not load activity", description: ex?.data?.msg || ex?.message });
-    } finally {
-      setLoading(false);
-    }
-  }, [groupId, action, canView, showToast]);
+  const load = useCallback(
+    async (nextAction = action) => {
+      if (!canView) return;
+      setLoading(true);
+      try {
+        const data = await auditApi.groupLog(groupId, { action: nextAction });
+        setEvents(data?.events || []);
+        setMoreCursor(data?.nextCursor || null);
+      } catch (ex) {
+        showToast({ status: "error", title: t("members.couldNotLoad"), description: ex?.data?.msg || ex?.message });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [groupId, action, canView, showToast, t],
+  );
 
   useEffect(() => {
     if (canView && !initialEvents.length) load();
@@ -93,7 +102,7 @@ export default function ActivityClient({ initialEvents = [], initialAction = "" 
       });
       setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
-      showToast({ status: "error", title: "Could not load more activity", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.data?.msg || ex?.message });
     } finally {
       setLoadingMore(false);
     }
@@ -108,60 +117,69 @@ export default function ActivityClient({ initialEvents = [], initialAction = "" 
 
   if (!canView) {
     return (
-      <Card variant="outlined" padding="md">
-        <p className="flex items-center gap-2 text-sm text-(--tm)">
-          <LuShieldAlert size={15} /> Activity history is visible to the owner, manager, treasurer and auditor.
-        </p>
-      </Card>
+      <SectionCard icon={LuShieldAlert} tone="warning" title={t("members.recentActivity")}>
+        <p className="text-sm leading-relaxed text-(--tm)">{t("more.settingsRestricted")}</p>
+      </SectionCard>
     );
   }
 
   return (
-    <Card
-      padding="md"
-      header={
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-sm font-bold text-(--tp)">
-            <LuHistory size={15} /> Group activity
-          </span>
-          <Button size="sm" variant="ghost" isRound ariaLabel="Refresh" isLoading={loading} onClick={() => load()}>
-            <LuRefreshCw size={14} />
-          </Button>
-        </div>
+    <SectionCard
+      icon={LuHistory}
+      title={t("members.recentActivity")}
+      subtitle={`${grouped.length}`}
+      actions={
+        <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} isLoading={loading} onClick={() => load()}>
+          <LuRefreshCw size={14} />
+        </Button>
       }
     >
       <Select size="md" options={ACTION_FAMILIES} value={action} onChange={(e) => changeFilter(e.target.value)} />
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-3 space-y-1.5">
         {loading && grouped.length === 0 ? (
-          <Skeleton variant="rect" height={64} />
+          <Skeleton variant="rect" height={64} className="rounded-xl" />
         ) : grouped.length === 0 ? (
-          <p className="py-6 text-center text-xs text-(--tm)">No activity recorded yet.</p>
+          <EmptyState icon={LuHistory} title={t("members.noActivity")} />
         ) : (
-          grouped.map((event) => (
-            <div
-              key={event._id}
-              className={`rounded-lg border-l-4 border-y border-r border-(--bd) bg-(--bgs) px-3 py-2 ${TONE[actionTone(event.action)] || ""}`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-1">
-                <span className="font-mono text-[11px] font-bold text-(--ts)">{event.action}</span>
-                <span className="text-[10px] text-(--tl)">{relativeTime(event.createdAt)}</span>
+          grouped.map((event) => {
+            const tone = TONE[actionTone(event.action)];
+            return (
+              <div key={event._id} className="relative overflow-hidden rounded-xl border border-(--bd) bg-(--bgs) py-2 pl-3.5 pr-2.5">
+                <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-1 ${tone.rail}`} />
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`truncate rounded-md px-1.5 py-0.5 font-mono text-[10.5px] font-bold ${tone.chip}`}>
+                    {event.action}
+                  </span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-(--tm)">
+                    {relativeTime(event.createdAt)}
+                  </span>
+                </div>
+                {event.targetType && (
+                  <p className="mt-1 flex items-center gap-1 truncate text-[11px] text-(--tm)">
+                    <LuCircleDot size={10} className="shrink-0" />
+                    {event.targetType}
+                    {event.reason ? ` · ${event.reason}` : ""}
+                  </p>
+                )}
               </div>
-              {event.targetType && (
-                <p className="text-[11px] text-(--tm)">
-                  {event.targetType}
-                  {event.reason ? ` · ${event.reason}` : ""}
-                </p>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
         {moreCursor && (
-          <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
-            Load more activity
+          <Button
+            variant="outline"
+            size="md"
+            isFullWidth
+            className="rounded-xl"
+            isLoading={loadingMore}
+            isDisabled={loadingMore}
+            onClick={loadMore}
+          >
+            {t("shell.loadMore")}
           </Button>
         )}
       </div>
-    </Card>
+    </SectionCard>
   );
 }

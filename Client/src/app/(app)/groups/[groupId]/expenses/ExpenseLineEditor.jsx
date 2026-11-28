@@ -1,9 +1,13 @@
 "use client";
 
+/**
+ * Split-line editor for one expense draft.
+ * Mobile-first: category + amount sit side by side, the rest stacks; member
+ * pickers become a 2-up tappable grid.
+ */
 import { useMemo } from "react";
-import { LuPlus, LuTrash2 } from "react-icons/lu";
+import { LuPlus, LuTrash2, LuSplit, LuLayers } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Checkbox from "@/components/shared/Checkbox";
 import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import { useT } from "@/lib/i18n/LangProvider";
@@ -13,18 +17,24 @@ import { activeCategories, EMPTY_LINE, memberKey, memberName } from "./expenseHe
 function MemberPicker({ memberships, selected, onToggle, label }) {
   return (
     <div className="min-w-0">
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-(--tm)">{label}</p>
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">{label}</p>
+      <div className="grid grid-cols-2 gap-1.5">
         {memberships.map((membership) => {
           const key = memberKey(membership);
+          const active = selected.includes(key);
           return (
-            <Checkbox
+            <button
               key={key}
-              size="sm"
-              label={memberName(membership)}
-              isChecked={selected.includes(key)}
-              onChange={() => onToggle(key)}
-            />
+              type="button"
+              onClick={() => onToggle(key)}
+              aria-pressed={active}
+              className={`min-h-10 truncate rounded-xl border px-2.5 text-left text-[12.5px] font-semibold transition-colors ${active
+                  ? "border-(--p) bg-(--pale) text-(--p)"
+                  : "border-(--bd) bg-(--bgs) text-(--ts) hover:border-(--bd2)"
+                }`}
+            >
+              {memberName(membership)}
+            </button>
           );
         })}
       </div>
@@ -35,8 +45,8 @@ function MemberPicker({ memberships, selected, onToggle, label }) {
 function PerMemberAmounts({ memberships, value, onAmountChange, title, integer }) {
   return (
     <div className="min-w-0">
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-(--tm)">{title}</p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">{title}</p>
+      <div className="grid grid-cols-2 gap-2">
         {memberships.map((membership) => {
           const key = memberKey(membership);
           return (
@@ -70,7 +80,12 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
     [categories],
   );
   const splitOptions = useMemo(
-    () => [{ value: "", label: t("exp.useDefaultSplit") }, ...["meal_units", "equal_all", "equal_selected", "member_days", "fixed_amounts", "weighted", "usage", "personal"].map((value) => ({ value, label: t(`split.${value}`) }))],
+    () => [
+      { value: "", label: t("exp.useDefaultSplit") },
+      ...["meal_units", "equal_all", "equal_selected", "member_days", "fixed_amounts", "weighted", "usage", "personal"].map(
+        (value) => ({ value, label: t(`split.${value}`) }),
+      ),
+    ],
     [t],
   );
 
@@ -91,11 +106,10 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
     patch(index, { [field]: { ...(line[field] || {}), [key]: value } });
   };
 
-  // Line amounts are Taka strings; sum them as integer poisha.
   const lineTotal = lines.reduce((sum, line) => sum + toPoisha(line.amount), 0);
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-3">
       {lines.map((line, index) => {
         const mode = line.splitMode;
         const showFixed = mode === "fixed_amounts";
@@ -103,26 +117,29 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
         const showMembers = ["equal_selected", "personal", "fixed_amounts", "weighted", "usage"].includes(mode);
 
         return (
-          <div key={index} className="min-w-0 rounded-lg border border-(--bd) bg-(--bgs) p-3">
+          <div key={index} className="min-w-0 rounded-2xl border border-(--bd) bg-(--bgs) p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-(--tm)">{t("exp.line")} {index + 1}</p>
+              <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">
+                <LuLayers size={12} /> {t("exp.line")} {index + 1}
+              </p>
               {lines.length > 1 && (
                 <Button
                   variant="ghost"
                   size="sm"
+                  isRound
                   ariaLabel={`${t("exp.line")} ${index + 1}`}
                   onClick={() => onChange(lines.filter((_, i) => i !== index))}
                 >
-                  <LuTrash2 size={16} />
+                  <LuTrash2 size={15} />
                 </Button>
               )}
             </div>
 
-            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <Select
                 label={t("exp.category")}
                 isRequired
-                size="lg"
+                size="md"
                 options={categoryOptions}
                 placeholder={t("exp.chooseCategory")}
                 value={line.categoryId}
@@ -131,7 +148,7 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
               <Input
                 label={t("exp.lineAmount")}
                 isRequired
-                size="lg"
+                size="md"
                 type="number"
                 inputMode="decimal"
                 min="0.01"
@@ -142,14 +159,14 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
               />
               <Input
                 label={t("exp.description")}
-                size="lg"
+                size="md"
                 placeholder={t("exp.descriptionPlaceholder")}
                 value={line.description}
                 onChange={(event) => patch(index, { description: event.target.value })}
               />
               <Select
                 label={t("exp.splitMode")}
-                size="lg"
+                size="md"
                 options={splitOptions}
                 value={line.splitMode}
                 onChange={(event) => patch(index, { splitMode: event.target.value })}
@@ -157,7 +174,7 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
             </div>
 
             {showMembers && (
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 space-y-3 border-t border-(--bd) pt-3">
                 <MemberPicker
                   memberships={memberships}
                   selected={line.beneficiaries}
@@ -192,15 +209,16 @@ export default function ExpenseLineEditor({ lines, memberships, categories, onCh
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Button
           variant="dashed"
-          size="lg"
-          leftIcon={<LuPlus size={16} />}
+          size="md"
+          className="rounded-xl"
+          leftIcon={<LuPlus size={15} />}
           onClick={() => onChange([...lines, { ...EMPTY_LINE }])}
           isFullWidth
         >
           {t("exp.addLine")}
         </Button>
-        <p className="text-sm font-bold tabular-nums text-(--tp)">
-          {t("exp.total")}: {fmt(lineTotal)}
+        <p className="flex items-center justify-center gap-1.5 rounded-xl bg-(--pale) px-3 py-2 text-sm font-bold tabular-nums text-(--p) sm:justify-start">
+          <LuSplit size={13} /> {t("exp.total")}: {fmt(lineTotal)}
         </p>
       </div>
     </div>

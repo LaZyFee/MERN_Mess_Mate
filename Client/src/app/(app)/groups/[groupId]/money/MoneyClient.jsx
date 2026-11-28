@@ -1,17 +1,22 @@
 "use client";
 
+/**
+ * Money tab — balance, ledger list, new transaction, fund accounts.
+ * Mobile-first: segmented views instead of a tab bar + panels, filter sheet that
+ * collapses, and an empty state with a direct CTA.
+ */
 import { useCallback, useMemo, useState } from "react";
-import { LuBanknote, LuList, LuPlus, LuWallet } from "react-icons/lu";
+import { LuBanknote, LuList, LuPlus, LuWallet, LuFilter, LuRefreshCw } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
 import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
-import Tabs, { TabList, Tab, TabPanels, TabPanel } from "@/components/shared/Tabs";
 import { useToast } from "@/components/shared/ToastProvider";
 import { useGroupStore } from "@/lib/store/groupStore";
 import { useAuthStore } from "@/lib/store/authStore";
 import { moneyApi } from "@/lib/api/money";
 import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
+import { SegmentedControl, SectionCard, EmptyState } from "../GroupUI";
 import TransactionForm from "./TransactionForm";
 import TransactionCard from "./TransactionCard";
 import FundsPanel from "./FundsPanel";
@@ -32,6 +37,7 @@ export default function MoneyClient({
   myMembershipId,
 }) {
   const t = useT();
+  const { fmt, n } = useMoney();
   const { showToast } = useToast();
   const role = useGroupStore((s) => s.myRole) || initialGroup?.myRole || "member";
   const userId = useAuthStore((s) => s.user?._id);
@@ -43,7 +49,7 @@ export default function MoneyClient({
     return mine?._id || null;
   }, [initialMemberships, myMembershipId, userId]);
 
-  const [tab, setTab] = useState("list");
+  const [view, setView] = useState("list");
   const [transactions, setTransactions] = useState(initialPage?.transactions ?? []);
   const [nextCursor, setNextCursor] = useState(initialPage?.nextCursor || null);
   const [hasMore, setHasMore] = useState(Boolean(initialPage?.hasMore));
@@ -51,6 +57,7 @@ export default function MoneyClient({
   const [balance, setBalance] = useState(initialBalance);
   const [status, setStatus] = useState("");
   const [kind, setKind] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -63,146 +70,211 @@ export default function MoneyClient({
     [t],
   );
 
-  const filters = useMemo(() => ({ status, kind, limit: 25 }), [status, kind]);
-
-  const refresh = useCallback(async (reset = true) => {
-    setLoading(reset);
-    setLoadingMore(!reset);
-    try {
-      const data = await moneyApi.list(groupId, reset ? filters : { ...filters, cursor: nextCursor });
-      const page = Array.isArray(data?.transactions) ? data.transactions : [];
-      setTransactions((current) => (reset ? page : [...current, ...page]));
-      setNextCursor(data?.nextCursor || null);
-      setHasMore(Boolean(data?.hasMore));
-      if (reset) {
-        const fundData = await moneyApi.funds(groupId).catch(() => null);
-        if (fundData) setFunds(fundData.funds || []);
-        if (membershipId) {
-          const balanceData = await moneyApi.memberBalance(groupId, membershipId).catch(() => null);
-          if (balanceData) setBalance(balanceData);
+  const refresh = useCallback(
+    async (reset = true, overrides = {}) => {
+      const nextStatus = overrides.status ?? status;
+      const nextKind = overrides.kind ?? kind;
+      const query = {
+        status: nextStatus || undefined,
+        kind: nextKind || undefined,
+        limit: 25,
+        ...(reset || !nextCursor ? {} : { cursor: nextCursor }),
+      };
+      if (reset) setLoading(true);
+      else setLoadingMore(true);
+      try {
+        const data = await moneyApi.list(groupId, query);
+        const page = Array.isArray(data?.transactions) ? data.transactions : [];
+        setTransactions((current) => (reset ? page : [...current, ...page]));
+        setNextCursor(data?.nextCursor || null);
+        setHasMore(Boolean(data?.hasMore));
+        if (reset) {
+          const fundData = await moneyApi.funds(groupId).catch(() => null);
+          if (fundData) setFunds(fundData.funds || []);
+          if (membershipId) {
+            const balanceData = await moneyApi.memberBalance(groupId, membershipId).catch(() => null);
+            if (balanceData) setBalance(balanceData);
+          }
         }
+      } catch (error) {
+        showToast({ status: "error", title: t("money.couldNotLoadTransactions"), description: error?.message });
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
       }
-    } catch (error) {
-      showToast({ status: "error", title: t("money.couldNotLoadTransactions"), description: error?.message });
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [filters, groupId, membershipId, nextCursor, showToast, t]);
+    },
+    [groupId, membershipId, nextCursor, showToast, t, status, kind],
+  );
 
-  const afterChange = () => refresh(true);
+  const applyFilters = (patch = {}) => {
+    const nextStatus = patch.status ?? status;
+    const nextKind = patch.kind ?? kind;
+    setStatus(nextStatus);
+    setKind(nextKind);
+    setNextCursor(null);
+    refresh(true, { status: nextStatus, kind: nextKind });
+  };
+
+  const afterChange = () => {
+    setNextCursor(null);
+    refresh(true);
+  };
+
+  const fundTotal = useMemo(
+    () => funds.reduce((sum, fund) => sum + Number(fund.balancePoisha || 0), 0),
+    [funds],
+  );
+  const activeFilterCount = (status ? 1 : 0) + (kind ? 1 : 0);
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-3">
       {membershipId && balance && <MyBalanceCard balance={balance} />}
 
-      <Tabs value={tab} onChange={setTab} variant="solid-rounded" size="lg" isFitted>
-        <TabList className="overflow-x-auto">
-          <Tab value="list">{t("money.transactions")}</Tab>
-          <Tab value="new">{t("money.new")}</Tab>
-          <Tab value="funds">{t("money.funds")}</Tab>
-        </TabList>
+      <SegmentedControl
+        ariaLabel={t("money.transactions")}
+        value={view}
+        onChange={setView}
+        options={[
+          { value: "list", label: t("money.transactions"), icon: LuList },
+          { value: "new", label: t("money.new"), icon: LuPlus },
+          { value: "funds", label: t("money.funds"), icon: LuWallet },
+        ]}
+      />
 
-        <TabPanels className="mt-4">
-          <TabPanel value="list">
-            <div className="min-w-0 space-y-3">
-              <Card padding="sm" variant="outlined">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Select
-                    size="lg"
-                    label={t("exp.status")}
-                    options={statusOptions}
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                  />
-                  <Select
-                    size="lg"
-                    label={t("money.kind")}
-                    options={kindOptions}
-                    value={kind}
-                    onChange={(e) => setKind(e.target.value)}
-                  />
-                </div>
-                <Button
-                  size="md"
-                  variant="secondary"
-                  isFullWidth
-                  className="mt-2"
-                  leftIcon={<LuList size={14} />}
-                  isLoading={loading}
-                  onClick={() => refresh(true)}
-                >
-                  {t("exp.applyFilters")}
-                </Button>
-              </Card>
-
-              {loading && transactions.length === 0 ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((key) => (
-                    <Skeleton key={key} variant="rect" height={72} />
-                  ))}
-                </div>
-              ) : transactions.length === 0 ? (
-                <Card variant="outlined">
-                  <div className="flex flex-col items-center py-8 text-center">
-                    <LuBanknote size={28} className="mb-3 text-(--tm)" />
-                    <p className="font-semibold text-(--tp)">{t("money.noTransactions")}</p>
-                    <p className="mt-1 text-sm text-(--tm)">{t("money.noTransactionsHint")}</p>
-                    <Button size="md" className="mt-4" leftIcon={<LuPlus size={15} />} onClick={() => setTab("new")}>
-                      {t("money.new")}
-                    </Button>
-                  </div>
-                </Card>
-              ) : (
-                <div className="space-y-2">
-                  {transactions.map((tx) => (
-                    <TransactionCard
-                      key={tx._id}
-                      groupId={groupId}
-                      tx={tx}
-                      canTreasurer={canTreasurer}
-                      onChanged={afterChange}
-                    />
-                  ))}
-                </div>
+      {view === "list" && (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors ${filtersOpen || activeFilterCount
+                  ? "border-(--p) bg-(--pale) text-(--p)"
+                  : "border-(--bd) bg-(--bgs) text-(--ts)"
+                }`}
+            >
+              <LuFilter size={14} />
+              {t("exp.status")}
+              {activeFilterCount > 0 && (
+                <span className="grid size-4 place-items-center rounded-full bg-(--p) text-[9px] font-bold text-(--bgs)">
+                  {activeFilterCount}
+                </span>
               )}
+            </button>
+            <Button
+              size="sm"
+              variant="ghost"
+              isRound
+              ariaLabel={t("shell.refresh")}
+              isLoading={loading}
+              onClick={() => {
+                setNextCursor(null);
+                refresh(true);
+              }}
+            >
+              <LuRefreshCw size={15} />
+            </Button>
+            <p className="ml-auto text-[11px] font-semibold text-(--tm)">
+              {n(transactions.length)} · {fmt(transactions.reduce((s, tx) => s + Number(tx.amount || 0), 0))}
+            </p>
+          </div>
 
-              {hasMore && (
-                <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} onClick={() => refresh(false)}>
-                  {t("shell.loadMore")}
-                </Button>
-              )}
-            </div>
-          </TabPanel>
-
-          <TabPanel value="new">
-            <Card padding="md">
-              <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-(--tp)">
-                <LuWallet size={17} className="text-(--p)" /> {t("money.submit")}
-              </h2>
-              <TransactionForm
-                groupId={groupId}
-                memberships={initialMemberships}
-                funds={funds}
-                onCreated={() => {
-                  setTab("list");
-                  afterChange();
-                }}
+          {filtersOpen && (
+            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-(--bd) bg-(--bgs) p-3 sm:grid-cols-2">
+              <Select
+                size="md"
+                label={t("exp.status")}
+                options={statusOptions}
+                value={status}
+                onChange={(e) => applyFilters({ status: e.target.value })}
               />
-            </Card>
-          </TabPanel>
+              <Select
+                size="md"
+                label={t("money.kind")}
+                options={kindOptions}
+                value={kind}
+                onChange={(e) => applyFilters({ kind: e.target.value })}
+              />
+            </div>
+          )}
 
-          <TabPanel value="funds">
-            <FundsPanel
-              groupId={groupId}
-              funds={funds}
-              memberships={initialMemberships}
-              role={role}
-              onChanged={afterChange}
-            />
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
+          {loading && transactions.length === 0 ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((key) => (
+                <Skeleton key={key} variant="rect" height={80} className="rounded-2xl" />
+              ))}
+            </div>
+          ) : transactions.length === 0 ? (
+            <div className="rounded-2xl border border-(--bd) bg-(--bgs)">
+              <EmptyState
+                icon={LuBanknote}
+                title={t("money.noTransactions")}
+                body={t("money.noTransactionsHint")}
+                action={
+                  <Button size="md" leftIcon={<LuPlus size={15} />} onClick={() => setView("new")}>
+                    {t("money.new")}
+                  </Button>
+                }
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {transactions.map((tx) => (
+                <TransactionCard
+                  key={tx._id}
+                  groupId={groupId}
+                  tx={tx}
+                  canTreasurer={canTreasurer}
+                  onChanged={afterChange}
+                />
+              ))}
+            </div>
+          )}
+
+          {hasMore && (
+            <Button
+              variant="outline"
+              size="md"
+              isFullWidth
+              className="rounded-xl"
+              isLoading={loadingMore}
+              onClick={() => refresh(false)}
+            >
+              {t("shell.loadMore")}
+            </Button>
+          )}
+        </>
+      )}
+
+      {view === "new" && (
+        <SectionCard icon={LuWallet} title={t("money.submit")} subtitle={t("money.note")}>
+          <TransactionForm
+            groupId={groupId}
+            memberships={initialMemberships}
+            funds={funds}
+            onCreated={() => {
+              setView("list");
+              afterChange();
+            }}
+          />
+        </SectionCard>
+      )}
+
+      {view === "funds" && (
+        <SectionCard
+          icon={LuWallet}
+          title={t("money.fundAccounts")}
+          subtitle={`${t("money.totalBalance")} · ${fmt(fundTotal)}`}
+        >
+          <FundsPanel
+            groupId={groupId}
+            funds={funds}
+            memberships={initialMemberships}
+            role={role}
+            onChanged={afterChange}
+          />
+        </SectionCard>
+      )}
     </div>
   );
 }

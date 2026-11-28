@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { LuX } from "react-icons/lu";
+import Button from "../shared/Button";
 
 /**
  * Modal component for dialogs and popups
@@ -120,7 +121,7 @@ const Modal = ({
         <Button
          variant="ghost"
          size="sm"
-
+        type="button"
          onClick={onClose}
          aria-label="Close"
          className="text-(--tm) hover:text-(--p) dark:text-(--bgs) dark:hover:text-primary transition-colors shrink-0"

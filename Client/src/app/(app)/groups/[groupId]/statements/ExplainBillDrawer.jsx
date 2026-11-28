@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * T14.14 — "Explain my bill" drawer (`GET /statements/groups/:groupId/statements/:month/explain`).
- * Renders the server-built breakdown of one frozen statement item in English or
- * Bengali. Nothing is recalculated here: every figure comes from the statement.
+ * "Explain my bill" sheet — the server-built breakdown of one frozen statement
+ * item, in English or Bengali. Nothing is recalculated here.
  */
 import { useCallback, useEffect, useState } from "react";
-import { LuReceiptText, LuLoaderCircle, LuTriangleAlert } from "react-icons/lu";
+import { LuReceiptText, LuLoaderCircle, LuTriangleAlert, LuSparkles } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Modal from "@/components/modals/Modal";
 import { statementsApi } from "@/lib/api/statements";
@@ -19,7 +18,6 @@ const LANGS = [
 ];
 
 function amountOf(row, fmt, lang) {
-  // the server ships display strings per language; fall back to the poisha value
   return row.display?.[lang] || row.display?.en || fmt(row.amountPoisha || 0, { lang });
 }
 
@@ -31,19 +29,21 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async (targetLang = lang) => {
-    setLoading(true);
-    setError(null);
-    try {
-      setData(await statementsApi.explain(groupId, month, membershipId, targetLang));
-    } catch (ex) {
-      setError(ex?.data?.msg || ex?.message || t("stmt.explainFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }, [groupId, month, membershipId, lang, t]);
+  const load = useCallback(
+    async (targetLang = lang) => {
+      setLoading(true);
+      setError(null);
+      try {
+        setData(await statementsApi.explain(groupId, month, membershipId, targetLang));
+      } catch (ex) {
+        setError(ex?.data?.msg || ex?.message || t("stmt.explainFailed"));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [groupId, month, membershipId, lang, t],
+  );
 
-  // Open in the language the user is reading the app in.
   useEffect(() => {
     if (!month) return;
     const next = uiLang === "bn" ? "bn" : "en";
@@ -59,20 +59,24 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
       isOpen={Boolean(month)}
       onClose={onClose}
       header={
-        <span className="flex items-center gap-2">
-          <LuReceiptText size={16} /> {t("stmt.explainMyBill")}
-          {displayName ? <span className="text-xs font-normal text-(--tm)">· {displayName}</span> : null}
+        <span className="flex min-w-0 items-center gap-2">
+          <LuReceiptText size={16} className="shrink-0" />
+          <span className="truncate">{t("stmt.explainMyBill")}</span>
+          {displayName ? <span className="truncate text-xs font-normal text-(--tm)">· {displayName}</span> : null}
         </span>
       }
       bodyClassName="px-4 py-4 sm:px-6"
     >
-      <div className="mb-3 flex gap-1 rounded-lg bg-(--bgm) p-1">
+      <div className="mb-3 flex gap-1 rounded-full bg-(--bgm) p-1">
         {LANGS.map((option) => (
           <button
             key={option.value}
             type="button"
-            onClick={() => { setLang(option.value); load(option.value); }}
-            className={`min-h-9 flex-1 rounded-md px-2 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p) ${lang === option.value ? "bg-(--bgs) text-(--tp) shadow-[var(--shadow-md)]" : "text-(--tm)"
+            onClick={() => {
+              setLang(option.value);
+              load(option.value);
+            }}
+            className={`min-h-9 flex-1 rounded-full text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--p) ${lang === option.value ? "bg-(--bgs) text-(--tp) shadow-sm" : "text-(--tm)"
               }`}
           >
             {option.label}
@@ -85,23 +89,26 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
           <LuLoaderCircle size={16} className="animate-spin" /> {t("stmt.buildingBreakdown")}
         </p>
       ) : error ? (
-        <p className="flex items-center gap-2 rounded-lg border border-(--danger) bg-(--danger-bg) p-3 text-xs text-(--ts)">
-          <LuTriangleAlert size={14} /> {error}
+        <p className="flex items-start gap-2 rounded-xl border border-(--danger)/40 bg-(--danger-bg) p-3 text-xs text-(--ts)">
+          <LuTriangleAlert size={14} className="mt-px shrink-0 text-(--danger)" /> {error}
         </p>
       ) : data ? (
         <div className="space-y-3">
-          <div className="rounded-lg border border-(--p) bg-(--pale) p-3">
-            <p className="text-sm font-extrabold text-(--p)">{data.headline}</p>
-            <p className="text-[11px] text-(--tm)">{data.summary?.note}</p>
+          <div className="rounded-2xl bg-(--pale) p-3 ring-1 ring-(--p)/20">
+            <p className="flex items-start gap-1.5 text-sm font-extrabold leading-snug text-(--p)">
+              <LuSparkles size={14} className="mt-0.5 shrink-0" /> {data.headline}
+            </p>
+            {data.summary?.note && <p className="mt-1 text-[11px] leading-relaxed text-(--tm)">{data.summary.note}</p>}
           </div>
 
           {(data.sections || []).map((section) => (
             <div key={section.key}>
-              <ul className="divide-y divide-(--bd) rounded-lg border border-(--bd) bg-(--bgs)">
+              <ul className="divide-y divide-(--bd) overflow-hidden rounded-xl border border-(--bd) bg-(--bgs)">
                 {section.rows.map((row) => (
                   <li
                     key={row.key}
-                    className={`flex items-center justify-between gap-3 px-3 py-2 text-sm ${row.emphasis ? "font-bold text-(--tp)" : "text-(--ts)"}`}
+                    className={`flex items-center justify-between gap-3 px-3 py-2 text-[13px] ${row.emphasis ? "font-bold text-(--tp)" : "text-(--ts)"
+                      }`}
                   >
                     <span className="min-w-0">{pick(row)}</span>
                     <span className={`shrink-0 tabular-nums ${row.negative ? "text-(--danger)" : ""}`}>
@@ -115,7 +122,7 @@ export default function ExplainBillDrawer({ groupId, month, membershipId = null,
         </div>
       ) : null}
 
-      <Button size="sm" variant="ghost" isFullWidth className="mt-3" onClick={onClose}>
+      <Button size="md" variant="ghost" isFullWidth className="mt-3 rounded-xl" onClick={onClose}>
         {t("shell.close")}
       </Button>
     </Modal>

@@ -24,6 +24,11 @@ export const groupsApi = {
   updateMembership: (membershipId, body) => apiClient.patch(`/memberships/${membershipId}`, body),
   departMembership: (membershipId, body) => apiClient.post(`/memberships/${membershipId}/depart`, body),
   getMembers: (groupId) => apiClient.get(`/users/groups/${groupId}/members`),
+  /** Approve a pending join request (admin only). */
+  approveRequest: (groupId, userId) =>
+    apiClient.post(`/messgroups/approve/${groupId}/${userId}`),
+  /** Leaderboard-style add by user id (admin only). */
+  addMember: (groupId, body) => apiClient.post(`/messgroups/add-member/${groupId}`, body),
   leaveGroup: (groupId, userId) => apiClient.delete(`/messgroups/remove-member/${groupId}/${userId}`),
   getPolicy: (groupId) => apiClient.get(`/policies/groups/${groupId}/policies`),
   createPolicy: (groupId, body) => apiClient.post(`/policies/groups/${groupId}/policies`, body),

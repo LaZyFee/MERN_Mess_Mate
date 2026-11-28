@@ -47,7 +47,7 @@ function GroupCard({ group, onClick }) {
           >
             <span className="[font-size:0.8125rem] [color:var(--tm)]">
               <LuUsers size={13} className="inline [margin-right:3px]" />
-              {t("grp.members", { count: memberCount })}
+              {t(memberCount === 1 ? "grp.members.singular" : "grp.members.plural", { count: memberCount })}
             </span>
             {group.myRole && (
               <Badge colorScheme="primary" size="sm" isRounded>

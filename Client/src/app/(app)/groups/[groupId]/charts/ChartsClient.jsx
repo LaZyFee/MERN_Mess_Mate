@@ -1,10 +1,15 @@
 "use client";
 
+/**
+ * Charts tab — meals / expenses / category breakdown, month or year range.
+ * Mobile-first: filters in a collapsible bar (range + year always visible), then
+ * one chart per card with a compact legend list underneath.
+ */
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LuChartBar, LuRefreshCw } from "react-icons/lu";
+import { LuChartBar, LuChartLine, LuFileChartPie, LuRefreshCw, LuCalendarRange } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
+import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import Skeleton from "@/components/shared/Skeleton";
 import { useToast } from "@/components/shared/ToastProvider";
@@ -12,14 +17,14 @@ import { statsApi } from "@/lib/api/stats";
 import { formatMonth, toMonthString } from "@/lib/utils/format";
 import { useT } from "@/lib/i18n/LangProvider";
 import { useMoney } from "@/lib/hooks/useMoney";
+import { MiniStat, SectionCard } from "../GroupUI";
 
 const ChartShell = dynamic(() => import("@/components/charts/ChartCanvas"), {
   ssr: false,
-  loading: () => <Skeleton variant="rect" height={220} />,
+  loading: () => <Skeleton variant="rect" height={220} className="rounded-2xl" />,
 });
 
 const GRANULARITY_VALUES = ["month", "year"];
-
 const CHART_VARS = ["--p", "--p2", "--p3", "--gold", "--warning", "--danger", "--info", "--success"];
 
 function readVar(name) {
@@ -52,11 +57,11 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
       });
       setStats(data);
     } catch (ex) {
-      showToast({ status: "error", title: "Could not load stats", description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.data?.msg || ex?.message });
     } finally {
       setLoading(false);
     }
-  }, [granularity, groupId, month, showToast, year]);
+  }, [granularity, groupId, month, showToast, year, t]);
 
   const years = useMemo(() => {
     const base = new Date().getFullYear();
@@ -70,32 +75,46 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
   const labelOf = (row) =>
     granularity === "month" && typeof row.bucket === "number" ? String(row.bucket) : String(row.bucket ?? "");
 
+  const categoryTotal = categories.reduce(
+    (sum, category) => sum + Number(category.totalPoisha ?? category.total ?? 0),
+    0,
+  );
+
   return (
-    <div className="min-w-0 space-y-4">
-      <Card padding="sm" variant="outlined">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+    <div className="min-w-0 space-y-3">
+      <SectionCard
+        icon={LuCalendarRange}
+        title={t("charts.rangeLabel")}
+        subtitle={granularity === "month" ? formatMonth(month, lang) : year}
+        actions={
+          <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} isLoading={loading} onClick={load}>
+            <LuRefreshCw size={14} />
+          </Button>
+        }
+      >
+        <div className="grid grid-cols-2 gap-2">
           <Select
-            size="lg"
+            size="md"
             label={t("charts.rangeLabel")}
             options={GRANULARITY_VALUES.map((value) => ({ value, label: t(`charts.granularity.${value}`) }))}
             value={granularity}
             onChange={(event) => setGranularity(event.target.value)}
           />
-          <Select size="lg" label={t("charts.year")} options={years} value={year} onChange={(event) => setYear(event.target.value)} />
+          <Select size="md" label={t("charts.year")} options={years} value={year} onChange={(event) => setYear(event.target.value)} />
           {granularity === "month" && (
-            <label className="flex flex-col gap-1 text-[13px] font-semibold text-(--ts)">
-              <span>{t("charts.month")}</span>
-              <input
+            <div className="col-span-2">
+              <Input
+                size="md"
                 type="month"
+                label={t("charts.month")}
                 value={month}
                 onChange={(event) => setMonth(event.target.value)}
-                className="h-12 w-full rounded-2xl border-[1.5px] border-(--bd2) bg-(--bgs) px-4 text-base text-(--tp) focus:border-(--p) focus:outline-none focus:ring-4 focus:ring-(--pale)"
               />
-            </label>
+            </div>
           )}
         </div>
         <Button
-          className="mt-2"
+          className="mt-2 rounded-xl"
           size="md"
           variant="secondary"
           isFullWidth
@@ -103,55 +122,39 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
           isLoading={loading}
           onClick={load}
         >
-          Apply
+          {t("exp.applyFilters")}
         </Button>
-      </Card>
+      </SectionCard>
 
       {stats?.totals && (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Card padding="sm" variant="outlined">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("meals.monthlyMeals")}</p>
-            <p className="text-lg font-extrabold tabular-nums text-(--tp)">{n(stats.totals.totalMeals || 0)}</p>
-          </Card>
-          <Card padding="sm" variant="outlined">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("exp.total")}</p>
-            <p className="text-lg font-extrabold tabular-nums text-(--tp)">
-              {fmt(stats.totals.totalExpensesPoisha ?? Math.round(Number(stats.totals.totalExpenses || 0) * 100))}
-            </p>
-          </Card>
-          <Card padding="sm" variant="outlined">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("overview.mealRate")}</p>
-            <p className="text-lg font-extrabold tabular-nums text-(--tp)">
-              {fmt(stats.totals.mealRatePoisha ?? Math.round(Number(stats.totals.mealRate || 0) * 100))}
-            </p>
-          </Card>
+        <div className="grid grid-cols-3 gap-2">
+          <MiniStat label={t("meals.monthlyMeals")} value={n(stats.totals.totalMeals || 0)} />
+          <MiniStat
+            label={t("exp.total")}
+            value={fmt(stats.totals.totalExpensesPoisha ?? Math.round(Number(stats.totals.totalExpenses || 0) * 100))}
+          />
+          <MiniStat
+            label={t("overview.mealRate")}
+            value={fmt(stats.totals.mealRatePoisha ?? Math.round(Number(stats.totals.mealRate || 0) * 100))}
+            tone="success"
+          />
         </div>
       )}
 
-      <Card padding="md" className="min-w-0">
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-bold text-(--tp)">
-          <LuChartBar size={16} className="text-(--p)" /> {t("charts.mealsOverTime")}
-        </h2>
+      <SectionCard icon={LuChartBar} title={t("charts.mealsOverTime")}>
         {mealSeries.length === 0 ? (
           <p className="py-6 text-center text-xs text-(--tm)">{t("charts.noMealData")}</p>
         ) : (
           <ChartShell
             type="bar"
             labels={mealSeries.map(labelOf)}
-            datasets={[
-              {
-                label: t("shell.meals"),
-                data: mealSeries.map((row) => Number(row.meals || 0)),
-                colorIndex: 0,
-              },
-            ]}
+            datasets={[{ label: t("shell.meals"), data: mealSeries.map((row) => Number(row.meals || 0)), colorIndex: 0 }]}
             palette={palette}
           />
         )}
-      </Card>
+      </SectionCard>
 
-      <Card padding="md" className="min-w-0">
-        <h2 className="mb-2 text-sm font-bold text-(--tp)">{t("charts.expensesOverTime")}</h2>
+      <SectionCard icon={LuChartLine} title={t("charts.expensesOverTime")}>
         {expenseSeries.length === 0 ? (
           <p className="py-6 text-center text-xs text-(--tm)">{t("charts.noExpenseData")}</p>
         ) : (
@@ -170,10 +173,9 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
             tooltipPrefix="৳"
           />
         )}
-      </Card>
+      </SectionCard>
 
-      <Card padding="md" className="min-w-0">
-        <h2 className="mb-2 text-sm font-bold text-(--tp)">{t("charts.byCategory")}</h2>
+      <SectionCard icon={LuFileChartPie} title={t("charts.byCategory")} subtitle={fmt(categoryTotal)}>
         {categories.length === 0 ? (
           <p className="py-6 text-center text-xs text-(--tm)">{t("charts.noCategoryData")}</p>
         ) : (
@@ -192,17 +194,27 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
               tooltipPrefix="৳"
             />
             <ul className="mt-3 space-y-1">
-              {categories.map((category) => (
-                <li key={String(category.categoryId)} className="flex items-center justify-between text-xs">
-                  <span className="min-w-0 truncate text-(--ts)">
-                    {category.icon ? `${category.icon} ` : ""}
-                    {category.name}
-                  </span>
-                  <span className="tabular-nums text-(--tp)">
-                    {fmt(category.totalPoisha ?? Math.round(Number(category.total || 0) * 100))}
-                  </span>
-                </li>
-              ))}
+              {categories.map((category) => {
+                const value = Number(category.totalPoisha ?? Math.round(Number(category.total || 0) * 100));
+                const pct = categoryTotal > 0 ? Math.round((value / categoryTotal) * 100) : 0;
+                return (
+                  <li key={String(category.categoryId)} className="rounded-lg bg-(--bgm) px-2.5 py-1.5">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="min-w-0 truncate text-(--ts)">
+                        {category.icon ? `${category.icon} ` : ""}
+                        {category.name}
+                      </span>
+                      <span className="shrink-0 font-semibold tabular-nums text-(--tp)">{fmt(value)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-(--bd)">
+                        <div className="h-full rounded-full bg-(--p)" style={{ width: `${Math.max(2, pct)}%` }} />
+                      </div>
+                      <span className="text-[10px] tabular-nums text-(--tm)">{n(pct)}%</span>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}
@@ -210,7 +222,7 @@ export default function ChartsClient({ groupId, initialStats, initialMonth }) {
           {t("charts.rangeNote")}
           {granularity === "year" ? ` ${t("charts.range", { from: formatMonth(`${year}-01`, lang), to: formatMonth(`${year}-12`, lang) })}` : ""}
         </p>
-      </Card>
+      </SectionCard>
     </div>
   );
 }

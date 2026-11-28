@@ -1,27 +1,27 @@
 "use client";
 
+/**
+ * Guest meals — add a visitor's meal for a date/slot and list the month's guests.
+ * Mobile-first: the form is a single stacked sheet; toasts go through the shared
+ * provider (no inline alerts).
+ */
 import { useEffect, useRef, useState } from "react";
-import { LuUserPlus } from "react-icons/lu";
+import { LuUserPlus, LuUsers } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
 import RadioGroup from "@/components/shared/RadioGroup";
 import Select from "@/components/shared/Select";
-import Toast from "@/components/shared/Toast";
+import { useToast } from "@/components/shared/ToastProvider";
 import { mealsApi } from "@/lib/api/meals";
 import { dhakaToday, monthRange } from "@/lib/utils/format";
-
-const SLOT_LABELS = {
-  breakfast: "Breakfast",
-  lunch: "Lunch",
-  snacks: "Snacks",
-  dinner: "Dinner",
-};
+import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
+import { EmptyState, SectionCard } from "../GroupUI";
 
 const PORTIONS = [
-  { value: "250", label: "1/4" },
-  { value: "500", label: "1/2" },
-  { value: "750", label: "3/4" },
+  { value: "250", label: "¼" },
+  { value: "500", label: "½" },
+  { value: "750", label: "¾" },
   { value: "1000", label: "1" },
 ];
 
@@ -31,11 +31,13 @@ export default function GuestMealPanel({
   month,
   initialGuests,
 }) {
+  const t = useT();
+  const { n } = useMoney();
+  const { showToast } = useToast();
   const [guests, setGuests] = useState(initialGuests ?? []);
   const [saving, setSaving] = useState(false);
   const [moreCursor, setMoreCursor] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [toast, setToast] = useState(null);
   const [form, setForm] = useState({
     guestName: "",
     date: dhakaToday(),
@@ -54,7 +56,7 @@ export default function GuestMealPanel({
     const to = `${month}-${String(last.getDate()).padStart(2, "0")}`;
     mealsApi.getGuests(groupId, from, to).then((data) => {
       setGuests(Array.isArray(data) ? data : data?.guests || []);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [groupId, month]);
 
   const update = (key, value) =>
@@ -88,7 +90,7 @@ export default function GuestMealPanel({
       });
       setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
-      setToast({ status: "error", title: "Could not load more guest meals", description: ex?.message });
+      showToast({ status: "error", title: t("shell.error"), description: ex?.message });
     } finally {
       setLoadingMore(false);
     }
@@ -106,11 +108,13 @@ export default function GuestMealPanel({
         eventPoolRef: form.eventPoolRef.trim(),
       });
       await refreshGuests();
-      setToast({ type: "success", message: "Guest meal added" });
+      setForm((current) => ({ ...current, guestName: "", eventPoolRef: "" }));
+      showToast({ status: "success", title: t("board.menu") });
     } catch (error) {
-      setToast({
-        type: "error",
-        message: error?.message || "Could not add guest meal",
+      showToast({
+        status: "error",
+        title: t("shell.error"),
+        description: error?.message || error?.data?.msg,
       });
     } finally {
       setSaving(false);
@@ -119,59 +123,45 @@ export default function GuestMealPanel({
 
   return (
     <div className="space-y-3">
-      {toast && (
-        <Toast
-          type={toast.type}
-          message={toast.message}
-          onClose={() => setToast(null)}
-        />
-      )}
-      <Card
-        header={
-          <div className="flex items-center gap-2">
-            <LuUserPlus size={20} className="text-(--p)" />
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-(--tm)">Guest meal</p>
-              <h2 className="text-lg font-bold text-(--tp)">Add visitor</h2>
-            </div>
-          </div>
-        }
-      >
+      <SectionCard icon={LuUserPlus} title={t("members.add")} subtitle="Guest meal">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             size="lg"
             label="Guest name"
             value={form.guestName}
             onChange={(event) => update("guestName", event.target.value)}
-            placeholder="Optional"
+            placeholder={t("shell.optional")}
           />
           <Input
             size="lg"
             type="date"
-            label="Date"
+            label={t("exp.date")}
             value={form.date}
             onChange={(event) => update("date", event.target.value)}
           />
           <Select
             size="lg"
-            label="Meal slot"
+            label={t("meals.mealMonth")}
             value={form.slot}
             options={enabledSlots.map((slot) => ({
               value: slot,
-              label: SLOT_LABELS[slot],
+              label: t(`meals.slot.${slot}`),
             }))}
             onChange={(event) => update("slot", event.target.value)}
           />
           <Input
             size="lg"
-            label="Event pool reference"
+            label="Event pool"
             value={form.eventPoolRef}
             onChange={(event) => update("eventPoolRef", event.target.value)}
-            placeholder="Optional"
+            placeholder={t("shell.optional")}
           />
+        </div>
+
+        <div className="mt-3 space-y-3">
           <RadioGroup
             name="guest-portion"
-            label="Portion"
+            label={t("meals.totalPortions")}
             value={form.portionSubunits}
             size="lg"
             orientation="horizontal"
@@ -180,55 +170,60 @@ export default function GuestMealPanel({
           />
           <RadioGroup
             name="guest-pool"
-            label="Pool mode"
+            label={t("money.kind")}
             value={form.poolMode}
             size="md"
             orientation="vertical"
             options={[
               { value: "individual", label: "Individual — host pays" },
-              { value: "universal", label: "Universal — raises meal-rate denominator" },
+              { value: "universal", label: "Universal — shared pool" },
             ]}
             onChange={(event) => update("poolMode", event.target.value)}
           />
         </div>
-        <div className="mt-4">
-          <Button
-            variant="primary"
-            size="lg"
-            isFullWidth
-            isLoading={saving}
-            onClick={submit}
-          >
-            Add guest meal
-          </Button>
-        </div>
-      </Card>
 
-      <Card variant="outlined">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-bold text-(--tp)">Guest meals</h3>
-          <span className="text-xs font-semibold text-(--tm)">
-            {guests.length} entries
-          </span>
-        </div>
+        <Button
+          variant="primary"
+          size="lg"
+          isFullWidth
+          className="mt-3 rounded-xl"
+          isLoading={saving}
+          onClick={submit}
+        >
+          {t("members.add")}
+        </Button>
+      </SectionCard>
+
+      <SectionCard
+        icon={LuUsers}
+        title="Guest meals"
+        subtitle={`${n(guests.length)} ${t("meals.entry")}`}
+      >
         {guests.length === 0 ? (
-          <p className="text-sm text-(--tm)">No guest meals in this month.</p>
+          <EmptyState icon={LuUsers} title={t("shell.noResults")} body="No guest meals in this month." />
         ) : (
           <div className="space-y-2">
             {guests.map((guest) => (
               <div
                 key={guest._id}
-                className="grid min-h-14 grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-(--bd) bg-(--bgs) px-3 py-2"
+                className="flex min-h-14 items-center gap-3 rounded-xl border border-(--bd) bg-(--bgs) px-3 py-2"
               >
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-(--tp)">
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-(--pale) text-sm font-extrabold text-(--p)">
+                  {n(
+                    PORTIONS.find((item) => item.value === String(guest.portionSubunits))?.value
+                      ? Number(guest.portionSubunits) / 1000
+                      : guest.portionSubunits / 1000,
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-(--tp)">
                     {guest.guestName || "Guest"}
                   </p>
-                  <p className="text-xs text-(--tm)">
-                    {guest.localDate} · {SLOT_LABELS[guest.slot] || guest.slot} · {guest.poolMode}
+                  <p className="truncate text-[11px] text-(--tm)">
+                    {guest.localDate} · {t(`meals.slot.${guest.slot}`)} · {guest.poolMode}
                   </p>
                 </div>
-                <span className="rounded-full bg-(--pale) px-3 py-1 text-sm font-bold text-(--p)">
+                <span className="shrink-0 rounded-full bg-(--bgm) px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-(--ts)">
                   {PORTIONS.find((item) => item.value === String(guest.portionSubunits))?.label ||
                     `${guest.portionSubunits / 1000}`}
                 </span>
@@ -236,12 +231,12 @@ export default function GuestMealPanel({
             ))}
             {moreCursor && (
               <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
-                Load more guest meals
+                {t("shell.loadMore")}
               </Button>
             )}
           </div>
         )}
-      </Card>
+      </SectionCard>
     </div>
   );
 }

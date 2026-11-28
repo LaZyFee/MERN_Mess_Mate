@@ -1,16 +1,24 @@
 "use client";
 
+/**
+ * Month-end close: period state, checklist, draft preview, finalize.
+ * Mobile-first: month stepper on one row, checklist as a compact list, actions
+ * stacked full-width, finalize confirmation in a bottom sheet.
+ */
 import { useCallback, useState } from "react";
 import {
   LuCheck,
+  LuChevronLeft,
+  LuChevronRight,
   LuCircleAlert,
   LuEye,
   LuLock,
   LuRotateCcw,
   LuTriangleAlert,
+  LuCalendarRange,
+  LuListChecks,
 } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
 import Textarea from "@/components/shared/Textarea";
 import Modal from "@/components/modals/Modal";
@@ -20,6 +28,7 @@ import { periodsApi, statementsApi } from "@/lib/api/statements";
 import { formatMonth, toMonthString, addMonths } from "@/lib/utils/format";
 import { useT } from "@/lib/i18n/LangProvider";
 import { useMoney } from "@/lib/hooks/useMoney";
+import { MiniStat, SectionCard } from "../GroupUI";
 
 const CHECK_KEYS = {
   journals_balanced: "stmt.check.journalsBalanced",
@@ -35,39 +44,41 @@ function FinalizeModal({ month, period, isOpen, saving, onClose, onConfirm, unre
       size="lg"
       header={t("stmt.finalizeTitle", { month: formatMonth(month, lang) })}
       footer={
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={onClose} isDisabled={saving}>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" isFullWidth className="sm:!w-fit" onClick={onClose} isDisabled={saving}>
             {t("shell.cancel")}
           </Button>
-          <Button isLoading={saving} isDisabled={saving} onClick={() => onConfirm(reason.trim(), period?.revision)}>
+          <Button
+            isFullWidth
+            className="sm:!w-fit"
+            isLoading={saving}
+            isDisabled={saving}
+            leftIcon={<LuLock size={14} />}
+            onClick={() => onConfirm(reason.trim(), period?.revision)}
+          >
             {t("stmt.close.finalize")}
           </Button>
         </div>
       }
     >
       {unresolved?.length > 0 && (
-        <>
-          {showToast({
-            status: "error",
-            title: t("stmt.unresolvedTitle"),
-            description: unresolved
-              .map((row) => `${row.date} · ${t(`meals.slot.${row.slot}`)}`)
-              .join(" · "),
-            duration: 8000,
-          })}
-          <div className="mt-1 flex flex-wrap gap-1">
+        <div className="mb-3 rounded-xl border border-(--danger)/40 bg-(--danger-bg) p-3">
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-bold text-(--danger)">
+            <LuTriangleAlert size={13} /> {t("stmt.unresolvedTitle")}
+          </p>
+          <div className="flex flex-wrap gap-1">
             {unresolved.map((row, index) => (
               <span
                 key={`${row.userId}-${row.date}-${row.slot}-${index}`}
-                className="rounded-full bg-(--danger-bg) px-2 py-0.5 text-[11px] font-semibold text-(--danger)"
+                className="rounded-full bg-(--bgs) px-2 py-0.5 text-[11px] font-semibold text-(--danger)"
               >
                 {row.date} · {t(`meals.slot.${row.slot}`)}
               </span>
             ))}
           </div>
-        </>
+        </div>
       )}
-      <p className="text-sm text-(--tm)">
+      <p className="text-sm leading-relaxed text-(--tm)">
         {t("stmt.finalizeBody", { month: formatMonth(month, lang), revision: n(period?.revision ?? 0) })}
       </p>
       <div className="mt-3">
@@ -163,11 +174,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
       onFinalized?.(month);
     } catch (ex) {
       if (ex?.status === 409) {
-        showToast({
-          status: "warning",
-          title: t("stmt.dataChanged"),
-          description: t("stmt.close.retry"),
-        });
+        showToast({ status: "warning", title: t("stmt.dataChanged"), description: t("stmt.close.retry") });
         await loadMonth(month);
       } else if (ex?.status === 422) {
         const list = ex?.data?.unresolved || [];
@@ -186,53 +193,80 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
   const checks = checklist?.checks || [];
 
   return (
-    <Card padding="md" className="min-w-0">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="min-w-0 flex-1">
-          <Input
-            size="lg"
-            type="month"
-            label={t("stmt.month")}
-            value={month}
-            onChange={(event) => changeMonth(event.target.value)}
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="lg" onClick={() => changeMonth(addMonths(month, -1))}>
-            {t("stmt.prev")}
+    <div className="space-y-3">
+      <SectionCard icon={LuCalendarRange} title={t("stmt.close.title")} subtitle={formatMonth(month, lang)}>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            isRound
+            ariaLabel={t("stmt.prev")}
+            onClick={() => changeMonth(addMonths(month, -1))}
+          >
+            <LuChevronLeft size={17} />
           </Button>
-          <Button variant="ghost" size="lg" onClick={() => changeMonth(addMonths(month, 1))}>
-            {t("stmt.next")}
+          <div className="min-w-0 flex-1">
+            <Input
+              size="md"
+              type="month"
+              aria-label={t("stmt.month")}
+              value={month}
+              onChange={(event) => changeMonth(event.target.value)}
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            isRound
+            ariaLabel={t("stmt.next")}
+            onClick={() => changeMonth(addMonths(month, 1))}
+          >
+            <LuChevronRight size={17} />
           </Button>
         </div>
-      </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <StatusBadge type="period" status={state} />
-        <span className="text-xs text-(--tm)">{t("overview.revision", { n: n(period?.revision ?? 0) })}</span>
-        {period?.finalizedAt && <span className="text-xs text-(--tm)">{t("stmt.isFinalized")}</span>}
-      </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <StatusBadge type="period" status={state} />
+          <span className="text-xs text-(--tm)">{t("overview.revision", { n: n(period?.revision ?? 0) })}</span>
+          {period?.finalizedAt && (
+            <span className="rounded-full bg-(--success-bg) px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-(--success)">
+              {t("stmt.isFinalized")}
+            </span>
+          )}
+        </div>
+
+        {state === "finalized" && (
+          <p className="mt-2 rounded-xl bg-(--info-bg) px-3 py-2 text-[11px] leading-relaxed text-(--info)">
+            {t("stmt.close.correctionNote")}
+          </p>
+        )}
+      </SectionCard>
 
       {checks.length > 0 && (
-        <ul className="mt-3 space-y-1">
-          {checks.map((check) => (
-            <li key={check.name} className="flex items-center gap-2 text-xs">
-              {check.ok ? (
-                <LuCheck size={14} className="text-(--success)" />
-              ) : (
-                <LuCircleAlert size={14} className="text-(--danger)" />
-              )}
-              <span className="text-(--ts)">{CHECK_KEYS[check.name] ? t(CHECK_KEYS[check.name]) : check.name}</span>
-              {check.state && <span className="text-(--tl)">({check.state})</span>}
-            </li>
-          ))}
-        </ul>
+        <SectionCard icon={LuListChecks} title={t("stmt.close.checklist")}>
+          <ul className="space-y-1">
+            {checks.map((check) => (
+              <li key={check.name} className="flex min-h-9 items-center gap-2 rounded-lg bg-(--bgm) px-2.5 text-xs">
+                {check.ok ? (
+                  <LuCheck size={14} className="shrink-0 text-(--success)" />
+                ) : (
+                  <LuCircleAlert size={14} className="shrink-0 text-(--danger)" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-(--ts)">
+                  {CHECK_KEYS[check.name] ? t(CHECK_KEYS[check.name]) : check.name}
+                </span>
+                {check.state && <span className="shrink-0 text-(--tm)">({check.state})</span>}
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Button
           variant="secondary"
           size="md"
+          className="rounded-xl"
           leftIcon={<LuEye size={14} />}
           isLoading={busy === "preview"}
           isDisabled={Boolean(busy)}
@@ -244,6 +278,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
           <Button
             variant="outline"
             size="md"
+            className="rounded-xl"
             isLoading={busy === "review"}
             isDisabled={Boolean(busy)}
             onClick={() => move("review")}
@@ -255,6 +290,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
           <Button
             variant="outline"
             size="md"
+            className="rounded-xl"
             leftIcon={<LuRotateCcw size={14} />}
             isLoading={busy === "open"}
             isDisabled={Boolean(busy)}
@@ -266,6 +302,7 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
         {state !== "finalized" && (
           <Button
             size="md"
+            className="rounded-xl"
             leftIcon={<LuLock size={14} />}
             isDisabled={Boolean(busy)}
             onClick={() => {
@@ -276,43 +313,20 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
             {t("stmt.close.finalize")}
           </Button>
         )}
-        {state === "finalized" && (
-          <>
-            {showToast({
-              status: "info",
-              title: t("stmt.close.correctionNote"),
-              duration: 6000,
-            })}
-          </>
-        )}
       </div>
 
       {preview && (
-        <div className="mt-3 rounded-lg border border-(--bd) bg-(--bgm) p-3">
-          <p className="mb-1 flex items-center gap-1 text-xs font-bold text-(--ts)">
-            <LuTriangleAlert size={13} /> {t("stmt.draftPreview")}
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-            <div>
-              <p className="text-(--tm)">{t("stmt.colMeals")}</p>
-              <p className="font-bold tabular-nums text-(--tp)">{n(preview.totalMeals ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-(--tm)">{t("exp.total")}</p>
-              <p className="font-bold tabular-nums text-(--tp)">{fmt(preview.totalExpenses || 0)}</p>
-            </div>
-            <div>
-              <p className="text-(--tm)">{t("members.title")}</p>
-              <p className="font-bold tabular-nums text-(--tp)">{n(preview.items?.length ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-(--tm)">{t("stmt.mealRate")}</p>
-              <p className="font-bold tabular-nums text-(--tp)">
-                {preview.mealRate != null ? fmt(preview.mealRate) : "—"}
-              </p>
-            </div>
+        <SectionCard icon={LuTriangleAlert} tone="warning" title={t("stmt.draftPreview")}>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <MiniStat label={t("stmt.colMeals")} value={n(preview.totalMeals ?? 0)} />
+            <MiniStat label={t("exp.total")} value={fmt(preview.totalExpenses || 0)} />
+            <MiniStat label={t("members.title")} value={n(preview.items?.length ?? 0)} />
+            <MiniStat
+              label={t("stmt.mealRate")}
+              value={preview.mealRate != null ? fmt(preview.mealRate) : "—"}
+            />
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <FinalizeModal
@@ -327,6 +341,6 @@ export default function ClosePanel({ groupId, initialPeriod, initialChecklist, i
         lang={lang}
         n={n}
       />
-    </Card>
+    </div>
   );
 }

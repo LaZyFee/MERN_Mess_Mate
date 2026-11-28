@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Role-gated workflow buttons for one expense.
+ * Approve / reject / reverse open a mobile-friendly bottom-sheet modal that
+ * collects the audit reason before confirming.
+ */
 import { useState } from "react";
 import { LuCheck, LuRotateCcw, LuSend, LuX } from "react-icons/lu";
 import Button from "@/components/shared/Button";
@@ -28,12 +33,14 @@ function ReasonModal({ action, onClose, onConfirm, saving }) {
       size="lg"
       header={t(config.titleKey)}
       footer={
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={onClose} isDisabled={saving}>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" isFullWidth onClick={onClose} isDisabled={saving}>
             {t("shell.cancel")}
           </Button>
           <Button
             variant={config.status === "error" ? "danger" : "primary"}
+            isFullWidth
+            className="sm:w-auto sm:!w-fit"
             isLoading={saving}
             isDisabled={saving || (config.requiresReason && !reason.trim())}
             onClick={() => onConfirm(reason.trim())}
@@ -43,7 +50,7 @@ function ReasonModal({ action, onClose, onConfirm, saving }) {
         </div>
       }
     >
-      <p className="text-sm text-(--tm)">
+      <p className="text-sm leading-relaxed text-(--tm)">
         {selfApproval ? t("exp.approveBody") : t("exp.dangerBody")}
       </p>
       <div className="mt-4">
@@ -100,12 +107,14 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
   };
 
   const status = expense?.status;
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
         {status === "draft" && (
           <Button
-            size="sm"
+            size="md"
+            className="col-span-2 rounded-xl"
             leftIcon={<LuSend size={14} />}
             isLoading={busy === "submit"}
             isDisabled={Boolean(busy)}
@@ -117,7 +126,8 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
         {status === "submitted" && canTreasurer && (
           <>
             <Button
-              size="sm"
+              size="md"
+              className="rounded-xl"
               leftIcon={<LuCheck size={14} />}
               isDisabled={Boolean(busy)}
               onClick={() => setPending("approve")}
@@ -125,7 +135,8 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
               {t("exp.approve")}
             </Button>
             <Button
-              size="sm"
+              size="md"
+              className="rounded-xl"
               variant="danger"
               leftIcon={<LuX size={14} />}
               isDisabled={Boolean(busy)}
@@ -137,7 +148,8 @@ export default function ExpenseActions({ groupId, expense, canTreasurer, onChang
         )}
         {status === "approved" && canTreasurer && (
           <Button
-            size="sm"
+            size="md"
+            className="col-span-2 rounded-xl"
             variant="outline"
             leftIcon={<LuRotateCcw size={14} />}
             isDisabled={Boolean(busy)}

@@ -1,24 +1,31 @@
 "use client";
 
+/**
+ * Owner-only meal tools: absence windows and bulk JSON entry.
+ * Each block previews first, then applies — nothing writes until confirmed.
+ * Mobile-first: single column, sticky-ish apply buttons, JSON preview scrolls.
+ */
 import { useMemo, useState } from "react";
-import { LuCalendarX, LuPlay, LuUpload } from "react-icons/lu";
+import { LuCalendarX, LuPlay, LuUpload, LuEye, LuCode } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
 import Textarea from "@/components/shared/Textarea";
-import Toast from "@/components/shared/Toast";
+import { useToast } from "@/components/shared/ToastProvider";
 import { mealsApi } from "@/lib/api/meals";
+import { useT } from "@/lib/i18n/LangProvider";
+import { SectionCard } from "../GroupUI";
 
 const SLOT_OPTIONS = [
-  { value: "breakfast", label: "Breakfast" },
-  { value: "lunch", label: "Lunch" },
-  { value: "snacks", label: "Snacks" },
-  { value: "dinner", label: "Dinner" },
+  { value: "breakfast", labelKey: "meals.slot.breakfast" },
+  { value: "lunch", labelKey: "meals.slot.lunch" },
+  { value: "snacks", labelKey: "meals.slot.snacks" },
+  { value: "dinner", labelKey: "meals.slot.dinner" },
 ];
 
 export default function AdminMealTools({ groupId, memberships, enabledSlots }) {
-  const [toast, setToast] = useState(null);
+  const t = useT();
+  const { showToast } = useToast();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [targetUser, setTargetUser] = useState("");
@@ -28,7 +35,7 @@ export default function AdminMealTools({ groupId, memberships, enabledSlots }) {
     '[\n  { "userId": "MEMBER_ID", "date": "2026-11-24", "slots": { "lunch": { "state": "consumed", "portionSubunits": 500 } } }\n]',
   );
   const [bulkPreview, setBulkPreview] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(null);
 
   const memberOptions = useMemo(
     () =>
@@ -36,9 +43,9 @@ export default function AdminMealTools({ groupId, memberships, enabledSlots }) {
         .filter((item) => item?.userId)
         .map((item) => ({
           value: item.userId?._id || item.userId?.id || item.userId,
-          label: item.displayName || item.userId?.username || "Member",
+          label: item.displayName || item.userId?.username || t("members.memberFallback"),
         })),
-    [memberships],
+    [memberships, t],
   );
 
   const toggleSlot = (slot) => {
@@ -50,7 +57,7 @@ export default function AdminMealTools({ groupId, memberships, enabledSlots }) {
   };
 
   const runAbsence = async (apply) => {
-    setBusy(true);
+    setBusy(apply ? "apply" : "preview");
     try {
       const body = {
         from,
@@ -62,19 +69,20 @@ export default function AdminMealTools({ groupId, memberships, enabledSlots }) {
         ? await mealsApi.applyAbsence(groupId, body)
         : await mealsApi.previewAbsence(groupId, body);
       setPreview(data);
-      setToast({
-        type: "success",
-        message: apply ? "Absence applied" : `${data.count ?? data.preview?.length ?? 0} changes found`,
+      showToast({
+        status: "success",
+        title: apply ? t("meals.saved") : t("exp.draftForm"),
+        description: `${data?.count ?? data?.preview?.length ?? 0}`,
       });
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Absence operation failed" });
+      showToast({ status: "error", title: t("shell.error"), description: error?.message });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const runBulk = async (apply) => {
-    setBusy(true);
+    setBusy(apply ? "bulk-apply" : "bulk-preview");
     try {
       const entries = JSON.parse(bulkJson);
       if (!Array.isArray(entries)) throw new Error("Bulk entries must be a JSON array");
@@ -82,60 +90,121 @@ export default function AdminMealTools({ groupId, memberships, enabledSlots }) {
         ? await mealsApi.applyBulk(groupId, entries)
         : await mealsApi.previewBulk(groupId, entries);
       setBulkPreview(data);
-      setToast({ type: "success", message: apply ? "Bulk entries applied" : "Bulk preview ready" });
+      showToast({ status: "success", title: apply ? t("meals.saved") : t("exp.draftForm") });
     } catch (error) {
-      setToast({ type: "error", message: error?.message || "Invalid bulk entries" });
+      showToast({ status: "error", title: t("shell.error"), description: error?.message });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-      {toast && <div className="lg:col-span-2"><Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} /></div>}
-      <Card header={<div className="flex items-center gap-2"><LuCalendarX size={20} className="text-(--p)" /><h2 className="font-bold text-(--tp)">Absence window</h2></div>}>
+      <SectionCard icon={LuCalendarX} title={t("meals.absent")} subtitle={t("exp.date")}>
         <div className="space-y-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input size="lg" type="date" label="From" value={from} onChange={(event) => setFrom(event.target.value)} />
-            <Input size="lg" type="date" label="To" value={to} onChange={(event) => setTo(event.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <Input size="lg" type="date" label={t("stmt.prev")} value={from} onChange={(event) => setFrom(event.target.value)} />
+            <Input size="lg" type="date" label={t("stmt.next")} value={to} onChange={(event) => setTo(event.target.value)} />
           </div>
-          <Select size="lg" label="Member (optional)" value={targetUser} options={[{ value: "", label: "All active members" }, ...memberOptions]} onChange={(event) => setTargetUser(event.target.value)} />
+          <Select
+            size="lg"
+            label={t("stmt.member")}
+            value={targetUser}
+            options={[{ value: "", label: t("exp.everyone") }, ...memberOptions]}
+            onChange={(event) => setTargetUser(event.target.value)}
+          />
           <div>
-            <p className="mb-2 text-sm font-semibold text-(--ts)">Slots</p>
+            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-(--tm)">{t("meals.selectedSlots")}</p>
             <div className="grid grid-cols-2 gap-2">
-              {SLOT_OPTIONS.filter((item) => enabledSlots.includes(item.value)).map((item) => (
-                <Button key={item.value} variant={slots.includes(item.value) ? "primary" : "outline"} size="lg" onClick={() => toggleSlot(item.value)}>
-                  {item.label}
-                </Button>
-              ))}
+              {SLOT_OPTIONS.filter((item) => enabledSlots.includes(item.value)).map((item) => {
+                const active = slots.includes(item.value);
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => toggleSlot(item.value)}
+                    className={`min-h-11 rounded-xl border text-[13px] font-semibold transition-colors ${active
+                        ? "border-(--p) bg-(--pale) text-(--p)"
+                        : "border-(--bd) text-(--ts) hover:border-(--bd2)"
+                      }`}
+                  >
+                    {t(item.labelKey)}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="lg" leftIcon={<LuPlay size={16} />} isLoading={busy} onClick={() => runAbsence(false)}>Preview</Button>
-            <Button variant="primary" size="lg" leftIcon={<LuCalendarX size={16} />} isLoading={busy} onClick={() => runAbsence(true)}>Apply absence</Button>
+            <Button
+              variant="outline"
+              size="md"
+              isFullWidth
+              className="rounded-xl"
+              leftIcon={<LuEye size={15} />}
+              isLoading={busy === "preview"}
+              isDisabled={Boolean(busy)}
+              onClick={() => runAbsence(false)}
+            >
+              {t("stmt.close.preview")}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              isFullWidth
+              className="rounded-xl"
+              leftIcon={<LuCalendarX size={15} />}
+              isLoading={busy === "apply"}
+              isDisabled={Boolean(busy)}
+              onClick={() => runAbsence(true)}
+            >
+              {t("meals.saveEntry")}
+            </Button>
           </div>
           {preview && (
-            <div className="max-h-48 overflow-auto rounded-xl border border-(--bd) p-3 text-sm text-(--ts)">
-              <pre className="whitespace-pre-wrap">{JSON.stringify(preview, null, 2)}</pre>
+            <div className="max-h-44 overflow-auto rounded-xl bg-(--bgm) p-3 text-[11px] text-(--ts)">
+              <pre className="whitespace-pre-wrap break-words">{JSON.stringify(preview, null, 2)}</pre>
             </div>
           )}
         </div>
-      </Card>
+      </SectionCard>
 
-      <Card header={<div className="flex items-center gap-2"><LuUpload size={20} className="text-(--p)" /><h2 className="font-bold text-(--tp)">Bulk entry</h2></div>}>
+      <SectionCard icon={LuCode} title={t("exp.advanced")} subtitle="JSON">
         <div className="space-y-3">
-          <Textarea label="Entries JSON" value={bulkJson} onChange={(event) => setBulkJson(event.target.value)} rows={10} />
+          <Textarea label="Entries JSON" value={bulkJson} onChange={(event) => setBulkJson(event.target.value)} rows={9} />
           <div className="flex gap-2">
-            <Button variant="outline" size="lg" leftIcon={<LuPlay size={16} />} isLoading={busy} onClick={() => runBulk(false)}>Preview</Button>
-            <Button variant="primary" size="lg" leftIcon={<LuUpload size={16} />} isLoading={busy} onClick={() => runBulk(true)}>Apply bulk</Button>
+            <Button
+              variant="outline"
+              size="md"
+              isFullWidth
+              className="rounded-xl"
+              leftIcon={<LuPlay size={15} />}
+              isLoading={busy === "bulk-preview"}
+              isDisabled={Boolean(busy)}
+              onClick={() => runBulk(false)}
+            >
+              {t("stmt.close.preview")}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              isFullWidth
+              className="rounded-xl"
+              leftIcon={<LuUpload size={15} />}
+              isLoading={busy === "bulk-apply"}
+              isDisabled={Boolean(busy)}
+              onClick={() => runBulk(true)}
+            >
+              {t("exp.saveDraft")}
+            </Button>
           </div>
           {bulkPreview && (
-            <div className="max-h-48 overflow-auto rounded-xl border border-(--bd) p-3 text-sm text-(--ts)">
-              <pre className="whitespace-pre-wrap">{JSON.stringify(bulkPreview, null, 2)}</pre>
+            <div className="max-h-44 overflow-auto rounded-xl bg-(--bgm) p-3 text-[11px] text-(--ts)">
+              <pre className="whitespace-pre-wrap break-words">{JSON.stringify(bulkPreview, null, 2)}</pre>
             </div>
           )}
         </div>
-      </Card>
+      </SectionCard>
     </div>
   );
 }

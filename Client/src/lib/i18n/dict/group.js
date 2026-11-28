@@ -4,6 +4,8 @@ import { registerDictionary } from "@/lib/i18n/registry";
 // ---------------- Home / groups ----------------
 registerDictionary("en", "grp", {
     "members": "{count} member{s}",
+    "members.singular": "{count} member",
+    "members.plural": "{count} members",
     "refresh": "Refresh",
     "create": "Create",
     "join": "Join",
@@ -12,6 +14,8 @@ registerDictionary("en", "grp", {
     "emptyHint": "Create your mess group or join one with an invite code.",
     "leftNoticeTitle": "History is clamped to your membership window",
     "couldNotRefresh": "Could not refresh groups",
+    "copyId": "Copy group ID",
+    "copiedId": "Group ID copied",
     "role.owner": "Owner",
     "role.manager": "Manager",
     "role.treasurer": "Treasurer",
@@ -20,6 +24,8 @@ registerDictionary("en", "grp", {
 });
 registerDictionary("bn", "grp", {
     "members": "{count} সদস্য",
+    "members.singular": "{count} সদস্য",
+    "members.plural": "{count} সদস্য",
     "refresh": "রিফ্রেশ",
     "create": "তৈরি করুন",
     "join": "যোগ দিন",
@@ -28,6 +34,8 @@ registerDictionary("bn", "grp", {
     "emptyHint": "আপনার মেস গ্রুপ তৈরি করুন, অথবা ইনভাইট কোড দিয়ে কোনো গ্রুপে যোগ দিন।",
     "leftNoticeTitle": "আপনার সদস্যপদের সময়কাল পর্যন্তই ইতিহাস দেখা যাবে",
     "couldNotRefresh": "গ্রুপ লোড করা যায়নি",
+    "copyId": "গ্রুপ আইডি কপি করুন",
+    "copiedId": "গ্রুপ আইডি কপি হয়েছে",
     "role.owner": "মালিক",
     "role.manager": "ম্যানেজার",
     "role.treasurer": "কোষাধ্যক্ষ",
@@ -59,6 +67,14 @@ registerDictionary("en", "overview", {
     "noCharges": "No member charges computed for this month yet.",
     "expenses": "Expenses",
     "money": "Money",
+    "couldNotLoadForecast": "Could not load the forecast",
+    "noneYet": "Nothing here yet",
+    "noneYetBody": "This section fills up as the group records activity.",
+    "couldNotRefresh": "Could not refresh",
+    "nothingDue": "Nothing due",
+    "yourShare": "Your share",
+    "quickActions": "Quick actions",
+    "ledger": "Settlement",
 });
 registerDictionary("bn", "overview", {
     "currentMonth": "চলতি মাস",
@@ -83,6 +99,14 @@ registerDictionary("bn", "overview", {
     "noCharges": "এই মাসে এখনো কোনো সদস্যের পাওনা হিসাব হয়নি।",
     "expenses": "খরচ",
     "money": "টাকা",
+    "couldNotLoadForecast": "পূর্বাভাস লোড করা যায়নি",
+    "noneYet": "এখনো কিছু নেই",
+    "noneYetBody": "গ্রুপ কাজ শুরু করলে এই অংশটি ভরে উঠবে।",
+    "couldNotRefresh": "রিফ্রেশ করা যায়নি",
+    "nothingDue": "কিছু বাকি নেই",
+    "yourShare": "আপনার অংশ",
+    "quickActions": "দ্রুত কাজ",
+    "ledger": "নিষ্পত্তি",
 });
 
 // ---------------- Meals ----------------
@@ -113,6 +137,9 @@ registerDictionary("en", "meals", {
     "couldNotDelete": "Could not delete meal entry",
     "half": "Half",
     "full": "Full",
+    "selectedSlots": "Slots set",
+    "totalPortions": "Portions",
+    "entry": "Day entry",
 });
 registerDictionary("bn", "meals", {
     "monthlyMeals": "মাসিক মিল",
@@ -141,6 +168,9 @@ registerDictionary("bn", "meals", {
     "couldNotDelete": "মিল মোছা যায়নি",
     "half": "হাফ",
     "full": "ফুল",
+    "selectedSlots": "নির্ধারিত স্লট",
+    "totalPortions": "মোট পরিমাণ",
+    "entry": "দিনের এন্ট্রি",
 });
 // ---------------- Expenses ----------------
 registerDictionary("en", "exp", {
@@ -536,6 +566,7 @@ registerDictionary("en", "more", {
     "inviteCodes": "Invite codes",
     "categories": "Categories",
     "featureFlags": "Features",
+    "pendingRequests": "Pending requests",
     "planned": "Planned",
     "spent": "Spent",
     "left": "Left",
@@ -565,6 +596,7 @@ registerDictionary("bn", "more", {
     "inviteCodes": "ইনভাইট কোড",
     "categories": "ক্যাটাগরি",
     "featureFlags": "ফিচার",
+    "pendingRequests": "অপেক্ষমাণ অনুরোধ",
     "planned": "পরিকল্পিত",
     "spent": "খরচ হয়েছে",
     "left": "বাকি",

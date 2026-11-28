@@ -1,13 +1,12 @@
 "use client";
 
 /**
- * T14.6 — Refundable deposit assets (landlord deposit, kitchen equipment,
- * advances). Cursor list with load-more; treasurer+ can record a refund.
+ * Refundable deposit assets (landlord deposit, kitchen equipment, advances).
+ * Cursor list with load-more; treasurer+ can record a refund.
  */
 import { useCallback, useEffect, useState } from "react";
 import { LuBox, LuBanknote, LuRefreshCw } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
 import Modal from "@/components/modals/Modal";
 import Select from "@/components/shared/Select";
@@ -17,6 +16,7 @@ import { useToast } from "@/components/shared/ToastProvider";
 import { assetsApi } from "@/lib/api/expenses";
 import { useT } from "@/lib/i18n/LangProvider";
 import { useMoney } from "@/lib/hooks/useMoney";
+import { EmptyState, SectionCard } from "../GroupUI";
 
 export default function AssetsPanel({ groupId, canManage = false, memberships = [] }) {
   const t = useT();
@@ -46,7 +46,7 @@ export default function AssetsPanel({ groupId, canManage = false, memberships = 
       setAssets(data?.assets || []);
       setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
-      showToast({ status: "error", title: t("more.couldNotLoadAssets"), description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("more.depositAssets"), description: ex?.data?.msg || ex?.message });
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ export default function AssetsPanel({ groupId, canManage = false, memberships = 
       });
       setMoreCursor(data?.nextCursor || null);
     } catch (ex) {
-      showToast({ status: "error", title: t("more.couldNotLoadMoreAssets"), description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("more.depositAssets"), description: ex?.data?.msg || ex?.message });
     } finally {
       setLoadingMore(false);
     }
@@ -99,90 +99,106 @@ export default function AssetsPanel({ groupId, canManage = false, memberships = 
     }
   };
 
+  const shareOptions = [
+    { value: "", label: t("more.memberLabel") },
+    ...((refunding?.fundingShares || [])
+      .filter((share) => (share.amount - (share.refundedAmount || 0)) > 0)
+      .map((share) => ({
+        value: String(share.membershipId),
+        label: `${memberName(share.membershipId)} · ${fmt(share.amount - (share.refundedAmount || 0))}`,
+      }))),
+  ];
+
   return (
-    <Card
-      padding="md"
-      header={
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 text-sm font-bold text-(--tp)">
-            <LuBox size={15} className="text-(--p)" /> {t("more.depositAssets")}
-          </span>
+    <>
+      <SectionCard
+        icon={LuBox}
+        title={t("more.depositAssets")}
+        subtitle={`${assets.length}`}
+        actions={
           <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} isLoading={loading} onClick={load}>
             <LuRefreshCw size={14} />
           </Button>
-        </div>
-      }
-    >
-      {loading && assets.length === 0 ? (
-        <Skeleton variant="rect" height={64} />
-      ) : assets.length === 0 ? (
-        <p className="py-4 text-center text-xs text-(--tm)">{t("more.noAssets")}</p>
-      ) : (
-        <div className="space-y-2">
-          {assets.map((asset) => {
-            const remaining = Math.max(0, (asset.currentValuation || asset.initialAmount || 0));
-            return (
-              <div key={asset._id} className="rounded-lg border border-(--bd) bg-(--bgs) p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge type="asset" status={asset.status} />
-                  <span className="text-xs font-semibold text-(--ts)">{t(`more.assetKind.${asset.kind}`)}</span>
+        }
+        bodyClassName="space-y-2"
+      >
+        {loading && assets.length === 0 ? (
+          <Skeleton variant="rect" height={64} className="rounded-xl" />
+        ) : assets.length === 0 ? (
+          <EmptyState icon={LuBox} title={t("more.noAssets")} />
+        ) : (
+          <>
+            {assets.map((asset) => {
+              const remaining = Math.max(0, asset.currentValuation || asset.initialAmount || 0);
+              return (
+                <div key={asset._id} className="rounded-2xl border border-(--bd) bg-(--bgs) p-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge type="asset" status={asset.status} />
+                    <span className="truncate text-[11px] font-semibold text-(--ts)">{t(`more.assetKind.${asset.kind}`)}</span>
+                  </div>
+                  <p className="mt-1 truncate text-[13.5px] font-bold text-(--tp)">{asset.name || t("more.assetFallback")}</p>
+                  <p className="text-[11px] text-(--tm)">
+                    {t("more.held")}: <span className="font-semibold tabular-nums text-(--ts)">{fmt(remaining)}</span>
+                    {" · "}
+                    {t("more.refunds", { count: n(asset.refunds?.length || 0) })}
+                  </p>
+                  {canManage && asset.status !== "fully_refunded" && asset.status !== "written_off" && (
+                    <Button
+                      size="sm"
+                      className="mt-2 rounded-lg"
+                      variant="outline"
+                      leftIcon={<LuBanknote size={13} />}
+                      onClick={() => {
+                        setRefunding(asset);
+                        setAmount("");
+                        setShareId("");
+                      }}
+                    >
+                      {t("more.recordRefund")}
+                    </Button>
+                  )}
                 </div>
-                <p className="mt-1 text-sm font-bold text-(--tp)">{asset.name || t("more.assetFallback")}</p>
-                <p className="text-xs text-(--tm)">
-                  {t("more.held")}: {fmt(remaining)}
-                  {" · "}
-                  {t("more.refunds", { count: n(asset.refunds?.length || 0) })}
-                </p>
-                {canManage && asset.status !== "fully_refunded" && asset.status !== "written_off" && (
-                  <Button size="sm" variant="outline" leftIcon={<LuBanknote size={13} />} className="mt-2" onClick={() => { setRefunding(asset); setAmount(""); setShareId(""); }}>
-                    {t("more.recordRefund")}
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-          {moreCursor && (
-            <Button variant="outline" size="md" isFullWidth isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
-              {t("more.loadMoreAssets")}
-            </Button>
-          )}
-        </div>
-      )}
+              );
+            })}
+            {moreCursor && (
+              <Button variant="outline" size="md" isFullWidth className="rounded-xl" isLoading={loadingMore} isDisabled={loadingMore} onClick={loadMore}>
+                {t("more.loadMoreAssets") || t("shell.loadMore")}
+              </Button>
+            )}
+          </>
+        )}
+      </SectionCard>
 
       <Modal
         isOpen={Boolean(refunding)}
         onClose={() => setRefunding(null)}
         header={t("more.recordRefund")}
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRefunding(null)} isDisabled={saving}>{t("shell.cancel")}</Button>
-            <Button onClick={submitRefund} isLoading={saving} isDisabled={saving}>{t("more.record")}</Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" isFullWidth className="sm:!w-fit" onClick={() => setRefunding(null)} isDisabled={saving}>
+              {t("shell.cancel")}
+            </Button>
+            <Button isFullWidth className="sm:!w-fit" onClick={submitRefund} isLoading={saving} isDisabled={saving}>
+              {t("more.record") || t("shell.save")}
+            </Button>
           </div>
         }
       >
         <div className="space-y-3">
-          <p className="text-xs text-(--tm)">
+          <p className="rounded-xl bg-(--bgm) px-3 py-2 text-xs text-(--tm)">
             {t("more.refundAgainst", { name: refunding?.name || t("more.assetFallback") })}
           </p>
           <Select
             size="lg"
             label={t("more.fundingShare")}
             isRequired
-            options={[
-              { value: "", label: t("more.memberLabel") },
-              ...(refunding?.fundingShares || [])
-                .filter((share) => (share.amount - (share.refundedAmount || 0)) > 0)
-                .map((share) => ({
-                  value: String(share.membershipId),
-                  label: `${memberName(share.membershipId)} · ${fmt(share.amount - (share.refundedAmount || 0))} ${t("more.left")}`,
-                })),
-            ]}
+            options={shareOptions}
             value={shareId}
             onChange={(e) => setShareId(e.target.value)}
           />
           <Input size="lg" label={t("more.refundAmount")} isRequired inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
       </Modal>
-    </Card>
+    </>
   );
 }

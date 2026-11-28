@@ -1,22 +1,23 @@
 "use client";
 
 /**
- * T9.4 — Weekly menu: template editor (manager+) and read-only week view.
- * Today's menu (with cook) is rendered from the board payload.
+ * Weekly menu: today's menu summary, plus a week editor (manager+) or a
+ * read-only week view. Money: stored as poisha, edited as Taka.
  *
- * Money: `estCostPoisha` is edited in Taka and converted to integer poisha.
+ * Mobile-first: every weekday is a collapsible block; the four slots stack.
  */
 import { useEffect, useMemo, useState } from "react";
-import { LuChefHat, LuPlus, LuRefreshCw, LuSave, LuTrash2 } from "react-icons/lu";
+import { LuChefHat, LuPlus, LuRefreshCw, LuSave, LuTrash2, LuSun } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
+import Select from "@/components/shared/Select";
 import { useToast } from "@/components/shared/ToastProvider";
 import { routinesApi } from "@/lib/api/routines";
 import { dhakaToday } from "@/lib/utils/format";
 import { useT } from "@/lib/i18n/LangProvider";
 import { useMoney } from "@/lib/hooks/useMoney";
 import { onRealtime } from "@/components/realtime/RealtimeProvider";
+import { SectionCard } from "../GroupUI";
 import { MEAL_SLOT_LIST, memberLabel } from "./boardHelpers";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -44,7 +45,6 @@ function planToDays(plan) {
       weekday: day.weekday,
       slots: slotMap,
       cookMembershipId: day.cookMembershipId?._id || day.cookMembershipId || "",
-      // Store Taka in the editor so the user never types poisha.
       estCostTaka: day.estCostPoisha ? String(day.estCostPoisha / 100) : "",
       note: day.note || "",
     };
@@ -81,10 +81,7 @@ export default function MenuClient({ groupId, initialPlans = [], canEdit = false
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const current = useMemo(
-    () => plans.find((plan) => plan.weekStart === weekStart) || null,
-    [plans, weekStart],
-  );
+  const current = useMemo(() => plans.find((plan) => plan.weekStart === weekStart) || null, [plans, weekStart]);
 
   const load = async () => {
     setLoading(true);
@@ -96,7 +93,7 @@ export default function MenuClient({ groupId, initialPlans = [], canEdit = false
       setDays(planToDays(next));
       setDirty(false);
     } catch (ex) {
-      showToast({ status: "error", title: t("board.couldNotLoadMenu"), description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("board.noMenu"), description: ex?.data?.msg || ex?.message });
     } finally {
       setLoading(false);
     }
@@ -126,11 +123,11 @@ export default function MenuClient({ groupId, initialPlans = [], canEdit = false
     setSaving(true);
     try {
       await routinesApi.setMenu(groupId, { weekStart, days: daysToPayload(days, toPoisha) });
-      showToast({ status: "success", title: t("board.menuSaved") });
+      showToast({ status: "success", title: t("board.saveWeek") });
       setDirty(false);
       load();
     } catch (ex) {
-      showToast({ status: "error", title: t("board.couldNotSaveMenu"), description: ex?.data?.msg || ex?.message });
+      showToast({ status: "error", title: t("board.saveWeek"), description: ex?.data?.msg || ex?.message });
     } finally {
       setSaving(false);
     }
@@ -141,139 +138,192 @@ export default function MenuClient({ groupId, initialPlans = [], canEdit = false
     date: new Date(new Date(`${weekStart}T00:00:00Z`).getTime() + day.weekday * 86400000).toISOString().slice(0, 10),
   }));
 
+  const cookOptions = [
+    { value: "", label: "—" },
+    ...memberships.map((m) => ({ value: m._id, label: memberLabel(m) })),
+  ];
+
   return (
-    <div className="flex flex-col gap-4">
-      <Card padding="md" header={<h2 className="flex items-center gap-2 text-sm font-bold text-(--tp)"><LuChefHat size={15} className="text-(--p)" /> {t("board.todayMenu")}</h2>}>
+    <div className="flex flex-col gap-3">
+      <SectionCard icon={LuSun} title={t("board.today")} subtitle={t("board.menu")}>
         {!todayMenu ? (
-          <p className="text-xs text-(--tm)">{t("board.noMenu")}</p>
+          <p className="rounded-xl bg-(--bgm) px-3 py-2.5 text-xs text-(--tm)">{t("board.noMenu")}</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {MEAL_SLOT_LIST.map((slot) => {
               const items = todayMenu.slots?.[slot] || [];
               if (!items.length) return null;
               return (
-                <p key={slot} className="text-xs text-(--ts)">
-                  <span className="font-bold text-(--tm)">{t(`meals.slot.${slot}`)}: </span>
-                  {items.map((item) => item.name || item).join(", ")}
-                </p>
+                <div key={slot} className="flex items-start gap-2 rounded-xl bg-(--bgm) px-2.5 py-1.5">
+                  <span className="w-[74px] shrink-0 text-[11px] font-bold text-(--tm)">{t(`meals.slot.${slot}`)}</span>
+                  <span className="min-w-0 flex-1 text-xs text-(--ts)">
+                    {items.map((item) => item.name || item).join(", ")}
+                  </span>
+                </div>
               );
             })}
             {todayMenu.cookMembershipId && (
-              <p className="text-[11px] text-(--tm)">{t("board.cook")}: {memberLabel(todayMenu.cookMembershipId)}</p>
+              <p className="px-1 text-[11px] text-(--tm)">
+                {t("board.cook")}: {memberLabel(todayMenu.cookMembershipId)}
+              </p>
             )}
             {todayMenu.estCostPoisha ? (
-              <p className="text-[11px] text-(--tm)">{t("board.estimated")}: {fmt(todayMenu.estCostPoisha)}</p>
+              <p className="px-1 text-[11px] text-(--tm)">
+                {t("board.estimated")}: {fmt(todayMenu.estCostPoisha)}
+              </p>
             ) : null}
           </div>
         )}
-      </Card>
+      </SectionCard>
 
-      <Card
-        padding="md"
-        header={
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold text-(--tp)">{t("board.menuPlan")}</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input size="sm" type="date" value={weekStart} onChange={(event) => setWeekStart(startOfWeek(event.target.value))} aria-label={t("board.weekStarting")} />
-              <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} isLoading={loading} onClick={load}>
-                <LuRefreshCw size={14} />
-              </Button>
-            </div>
-          </div>
+      <SectionCard
+        icon={LuChefHat}
+        title={t("board.menuPlan")}
+        subtitle={weekStart}
+        actions={
+          <>
+            <Input
+              size="sm"
+              type="date"
+              value={weekStart}
+              onChange={(event) => setWeekStart(startOfWeek(event.target.value))}
+              aria-label={t("board.weekStarting")}
+              className="!w-[132px]"
+            />
+            <Button size="sm" variant="ghost" isRound ariaLabel={t("shell.refresh")} isLoading={loading} onClick={load}>
+              <LuRefreshCw size={14} />
+            </Button>
+          </>
         }
       >
         {!canEdit && !current && (
-          <p className="text-xs text-(--tm)">{t("board.noPublishedMenu")}</p>
+          <p className="mb-2 rounded-xl bg-(--bgm) px-3 py-2 text-xs text-(--tm)">{t("board.noPublishedMenu")}</p>
         )}
 
-        <div className="space-y-3">
-          {weekDays.map((day) => (
-            <div key={day.weekday} className="rounded-lg border border-(--bd) p-2">
-              <div className="mb-1 flex items-center justify-between">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">
-                  {lang === "bn"
-                    ? new Date(`${day.date}T12:00:00+06:00`).toLocaleDateString("bn-BD", { weekday: "short", timeZone: "Asia/Dhaka" })
-                    : WEEKDAYS[day.weekday]}
-                  {" · "}{day.date.slice(5)}
-                </p>
-              </div>
-              {canEdit ? (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {MEAL_SLOT_LIST.map((slot) => (
-                    <Input
-                      key={slot}
-                      size="sm"
-                      label={t(`meals.slot.${slot}`)}
-                      value={day.slots?.[slot] || ""}
-                      placeholder={t("board.itemsPlaceholder")}
-                      onChange={(event) => setSlot(day.weekday, slot, event.target.value)}
-                    />
-                  ))}
-                  <Input
-                    size="sm"
-                    label={t("board.note")}
-                    value={day.note || ""}
-                    maxLength={300}
-                    onChange={(event) => setDayField(day.weekday, "note", event.target.value)}
-                  />
-                  <Input
-                    size="sm"
-                    label={t("board.estimatedTaka")}
-                    inputMode="decimal"
-                    value={day.estCostTaka || ""}
-                    placeholder="0.00"
-                    onChange={(event) => setDayField(day.weekday, "estCostTaka", event.target.value)}
-                  />
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-(--tm)">{t("board.cook")}</span>
-                    <select
-                      value={day.cookMembershipId || ""}
-                      onChange={(event) => setDayField(day.weekday, "cookMembershipId", event.target.value)}
-                      className="min-h-11 w-full rounded-lg border border-(--bd) bg-(--bgs) px-2 text-base text-(--ts)"
-                    >
-                      <option value="">—</option>
-                      {memberships.map((m) => (
-                        <option key={m._id} value={m._id}>{memberLabel(m)}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              ) : (
-                <ul className="list-none space-y-0.5">
-                  {MEAL_SLOT_LIST.map((slot) => {
-                    const text = day.slots?.[slot];
-                    if (!text) return null;
-                    return (
-                      <li key={slot} className="truncate text-xs text-(--ts)">
-                        <span className="font-semibold text-(--tm)">{t(`meals.slot.${slot}`)}: </span>{text}
-                      </li>
-                    );
-                  })}
-                  {!MEAL_SLOT_LIST.some((slot) => day.slots?.[slot]) && (
-                    <li className="text-xs text-(--tm)">{t("board.noMealPlanned")}</li>
+        <div className="space-y-2">
+          {weekDays.map((day) => {
+            const weekdayLabel =
+              lang === "bn"
+                ? new Date(`${day.date}T12:00:00+06:00`).toLocaleDateString("bn-BD", {
+                  weekday: "short",
+                  timeZone: "Asia/Dhaka",
+                })
+                : WEEKDAYS[day.weekday];
+            const hasAny = MEAL_SLOT_LIST.some((slot) => day.slots?.[slot]);
+
+            return (
+              <details
+                key={day.weekday}
+                open={day.date === dhakaToday() || canEdit}
+                className="overflow-hidden rounded-2xl border border-(--bd)"
+              >
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 bg-(--bgm) px-2.5">
+                  <span className="text-[11.5px] font-bold uppercase tracking-wide text-(--ts)">
+                    {weekdayLabel} <span className="font-medium text-(--tm)">· {day.date.slice(5)}</span>
+                  </span>
+                  {!canEdit && (
+                    <span className="truncate text-[11px] text-(--tm)">{hasAny ? t("meals.set") : t("board.noMealPlanned")}</span>
                   )}
-                </ul>
-              )}
-            </div>
-          ))}
+                </summary>
+
+                <div className="p-2.5">
+                  {canEdit ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {MEAL_SLOT_LIST.map((slot) => (
+                        <Input
+                          key={slot}
+                          size="md"
+                          label={t(`meals.slot.${slot}`)}
+                          value={day.slots?.[slot] || ""}
+                          placeholder={t("board.itemsPlaceholder")}
+                          onChange={(event) => setSlot(day.weekday, slot, event.target.value)}
+                        />
+                      ))}
+                      <Input
+                        size="md"
+                        label={t("board.note")}
+                        value={day.note || ""}
+                        maxLength={300}
+                        onChange={(event) => setDayField(day.weekday, "note", event.target.value)}
+                      />
+                      <Input
+                        size="md"
+                        label={t("board.estimatedTaka")}
+                        inputMode="decimal"
+                        value={day.estCostTaka || ""}
+                        placeholder="0.00"
+                        onChange={(event) => setDayField(day.weekday, "estCostTaka", event.target.value)}
+                      />
+                      <Select
+                        size="md"
+                        label={t("board.cook")}
+                        options={cookOptions}
+                        value={day.cookMembershipId || ""}
+                        onChange={(event) => setDayField(day.weekday, "cookMembershipId", event.target.value)}
+                      />
+                    </div>
+                  ) : (
+                    <ul className="list-none space-y-1">
+                      {MEAL_SLOT_LIST.map((slot) => {
+                        const text = day.slots?.[slot];
+                        if (!text) return null;
+                        return (
+                          <li key={slot} className="flex items-start gap-2 text-xs">
+                            <span className="w-[74px] shrink-0 font-semibold text-(--tm)">{t(`meals.slot.${slot}`)}</span>
+                            <span className="min-w-0 flex-1 text-(--ts)">{text}</span>
+                          </li>
+                        );
+                      })}
+                      {!hasAny && <li className="text-xs text-(--tm)">{t("board.noMealPlanned")}</li>}
+                    </ul>
+                  )}
+                </div>
+              </details>
+            );
+          })}
         </div>
 
         {canEdit && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button isFullWidth leftIcon={<LuSave size={14} />} isLoading={saving} isDisabled={saving || !dirty} onClick={save}>
-              {t("board.saveWeek")}
-            </Button>
-            <Button variant="outline" leftIcon={<LuPlus size={14} />} onClick={() => { setDays(emptyDays()); setDirty(true); }}>
-              {t("board.clearWeek")}
-            </Button>
-            {current && (
-              <Button variant="ghost" leftIcon={<LuTrash2 size={14} />} onClick={() => { setDays(planToDays(current)); setDirty(false); }}>
-                {t("board.resetEdits")}
+          <div className="sticky bottom-2 z-10 mt-3 rounded-2xl border border-(--bd) bg-(--glb) p-2 shadow-lg backdrop-blur-md sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="rounded-xl"
+                isFullWidth
+                leftIcon={<LuSave size={14} />}
+                isLoading={saving}
+                isDisabled={saving || !dirty}
+                onClick={save}
+              >
+                {t("board.saveWeek")}
               </Button>
-            )}
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                leftIcon={<LuPlus size={14} />}
+                onClick={() => {
+                  setDays(emptyDays());
+                  setDirty(true);
+                }}
+              >
+                {t("board.clearWeek")}
+              </Button>
+              {current && (
+                <Button
+                  variant="ghost"
+                  className="rounded-xl"
+                  leftIcon={<LuTrash2 size={14} />}
+                  onClick={() => {
+                    setDays(planToDays(current));
+                    setDirty(false);
+                  }}
+                >
+                  {t("board.resetEdits")}
+                </Button>
+              )}
+            </div>
           </div>
         )}
-      </Card>
+      </SectionCard>
     </div>
   );
 }

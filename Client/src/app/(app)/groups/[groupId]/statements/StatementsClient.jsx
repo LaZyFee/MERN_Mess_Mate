@@ -1,11 +1,19 @@
 "use client";
 
+/**
+ * Statements tab — finalized month statements + month-end close.
+ * Mobile-first: a month selector strip, a summary card, then member rows that
+ * expand in place (no wide table on phones).
+ */
 import { useCallback, useMemo, useState } from "react";
+import { LuFileText, LuLock, LuRefreshCw } from "react-icons/lu";
+import Button from "@/components/shared/Button";
 import Skeleton from "@/components/shared/Skeleton";
-import Tabs, { TabList, Tab, TabPanels, TabPanel } from "@/components/shared/Tabs";
 import { useToast } from "@/components/shared/ToastProvider";
 import { useGroupStore } from "@/lib/store/groupStore";
 import { statementsApi } from "@/lib/api/statements";
+import { useT } from "@/lib/i18n/LangProvider";
+import { SegmentedControl, SectionCard } from "../GroupUI";
 import StatementList from "./StatementList";
 import StatementDetail from "./StatementDetail";
 import ClosePanel from "./ClosePanel";
@@ -13,6 +21,7 @@ import ClosePanel from "./ClosePanel";
 const CLOSE_ROLES = ["owner", "manager", "treasurer"];
 
 export default function StatementsClient({ groupId, initialGroup, initialData }) {
+  const t = useT();
   const { showToast } = useToast();
   const role = useGroupStore((s) => s.myRole) || initialGroup?.myRole || "member";
   const canClose = CLOSE_ROLES.includes(role);
@@ -42,12 +51,12 @@ export default function StatementsClient({ groupId, initialGroup, initialData })
         setActiveMonth(month);
         setActiveVersionId(versionId || list[0]?._id || "");
       } catch (ex) {
-        showToast({ status: "error", title: "Could not load statement", description: ex?.message });
+        showToast({ status: "error", title: t("stmt.couldNotLoad"), description: ex?.message });
       } finally {
         setLoading(false);
       }
     },
-    [groupId, showToast],
+    [groupId, showToast, t],
   );
 
   const reloadList = useCallback(async () => {
@@ -58,67 +67,67 @@ export default function StatementsClient({ groupId, initialGroup, initialData })
       setStatements(list);
       if (list.length) await loadVersions(activeMonth || list[0]?.month);
     } catch (ex) {
-      showToast({ status: "error", title: "Could not refresh", description: ex?.message });
+      showToast({ status: "error", title: t("stmt.couldNotRefresh"), description: ex?.message });
     } finally {
       setLoading(false);
     }
-  }, [activeMonth, groupId, loadVersions, showToast]);
+  }, [activeMonth, groupId, loadVersions, showToast, t]);
 
   return (
-    <div className="min-w-0 space-y-4">
-      <Tabs value={tab} onChange={setTab} variant="solid-rounded" size="lg" isFitted>
-        <TabList className="overflow-x-auto">
-          <Tab value="statements">Statements</Tab>
-          {canClose && <Tab value="close">Month-end close</Tab>}
-        </TabList>
+    <div className="min-w-0 space-y-3">
+      <SegmentedControl
+        ariaLabel={t("stmt.tabStatements")}
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "statements", label: t("stmt.tabStatements"), icon: LuFileText },
+          ...(canClose ? [{ value: "close", label: t("stmt.tabClose"), icon: LuLock }] : []),
+        ]}
+      />
 
-        <TabPanels className="mt-4">
-          <TabPanel value="statements">
+      {tab === "statements" && (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,290px)_minmax(0,1fr)] lg:items-start">
+          <StatementList
+            statements={statements}
+            activeMonth={activeMonth}
+            loading={loading}
+            onSelect={(month) => loadVersions(month)}
+            onRefresh={reloadList}
+          />
+
+          <div className="min-w-0">
             {loading && versions.length === 0 ? (
-              <Skeleton variant="rect" height={220} />
+              <Skeleton variant="rect" height={240} className="rounded-2xl" />
             ) : (
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
-                <StatementList
-                  statements={statements}
-                  activeMonth={activeMonth}
-                  loading={loading}
-                  onSelect={(month) => loadVersions(month)}
-                  onRefresh={reloadList}
-                />
-                <div className="min-w-0">
-                  <StatementDetail
-                    groupId={groupId}
-                    statement={activeStatement}
-                    versions={versions}
-                    activeVersionId={activeVersionId}
-                    onSelectVersion={(version) => setActiveVersionId(version._id)}
-                  />
-                </div>
-              </div>
-            )}
-          </TabPanel>
-
-          {canClose && (
-            <TabPanel value="close">
-              <ClosePanel
+              <StatementDetail
                 groupId={groupId}
-                initialPeriod={period}
-                initialChecklist={checklist}
-                initialMonth={activeMonth}
-                onFinalized={(month) => {
-                  setPeriod(null);
-                  setChecklist(null);
-                  loadVersions(month);
-                  statementsApi
-                    .list(groupId)
-                    .then((data) => setStatements(data?.statements || data || []))
-                    .catch(() => { });
-                }}
+                statement={activeStatement}
+                versions={versions}
+                activeVersionId={activeVersionId}
+                onSelectVersion={(version) => setActiveVersionId(version._id)}
               />
-            </TabPanel>
-          )}
-        </TabPanels>
-      </Tabs>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "close" && canClose && (
+        <ClosePanel
+          groupId={groupId}
+          initialPeriod={period}
+          initialChecklist={checklist}
+          initialMonth={activeMonth}
+          onFinalized={(month) => {
+            setPeriod(null);
+            setChecklist(null);
+            loadVersions(month);
+            statementsApi
+              .list(groupId)
+              .then((data) => setStatements(data?.statements || data || []))
+              .catch(() => { });
+          }}
+        />
+      )}
     </div>
   );
 }

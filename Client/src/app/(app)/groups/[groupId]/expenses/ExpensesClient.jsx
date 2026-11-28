@@ -1,279 +1,342 @@
 "use client";
 
+/**
+ * Expenses tab — the ledger of spending.
+ *
+ * Mobile-first layout:
+ *  - segmented control (List / New draft / Advanced)
+ *  - compact filter sheet (status + payment) that collapses into a chip
+ *  - one-tap import from spreadsheet
+ *  - cards expand in place; destructive actions ask for a reason in a modal
+ */
 import { useCallback, useMemo, useState } from "react";
 import {
-  LuFilter,
-  LuPlus,
-  LuReceipt,
-  LuRefreshCw,
-  LuFileSpreadsheet,
-  LuX,
+    LuReceipt,
+    LuPlus,
+    LuRefreshCw,
+    LuFileSpreadsheet,
+    LuSlidersHorizontal,
+    LuListFilter,
+    LuX,
+    LuChevronDown,
+    LuChevronUp,
 } from "react-icons/lu";
 import Button from "@/components/shared/Button";
-import Card from "@/components/shared/Card";
-import Input from "@/components/shared/Input";
 import Select from "@/components/shared/Select";
+import Checkbox from "@/components/shared/Checkbox";
 import Skeleton from "@/components/shared/Skeleton";
-import Tabs, { TabList, Tab, TabPanels, TabPanel } from "@/components/shared/Tabs";
 import { useToast } from "@/components/shared/ToastProvider";
-import { useGroupStore } from "@/lib/store/groupStore";
-import { useAuthStore } from "@/lib/store/authStore";
 import { expensesApi } from "@/lib/api/expenses";
 import { useT } from "@/lib/i18n/LangProvider";
+import { useMoney } from "@/lib/hooks/useMoney";
+import { useGroupStore } from "@/lib/store/groupStore";
+import { SegmentedControl, SectionCard, EmptyState } from "../GroupUI";
 import ExpenseCard from "./ExpenseCard";
 import ExpenseDraftForm from "./ExpenseDraftForm";
-import LegacyExpensePanel from "./LegacyExpensePanel";
 import ExpenseImportWizard from "./ExpenseImportWizard";
+import LegacyExpensePanel from "./LegacyExpensePanel";
+import { memberKey } from "./expenseHelpers";
 
 const STATUS_VALUES = ["", "draft", "submitted", "approved", "rejected", "reversed"];
 const TREASURER_ROLES = ["owner", "manager", "treasurer"];
 
 export default function ExpensesClient({
-  groupId,
-  initialGroup,
-  initialExpensePage,
-  initialCategories = [],
-  initialMemberships = [],
+    groupId,
+    initialGroup,
+    initialExpensePage,
+    initialCategories = [],
+    initialMemberships = [],
 }) {
-  const t = useT();
-  const { showToast } = useToast();
-  const storeRole = useGroupStore((s) => s.myRole);
-  const userId = useAuthStore((s) => s.user?._id);
-  const group = initialGroup;
-  const myMembership = useMemo(
-    () => (group?.memberships || []).find((m) => String(m.userId?._id || m.userId) === String(userId)),
-    [group, userId],
-  );
-  const role = storeRole || group?.myRole || myMembership?.role || "member";
-  const canTreasurer = TREASURER_ROLES.includes(role);
+    const t = useT();
+    const { fmt, n } = useMoney();
+    const { showToast } = useToast();
+    const role = useGroupStore((s) => s.myRole) || initialGroup?.myRole;
+    const canTreasurer = TREASURER_ROLES.includes(role);
 
-  const [tab, setTab] = useState("list");
-  const [expenses, setExpenses] = useState(initialExpensePage?.expenses ?? []);
-  const [nextCursor, setNextCursor] = useState(initialExpensePage?.nextCursor || null);
-  const [hasMore, setHasMore] = useState(Boolean(initialExpensePage?.hasMore));
-  const [status, setStatus] = useState("");
-  const [costPeriod, setCostPeriod] = useState("");
-  const [payable, setPayable] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+    const [tab, setTab] = useState("list");
+    const [expenses, setExpenses] = useState(
+        initialExpensePage?.expenses ?? initialExpensePage?.items ?? [],
+    );
+    const [nextCursor, setNextCursor] = useState(initialExpensePage?.nextCursor || null);
+    const [status, setStatus] = useState("");
+    const [payableOnly, setPayableOnly] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
 
-  const statusOptions = useMemo(
-    () => STATUS_VALUES.map((value) => ({ value, label: value ? t(`exp.${value}`) : t("exp.allStatuses") })),
-    [t],
-  );
-  const payableOptions = useMemo(
-    () => [
-      { value: "", label: t("exp.allExpenses") },
-      { value: "true", label: t("exp.payableOnly") },
-    ],
-    [t],
-  );
+    const myMembership = useMemo(
+        () => initialMemberships.find((m) => m.isMe || m.isSelf) || initialMemberships[0],
+        [initialMemberships],
+    );
+    const myMembershipId = myMembership ? memberKey(myMembership) : "";
 
-  const filters = useMemo(
-    () => ({ status, costPeriod, payable: payable === "true" ? true : "", limit: 30 }),
-    [status, costPeriod, payable],
-  );
-  const filtersActive = Boolean(status || costPeriod || payable);
+    const statusOptions = useMemo(
+        () =>
+            STATUS_VALUES.map((value) => ({
+                value,
+                label: value ? t(`exp.${value}`) : t("exp.allStatuses"),
+            })),
+        [t],
+    );
 
-  const load = useCallback(
-    async (reset = true) => {
-      setLoading(reset);
-      setLoadingMore(!reset);
-      try {
-        const data = await expensesApi.list(
-          groupId,
-          reset ? filters : { ...filters, cursor: nextCursor },
-        );
-        const page = Array.isArray(data?.expenses) ? data.expenses : [];
-        setExpenses((current) => (reset ? page : [...current, ...page]));
-        setNextCursor(data?.nextCursor || null);
-        setHasMore(Boolean(data?.hasMore));
-      } catch (error) {
-        showToast({
-          status: "error",
-          title: t("exp.couldNotLoad"),
-          description: error?.data?.msg || error?.message,
-        });
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    },
-    [groupId, filters, nextCursor, showToast, t],
-  );
+    const load = useCallback(
+        async (reset = true, overrides = {}) => {
+            const nextStatus = overrides.status ?? status;
+            const nextPayable = overrides.payableOnly ?? payableOnly;
+            const query = {
+                status: nextStatus || undefined,
+                payable: nextPayable ? "true" : undefined,
+                limit: 30,
+                ...(reset || !nextCursor ? {} : { cursor: nextCursor }),
+            };
+            if (reset) setLoading(true);
+            else setLoadingMore(true);
+            try {
+                const data = await expensesApi.list(groupId, query);
+                const page = Array.isArray(data?.expenses) ? data.expenses : data?.items || [];
+                setExpenses((current) => (reset ? page : [...current, ...page]));
+                setNextCursor(data?.nextCursor || null);
+            } catch (ex) {
+                showToast({ status: "error", title: t("exp.couldNotLoad"), description: ex?.data?.msg || ex?.message });
+            } finally {
+                setLoading(false);
+                setLoadingMore(false);
+            }
+        },
+        [groupId, status, payableOnly, nextCursor, showToast, t],
+    );
 
-  const resetFilters = () => {
-    setStatus("");
-    setCostPeriod("");
-    setPayable("");
-    setNextCursor(null);
-  };
+    const applyFilters = (patch = {}) => {
+        const nextStatus = patch.status ?? status;
+        const nextPayable = patch.payableOnly ?? payableOnly;
+        setStatus(nextStatus);
+        setPayableOnly(nextPayable);
+        setNextCursor(null);
+        load(true, { status: nextStatus, payableOnly: nextPayable });
+    };
 
-  const afterCreate = () => {
-    setTab("list");
-    load(true);
-  };
+    const clearFilters = () => applyFilters({ status: "", payableOnly: false });
 
-  return (
-    <div className="min-w-0 space-y-4">
-      <Tabs value={tab} onChange={setTab} variant="solid-rounded" size="lg" isFitted>
-        <TabList className="overflow-x-auto">
-          <Tab value="list">{t("exp.all")}</Tab>
-          <Tab value="new">{t("exp.newDraft")}</Tab>
-          {canTreasurer && <Tab value="advanced">{t("exp.advanced")}</Tab>}
-        </TabList>
+    const totals = useMemo(() => {
+        const count = expenses.length;
+        const sum = expenses.reduce((acc, row) => acc + Number(row.amount || 0), 0);
+        const awaiting = expenses.filter((row) => row.status === "submitted").length;
+        return { count, sum, awaiting };
+    }, [expenses]);
 
-        <TabPanels className="mt-4">
-          <TabPanel value="list">
-            <div className="min-w-0 space-y-3">
-              <Card padding="sm" variant="outlined">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Select
-                    size="lg"
-                    label={t("exp.status")}
-                    options={statusOptions}
-                    value={status}
-                    onChange={(event) => setStatus(event.target.value)}
-                  />
-                  <Input
-                    size="lg"
-                    type="month"
-                    label={t("exp.costPeriod")}
-                    value={costPeriod}
-                    onChange={(event) => setCostPeriod(event.target.value)}
-                  />
-                  <Select
-                    size="lg"
-                    label={t("exp.payment")}
-                    options={payableOptions}
-                    value={payable}
-                    onChange={(event) => setPayable(event.target.value)}
-                  />
-                </div>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    isFullWidth
-                    leftIcon={<LuFilter size={15} />}
-                    isLoading={loading}
-                    onClick={() => load(true)}
-                  >
-                    {t("exp.applyFilters")}
-                  </Button>
-                  {filtersActive && (
-                    <Button
-                      variant="ghost"
-                      size="lg"
-                      leftIcon={<LuX size={15} />}
-                      onClick={() => {
-                        resetFilters();
-                      }}
-                    >
-                      {t("exp.clear")}
-                    </Button>
-                  )}
-                </div>
-              </Card>
+    const activeFilterCount = (status ? 1 : 0) + (payableOnly ? 1 : 0);
 
-              {loading && expenses.length === 0 ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((key) => (
-                    <Skeleton key={key} variant="rect" height={84} />
-                  ))}
-                </div>
-              ) : expenses.length === 0 ? (
-                <Card variant="outlined">
-                  <div className="flex flex-col items-center py-8 text-center">
-                    <LuReceipt size={28} className="mb-3 text-(--tm)" />
-                    <p className="font-semibold text-(--tp)">{t("exp.none")}</p>
-                    <p className="mt-1 text-sm text-(--tm)">
-                      {filtersActive ? t("exp.noneFiltered") : t("exp.noneEmpty")}
-                    </p>
-                    {!filtersActive && (
-                      <Button size="md" className="mt-4" leftIcon={<LuPlus size={15} />} onClick={() => setTab("new")}>
-                        {t("exp.newDraft")}
-                      </Button>
+    return (
+        <div className="min-w-0 space-y-3">
+            <SegmentedControl
+                ariaLabel={t("overview.expenses")}
+                value={tab}
+                onChange={setTab}
+                options={[
+                    { value: "list", label: t("exp.allExpenses"), icon: LuReceipt },
+                    { value: "new", label: t("exp.newDraft"), icon: LuPlus },
+                    { value: "advanced", label: t("exp.advanced"), icon: LuSlidersHorizontal },
+                ]}
+            />
+
+            {tab === "list" && (
+                <>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setFiltersOpen((v) => !v)}
+                            aria-expanded={filtersOpen}
+                            className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-[12.5px] font-semibold transition-colors ${filtersOpen || activeFilterCount
+                                ? "border-(--p) bg-(--pale) text-(--p)"
+                                : "border-(--bd) bg-(--bgs) text-(--ts)"
+                                }`}
+                        >
+                            <LuListFilter size={14} />
+                            {t("exp.status")}
+                            {activeFilterCount > 0 && (
+                                <span className="grid size-4 place-items-center rounded-full bg-(--p) text-[9px] font-bold text-(--bgs)">
+                                    {activeFilterCount}
+                                </span>
+                            )}
+                            {filtersOpen ? <LuChevronUp size={13} /> : <LuChevronDown size={13} />}
+                        </button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            isRound
+                            ariaLabel={t("exp.refresh")}
+                            isLoading={loading}
+                            onClick={() => {
+                                setNextCursor(null);
+                                load(true);
+                            }}
+                        >
+                            <LuRefreshCw size={15} />
+                        </Button>
+                        {canTreasurer && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="ml-auto rounded-full"
+                                leftIcon={<LuFileSpreadsheet size={14} />}
+                                onClick={() => setImportOpen(true)}
+                            >
+                                {t("exp.import")}
+                            </Button>
+                        )}
+                    </div>
+
+                    {filtersOpen && (
+                        <div className="rounded-2xl border border-(--bd) bg-(--bgs) p-3">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <Select
+                                    size="lg"
+                                    label={t("exp.status")}
+                                    options={statusOptions}
+                                    value={status}
+                                    onChange={(event) => applyFilters({ status: event.target.value })}
+                                />
+                                <div className="flex items-end pb-1">
+                                    <Checkbox
+                                        label={t("exp.payableOnly")}
+                                        isChecked={payableOnly}
+                                        onChange={() => applyFilters({ payableOnly: !payableOnly })}
+                                    />
+                                </div>
+                            </div>
+                            {activeFilterCount > 0 && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="mt-1 rounded-full"
+                                    leftIcon={<LuX size={13} />}
+                                    onClick={clearFilters}
+                                >
+                                    {t("exp.clear")}
+                                </Button>
+                            )}
+                        </div>
                     )}
-                  </div>
-                </Card>
-              ) : (
-                <div className="space-y-3">
-                  {expenses.map((expense) => (
-                    <ExpenseCard
-                      key={expense._id}
-                      groupId={groupId}
-                      expense={expense}
-                      canTreasurer={canTreasurer}
-                      onChanged={() => load(true)}
+
+                    <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-xl bg-(--bgm) px-2.5 py-2">
+                            <p className="truncate text-[10px] font-bold uppercase tracking-wide text-(--tm)">
+                                {t("overview.expenses")}
+                            </p>
+                            <p className="truncate text-sm font-extrabold tabular-nums text-(--tp)">{n(totals.count)}</p>
+                        </div>
+                        <div className="rounded-xl bg-(--bgm) px-2.5 py-2">
+                            <p className="truncate text-[10px] font-bold uppercase tracking-wide text-(--tm)">{t("exp.total")}</p>
+                            <p className="truncate text-sm font-extrabold tabular-nums text-(--tp)">{fmt(totals.sum)}</p>
+                        </div>
+                        <div className="rounded-xl bg-(--warning-bg) px-2.5 py-2">
+                            <p className="truncate text-[10px] font-bold uppercase tracking-wide text-(--warning)">
+                                {t("exp.submitted")}
+                            </p>
+                            <p className="truncate text-sm font-extrabold tabular-nums text-(--warning)">
+                                {n(totals.awaiting)}
+                            </p>
+                        </div>
+                    </div>
+
+                    {loading && expenses.length === 0 ? (
+                        <div className="space-y-2">
+                            {[1, 2, 3].map((key) => (
+                                <Skeleton key={key} variant="rect" height={92} className="rounded-2xl" />
+                            ))}
+                        </div>
+                    ) : expenses.length === 0 ? (
+                        <div className="rounded-2xl border border-(--bd) bg-(--bgs)">
+                            <EmptyState
+                                icon={LuReceipt}
+                                title={t("exp.none")}
+                                body={activeFilterCount ? t("exp.noneFiltered") : t("exp.noneEmpty")}
+                                action={
+                                    activeFilterCount ? (
+                                        <Button variant="outline" size="md" onClick={clearFilters}>
+                                            {t("exp.clear")}
+                                        </Button>
+                                    ) : (
+                                        <Button size="md" leftIcon={<LuPlus size={15} />} onClick={() => setTab("new")}>
+                                            {t("exp.newDraft")}
+                                        </Button>
+                                    )
+                                }
+                            />
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {expenses.map((expense) => (
+                                <ExpenseCard
+                                    key={expense._id}
+                                    groupId={groupId}
+                                    expense={expense}
+                                    canTreasurer={canTreasurer}
+                                    onChanged={() => {
+                                        setNextCursor(null);
+                                        load(true);
+                                    }}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    {nextCursor && (
+                        <Button
+                            variant="outline"
+                            size="md"
+                            isFullWidth
+                            className="rounded-xl"
+                            isLoading={loadingMore}
+                            isDisabled={loadingMore}
+                            onClick={() => load(false)}
+                        >
+                            {t("exp.loadMore")}
+                        </Button>
+                    )}
+                </>
+            )}
+
+            {tab === "new" && (
+                <SectionCard icon={LuPlus} title={t("exp.draftForm")} subtitle={t("exp.newDraft")}>
+                    <ExpenseDraftForm
+                        groupId={groupId}
+                        categories={initialCategories}
+                        memberships={initialMemberships}
+                        myMembershipId={myMembershipId}
+                        onCreated={() => {
+                            setTab("list");
+                            setNextCursor(null);
+                            load(true);
+                        }}
                     />
-                  ))}
-                </div>
-              )}
+                </SectionCard>
+            )}
 
-              <div className="flex items-center justify-between gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  leftIcon={<LuRefreshCw size={14} />}
-                  isLoading={loading}
-                  onClick={() => load(true)}
-                >
-                  {t("exp.refresh")}
-                </Button>
-                <div className="flex items-center gap-2">
-                  {canTreasurer && (
-                    <Button variant="outline" size="sm" leftIcon={<LuFileSpreadsheet size={13} />} onClick={() => setImportOpen(true)}>
-                      {t("exp.import")}
-                    </Button>
-                  )}
-                  {hasMore && (
-                    <Button
-                      variant="outline"
-                      size="md"
-                      isLoading={loadingMore}
-                      onClick={() => load(false)}
-                    >
-                      {t("shell.loadMore")}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </TabPanel>
+            {tab === "advanced" && (
+                <SectionCard icon={LuSlidersHorizontal} title={t("exp.advanced")} subtitle={t("exp.legacyTitle")}>
+                    <LegacyExpensePanel
+                        groupId={groupId}
+                        categories={initialCategories}
+                        onChanged={() => {
+                            setNextCursor(null);
+                            load(true);
+                        }}
+                    />
+                </SectionCard>
+            )}
 
-          <TabPanel value="new">
-            <Card padding="md">
-              <h2 className="mb-3 text-base font-bold text-(--tp)">{t("exp.draftForm")}</h2>
-              <ExpenseDraftForm
+            <ExpenseImportWizard
+                isOpen={importOpen}
+                onClose={() => setImportOpen(false)}
                 groupId={groupId}
-                categories={initialCategories}
-                memberships={initialMemberships}
-                myMembershipId={myMembership?._id || ""}
-                onCreated={afterCreate}
-              />
-            </Card>
-          </TabPanel>
-
-          {canTreasurer && (
-            <TabPanel value="advanced">
-              <LegacyExpensePanel
-                groupId={groupId}
-                categories={initialCategories}
-                onChanged={() => load(true)}
-              />
-            </TabPanel>
-          )}
-        </TabPanels>
-      </Tabs>
-
-      <ExpenseImportWizard
-        isOpen={importOpen}
-        onClose={() => setImportOpen(false)}
-        groupId={groupId}
-        onImported={() => load(true)}
-      />
-    </div>
-  );
+                onImported={() => {
+                    setNextCursor(null);
+                    load(true);
+                }}
+            />
+        </div>
+    );
 }
+

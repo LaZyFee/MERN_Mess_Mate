@@ -25,3 +25,5 @@ dist-ssr
 scripts
 .log
 *.mjs*
+*.qa*
+*.txt
