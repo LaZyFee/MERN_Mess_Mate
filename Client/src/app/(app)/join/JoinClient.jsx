@@ -1,102 +1,105 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { LuArrowLeft, LuLogIn } from "react-icons/lu";
+import { LuLogIn } from "react-icons/lu";
+import PageHeader from "@/components/shared/PageHeader";
 import Input from "@/components/shared/Input";
 import Button from "@/components/shared/Button";
-import Alert from "@/components/shared/Alert";
+import { useToast } from "@/components/shared/ToastProvider";
 import { groupsApi } from "@/lib/api/groups";
+import { useT } from "@/lib/i18n/LangProvider";
 
 function JoinForm({ initialCode }) {
+  const t = useT();
+  const { showToast } = useToast();
   const [code, setCode] = useState(initialCode);
   const [groupId, setGroupId] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!code.trim()) { setError("Enter an invite code"); return; }
-    if (!groupId.trim()) { setError("Enter a group ID"); return; }
-    setError("");
+    if (!code.trim()) {
+      showToast({ status: "error", title: t("join.error.emptyCode") });
+      return;
+    }
+    if (!groupId.trim()) {
+      showToast({ status: "error", title: t("join.error.emptyGroupId") });
+      return;
+    }
     setLoading(true);
     try {
       await groupsApi.joinByCode({ code: code.trim(), groupId: groupId.trim() });
-      setPending(true);
+      showToast({
+        status: "success",
+        title: t("join.success.title"),
+        description: t("join.success.description"),
+      });
     } catch (ex) {
-      const msg = ex?.data?.message || ex?.message || "Failed to join";
       if (ex?.status === 429) {
-        setError("Too many attempts. Please wait before trying again.");
+        showToast({ status: "error", title: t("join.error.tooManyAttempts") });
       } else {
-        setError(msg);
+        const msg = ex?.data?.message || ex?.message || t("join.error.failed");
+        showToast({ status: "error", title: msg });
       }
+      setLoading(false);
     } finally {
       setLoading(false);
     }
   }
 
-  if (pending) {
-    return (
-      <Alert status="success">
-        Your join request was submitted! An admin will approve it soon. You can{" "}
-        <Link href="/" className="[color:var(--p)] font-semibold">go home</Link> while you wait.
-      </Alert>
-    );
-  }
-
   return (
-    <form onSubmit={handleSubmit} noValidate>
-      <div className="flex flex-col gap-4">
-        {error && <Alert status="error">{error}</Alert>}
-        <Input
-          label="Invite Code"
-          isRequired
-          value={code}
-          onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(""); }}
-          placeholder="MM-XXXXXX"
-          helperText="Case-insensitive 6-character code"
-          autoComplete="off"
-        />
-        <Input
-          label="Group ID"
-          isRequired
-          value={groupId}
-          onChange={(e) => { setGroupId(e.target.value.trim()); setError(""); }}
-          placeholder="Group identifier"
-          helperText="Ask your group admin for the Group ID"
-          autoComplete="off"
-        />
-        <Button type="submit" variant="primary" isFullWidth isLoading={loading} isDisabled={loading} leftIcon={<LuLogIn size={16} />}>
-          Join Group
-        </Button>
-      </div>
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 sm:gap-6">
+      <Input
+        label={t("join.code")}
+        isRequired
+        value={code}
+        onChange={(e) => {
+          setCode(e.target.value.toUpperCase());
+        }}
+        placeholder="MM-XXXXXX"
+        helperText={t("join.helper.code")}
+        autoComplete="off"
+      />
+      <Input
+        label={t("join.groupId")}
+        isRequired
+        value={groupId}
+        onChange={(e) => {
+          setGroupId(e.target.value.trim());
+        }}
+        placeholder={t("join.placeholder.groupId")}
+        helperText={t("join.helper.groupId")}
+        autoComplete="off"
+      />
+      <Button
+        type="submit"
+        variant="primary"
+        isFullWidth
+        isLoading={loading}
+        isDisabled={loading}
+        leftIcon={<LuLogIn size={16} />}
+      >
+        {t("join.submit")}
+      </Button>
     </form>
   );
 }
 
 export default function JoinClient({ initialCode = "" }) {
-  const router = useRouter();
+  const t = useT();
   return (
-    <main className="[min-height:100dvh] [background:var(--bg)] [padding:var(--space-6)_var(--space-4)] flex flex-col items-center justify-center">
-      <div className="w-full [max-width:480px]">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 [color:var(--tm)] text-sm mb-5 bg-none border-0 cursor-pointer p-0"
-        >
-          <LuArrowLeft size={16} /> Back
-        </button>
-        <div className="[background:var(--bgs)] [border:1px_solid_var(--bd)] [border-radius:var(--r-xl)] [box-shadow:var(--shadow-lg)] p-8">
-          <h1 className="[font-size:1.375rem] font-extrabold [color:var(--tp)] mb-2">
-            Join a Group
-          </h1>
-          <p className="[color:var(--tm)] text-sm mb-6">
-            Enter the invite code and Group ID shared by your admin.
-          </p>
-          <JoinForm initialCode={initialCode} />
-        </div>
+    <div className="min-h-[100dvh] bg-(--bg) overflow-x-hidden">
+      <PageHeader
+        as="div"
+        className="mb-4 sm:mb-6"
+        backHref="/dashboard"
+        backLabel={t("shell.back")}
+        title={t("join.title")}
+        description={t("join.subtitle")}
+      />
+      <div className="mx-auto min-w-0 w-full px-3 sm:px-6 pb-[calc(16px+env(safe-area-inset-bottom))]">
+        <JoinForm initialCode={initialCode} />
       </div>
-    </main>
+    </div>
   );
 }

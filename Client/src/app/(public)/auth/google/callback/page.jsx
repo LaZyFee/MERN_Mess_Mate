@@ -15,5 +15,5 @@ export default async function GoogleCallbackPage({ searchParams }) {
   const user = await verifyToken();
   if (!user) redirect("/login?error=google_failed");
 
-  redirect("/");
+  redirect("/dashboard");
 }

@@ -5,6 +5,7 @@ import { registerDictionary } from "@/lib/i18n/registry";
 registerDictionary("en", "shell", {
   "groups": "My groups",
   "home": "Home",
+  "dashboard":"Dashboard",
   "meals": "Meals",
   "expenses": "Expenses",
   "summary": "Summary",
@@ -52,6 +53,7 @@ registerDictionary("en", "shell", {
 registerDictionary("bn", "shell", {
   "groups": "আমার গ্রুপ",
   "home": "হোম",
+  "dashboard":"ড্যাশবোর্ড",
   "meals": "মিল",
   "expenses": "খরচ",
   "summary": "সারসংক্ষেপ",
@@ -107,6 +109,8 @@ registerDictionary("en", "group", {
   "tab.members": "Members",
   "tab.activity": "Activity",
   "tab.more": "More",
+  "create": "Create a group",
+  "join": "Join with a code",
 });
 
 registerDictionary("bn", "group", {
@@ -120,6 +124,26 @@ registerDictionary("bn", "group", {
   "tab.members": "সদস্য",
   "tab.activity": "কার্যকলাপ",
   "tab.more": "আরও",
+  "create": "গ্রুপ তৈরি করুন",
+  "join": "কোড দিয়ে যোগ দিন",
+});
+
+registerDictionary("en", "grp", {
+  "create": "Create a group",
+  "join": "Join with a code",
+  "members": "{count} members",
+  "emptyHint": "Create a group to start tracking meals, expenses and balances, or join one with an invite code.",
+  "couldNotRefresh": "Could not refresh groups",
+  "leftNoticeTitle": "You left a group",
+});
+
+registerDictionary("bn", "grp", {
+  "create": "গ্রুপ তৈরি করুন",
+  "join": "কোড দিয়ে যোগ দিন",
+  "members": "{count} সদস্য",
+  "emptyHint": "খাবার, খরচ ও ব্যালেন্স ট্র্যাক করার জন্য একটি গ্রুপ তৈরি করুন, অথবা একটি ইনভাইট কোড দিয়ে গ্রুপে যোগ দিন।",
+  "couldNotRefresh": "গ্রুপ রিফ্রেশ করতে ব্যর্থ হয়েছে",
+  "leftNoticeTitle": "আপনি একটি গ্রুপ ছেড়ে দিয়েছেন",
 });
 
 registerDictionary("en", "auth", {
@@ -141,6 +165,17 @@ registerDictionary("en", "auth", {
   "join.title": "Join a group",
   "join.code": "Join code",
   "join.submit": "Join",
+  "join.subtitle": "Enter the invite code and Group ID shared by your admin.",
+  "join.groupId": "Group ID",
+  "join.placeholder.groupId": "Ask your admin for the Group ID",
+  "join.helper.code": "Case-insensitive 6-character code",
+  "join.helper.groupId": "Unique identifier for the group",
+  "join.error.emptyCode": "Please enter an invite code",
+  "join.error.emptyGroupId": "Please enter a Group ID",
+  "join.error.failed": "Failed to join. Please check your code and Group ID.",
+  "join.error.tooManyAttempts": "Too many attempts. Please wait before trying again.",
+  "join.success.title": "Join request submitted",
+  "join.success.description": "An admin will approve it soon. You’ll appear in the group once approved.",
   "login2fa.enterCode": "Enter the 6-digit code from your authenticator app.",
   "login2fa.code": "Authenticator Code",
   "login2fa.verify": "Verify",
@@ -167,6 +202,17 @@ registerDictionary("bn", "auth", {
   "join.title": "গ্রুপে যোগ দিন",
   "join.code": "জয়েন কোড",
   "join.submit": "যোগ দিন",
+  "join.subtitle": "অ্যাডমিনের দেওয়া ইনভাইট কোড ও গ্রুপ আইডি লিখুন।",
+  "join.groupId": "গ্রুপ আইডি",
+  "join.placeholder.groupId": "গ্রুপ অ্যাডমিনের কাছে গ্রুপ আইডি চান",
+  "join.helper.code": "কেস-ইনসেনসিটিভ ৬-ক্যারেক্টারের কোড",
+  "join.helper.groupId": "গ্রুপের अनন্য identifiers",
+  "join.error.emptyCode": "দয়া করে একটি ইনভাইট কোড লিখুন",
+  "join.error.emptyGroupId": "দয়া করে একটি গ্রুপ আইডি লিখুন",
+  "join.error.failed": "যোগ দিতে ব্যর্থ হয়েছে। কোড ও গ্রুপ আইডি যাচাই করুন।",
+  "join.error.tooManyAttempts": "অধিকতর চেষ্টা। 다시 চেষ্টা করার আগে অপেক্ষা করুন।",
+  "join.success.title": "যোগের অনুরোধ প্রেরিত",
+  "join.success.description": "একজন অ্যাডমিন এটি অনুমোদন করবেন। অনুমোদন 후 আপনি গ্রুপে উপস্থিত থাকবেন।",
   "login2fa.enterCode": "আপনার অথেন্টিকেটর অ্যাপ থেকে 6-অंকের কোড লিখুন।",
   "login2fa.code": "অথেন্টিকেটর কোড",
   "login2fa.verify": "যাচাই করুন",
@@ -204,4 +250,16 @@ registerDictionary("bn", "home", {
   "join": "কোড দিয়ে যোগ দিন",
   "meals": "মিল",
   "members": "সদস্য",
+});
+
+registerDictionary("en", "support", {
+  "title": "MealMate support",
+  "pageTitle": "Support",
+  "subtitle": "Track tickets and replies from the MealMate team."
+});
+
+registerDictionary("bn", "support", {
+  "title": "মিলমেট সাপোর্ট",
+  "pageTitle": "সাপোর্ট",
+  "subtitle": "মিলমেট টিমের টিকেট ও উত্তর ট্র্যাক করুন।"
 });

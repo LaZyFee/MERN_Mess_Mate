@@ -10,7 +10,15 @@ import { useAuthStore } from "@/lib/store/authStore";
 import { authApi } from "@/lib/api/auth";
 import { useT } from "@/lib/i18n/LangProvider";
 import PasswordInput from "@/components/auth/PasswordInput.jsx";
-// 2FA step 
+// 2FA step
+
+/**
+ * Where to send the user after a successful login. Falls back to the app
+ * home (`/dashboard`) instead of the public root (`/`).
+ */
+function resolveLoginNext(next) {
+  return next && next !== "/" ? next : "/dashboard";
+} 
 function TwoFAStep({ challengeToken, onBack }) {
   const t = useT();
   const router = useRouter();
@@ -28,7 +36,7 @@ function TwoFAStep({ challengeToken, onBack }) {
     try {
       const data = await authApi.twoFactorLogin({ challengeToken, code: code.trim() });
       hydrate({ user: data.user, roles: data.user?.roles || [], isAdmin: Boolean(data.user?.isAdmin) });
-      router.replace(searchParams.get("next") || "/dashboard");
+      router.replace(resolveLoginNext(searchParams.get("next")));
     } catch (ex) {
       setErr(ex?.data?.message || ex?.message || t("auth.login2fa.invalidCode"));
     } finally {
@@ -95,7 +103,7 @@ export default function LoginForm() {
         return;
       }
       hydrate({ user: data.user, roles: data.user?.roles || [], isAdmin: Boolean(data.user?.isAdmin) });
-      router.replace(searchParams.get("next") || "/dashboard");
+      router.replace(resolveLoginNext(searchParams.get("next")));
     } catch (ex) {
       const msg = ex?.data?.message || ex?.message || "Login failed";
       if (ex?.data?.errors) {

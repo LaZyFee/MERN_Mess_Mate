@@ -4,6 +4,7 @@ import { getProfile } from "@/lib/actions/auth";
 import { getInboxPreferences } from "@/lib/actions/inbox";
 import ProfileClient from "./ProfileClient";
 import NotificationPrefs from "@/components/inbox/NotificationPrefs";
+import PageHeader from "@/components/shared/PageHeader";
 import { normalizeLang, translate, LANG_COOKIE } from "@/lib/i18n";
 
 export const metadata = { title: "Profile — MealMate" };
@@ -24,15 +25,12 @@ export default async function ProfilePage() {
 
   return (
     <main className="px-4 py-6 sm:px-6 sm:py-9">
-      <header className="mb-6 rounded-3xl bg-(--brand-bg) px-5 py-7 text-(--brand-fg) sm:px-8 sm:py-9">
-        <p className="text-sm font-semibold text-(--brand-on)">{t("profile.accountTitle")}</p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
-          {t("profile.pageTitle")}
-        </h1>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-(--brand-mute) sm:text-base">
-          {t("profile.subtitle")}
-        </p>
-      </header>
+      <PageHeader
+        className="mb-6"
+        eyebrow={t("profile.accountTitle")}
+        title={t("profile.pageTitle")}
+        description={t("profile.subtitle")}
+      />
       <ProfileClient
         initialProfile={profile}
         notificationPrefsSlot={<NotificationPrefs initialPreferences={prefs} />}

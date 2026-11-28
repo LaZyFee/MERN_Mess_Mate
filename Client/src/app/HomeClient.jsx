@@ -4,8 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/LangProvider";
 import Topbar from "@/components/shared/Topbar";
+import PageHeader from "@/components/shared/PageHeader";
 import Card from "@/components/shared/Card";
 import { LuUtensils, LuReceipt, LuShieldCheck, LuBookOpen, LuCalendarDays, LuShoppingBasket, LuPackage, LuWallet } from "react-icons/lu";
+import { LuRefreshCw, LuPlus, LuLogIn } from "react-icons/lu";
+import Button from "@/components/shared/Button";
 
 // Source data keyed to the `landing` dictionary namespace.
 const STATS_SRC = [
@@ -83,6 +86,45 @@ export default function HomeClient() {
   return (
     <div className="min-h-[100dvh] overflow-x-clip bg-(--bg) text-(--tp)">
       <Topbar />
+
+      <PageHeader
+        as="div"
+        className="mb-5 sm:mb-6"
+        eyebrow={t("shell.builtFor")}
+        title={t("shell.groups")}
+        description={t("home.dashboardIntro")}
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<LuRefreshCw size={15} />}
+              onClick={() => router.refresh()}
+              className="w-full sm:w-fit"
+            >
+              {t("shell.refresh")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<LuPlus size={15} />}
+              onClick={() => router.push("/groups/create")}
+              className="w-full sm:w-fit"
+            >
+              {t("grp.create")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<LuLogIn size={15} />}
+              onClick={() => router.push("/join")}
+              className="w-full sm:w-fit"
+            >
+              {t("grp.join")}
+            </Button>
+          </>
+        }
+      />
 
       <main>
       <section className="bg-(--bgs)">

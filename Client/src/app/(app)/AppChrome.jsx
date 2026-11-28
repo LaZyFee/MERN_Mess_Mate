@@ -84,42 +84,46 @@ export default function AppChrome({ children }) {
         </div>
       </header>
 
-      {/* Sidebar — desktop only (lg+) */}
-      <aside
-        className="hidden lg:flex fixed inset-y-0 left-0 z-30 w-64 border-r border-(--bd) bg-(--bgs)/95 backdrop-blur-xl flex-col"
-      >
-        <div className="flex flex-col h-full">
-          <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-            {SIDEBAR_NAV.map(({ key, href, icon: Icon, labelKey }) => {
-              const active = isActive(pathname, key);
-              return (
-                <Link
-                  key={key}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium no-underline transition-colors ${active ? "bg-(--pale) text-(--p)" : "text-(--ts) hover:bg-(--bgm) hover:text-(--p)"}`}
-                >
-                  <Icon size={18} />
-                  <span>{labelKey ? t(labelKey) : t(`shell.${key}`)}</span>
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="p-3 border-t border-(--bd)">
-            <Link
-              href="/support"
-              className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-(--ts) no-underline hover:bg-(--bgm) hover:text-(--p) transition-colors"
-            >
-              <LuLifeBuoy size={18} /> {t("shell.support")}
-            </Link>
+      {/* Below-header layout: sidebar + main */}
+      <div className="flex">
+        {/* Sidebar — desktop only (lg+) */}
+        <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-(--bd) bg-(--bgs)/95 backdrop-blur-xl">
+          <div className="sticky top-14 flex h-[calc(100dvh-3.5rem)] flex-col">
+            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+              {SIDEBAR_NAV.map(({ key, href, icon: Icon, labelKey }) => {
+                const active = isActive(pathname, key);
+                return (
+                  <Link
+                    key={key}
+                    href={href}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium no-underline transition-colors ${active
+                        ? "bg-(--pale) text-(--p)"
+                        : "text-(--ts) hover:bg-(--bgm) hover:text-(--p)"
+                      }`}
+                  >
+                    <Icon size={18} />
+                    <span>{labelKey ? t(labelKey) : t(`shell.${key}`)}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="p-3 border-t border-(--bd)">
+              <Link
+                href="/support"
+                className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-(--ts) no-underline hover:bg-(--bgm) hover:text-(--p) transition-colors"
+              >
+                <LuLifeBuoy size={18} /> {t("shell.support")}
+              </Link>
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
 
-      {/* Main content — padded right for sidebar on desktop */}
-      <main className={`mx-auto min-w-0 max-w-7xl pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-8 lg:pl-72 lg:mr-auto`}>
-        {children}
-      </main>
+        {/* Main content */}
+        <main className="flex-1 min-w-0 px-3 pt-4 pb-24 sm:px-5 lg:px-8 lg:pb-8">
+          {children}
+        </main>
+      </div>
 
       {/* Bottom nav — mobile only (hidden lg+) */}
       <nav
@@ -134,9 +138,13 @@ export default function AppChrome({ children }) {
                 <Link
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-[10px] font-semibold no-underline transition-colors ${active ? "text-(--p)" : "text-(--tm)"}`}
+                  className={`flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-[10px] font-semibold no-underline transition-colors ${active ? "text-(--p)" : "text-(--tm)"
+                    }`}
                 >
-                  <span className={`grid size-8 place-items-center rounded-xl transition-colors ${active ? "bg-(--pale)" : ""}`}>
+                  <span
+                    className={`grid size-8 place-items-center rounded-xl transition-colors ${active ? "bg-(--pale)" : ""
+                      }`}
+                  >
                     <Icon size={19} strokeWidth={active ? 2.4 : 1.8} />
                   </span>
                   <span className="max-w-full truncate">{t(`shell.${key}`)}</span>

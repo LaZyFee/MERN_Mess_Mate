@@ -129,6 +129,9 @@ const Input = forwardRef(
    isBlocked ? stateClasses.blocked : "",
    leftElement ? containerSizeClasses[size] : "",
    rightElement ? rightElementClasses[size] : "",
+   props.type === "number"
+    ? "appearance-none [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+    : "",
    className,
   ].join(" ");
 
@@ -166,7 +169,12 @@ const Input = forwardRef(
      disabled={isDisabled}
      readOnly={isReadOnly || isBlocked}
      required={isRequired}
-     onWheel={(e) => e.currentTarget.blur()}
+     onWheel={(e) => {
+       if (props.type === "number") {
+         e.preventDefault();
+       }
+       e.currentTarget.blur();
+     }}
      {...normalizedInputProps}
     />
 

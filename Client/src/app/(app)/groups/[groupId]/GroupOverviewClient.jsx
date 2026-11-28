@@ -40,7 +40,7 @@ export default function GroupOverviewClient({ initialDash, groupId, initialBoard
   const settlement = dash.settlement;
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-3 sm:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-wide text-(--tm)">
@@ -134,11 +134,23 @@ export default function GroupOverviewClient({ initialDash, groupId, initialBoard
             ))}
           </ul>
         )}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button href={`/groups/${groupId}/expenses`} size="md" variant="secondary" leftIcon={<LuReceipt size={14} />}>
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+          <Button
+            href={`/groups/${groupId}/expenses`}
+            size="md"
+            variant="secondary"
+            isFullWidth
+            leftIcon={<LuReceipt size={14} />}
+          >
             {t("overview.expenses")}
           </Button>
-          <Button href={`/groups/${groupId}/money`} size="md" variant="outline" leftIcon={<LuBanknote size={14} />}>
+          <Button
+            href={`/groups/${groupId}/money`}
+            size="md"
+            variant="outline"
+            isFullWidth
+            leftIcon={<LuBanknote size={14} />}
+          >
             {t("overview.money")}
           </Button>
         </div>

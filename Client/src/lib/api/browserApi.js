@@ -93,7 +93,8 @@ export const tokenStore = {
   clear() {
     if (typeof window === "undefined") return;
     deleteCookie("mm_csrf");
-    deleteCookie("mm_theme");
+    // NOTE: mm_theme is deliberately NOT cleared here. Theme is a user
+    // preference, not session data, so it must survive logout / session expiry.
     deleteCookie("auth-token");
     deleteCookie("user-role");
     deleteCookie("user-roles");

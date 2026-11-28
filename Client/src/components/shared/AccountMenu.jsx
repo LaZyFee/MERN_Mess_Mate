@@ -8,6 +8,7 @@ import Avatar from "@/components/shared/Avatar";
 import Button from "@/components/shared/Button";
 import { useT } from "@/lib/i18n/LangProvider";
 import { authApi } from "@/lib/api/auth";
+import { setThemeCookie } from "@/lib/store/uiStore";
 import { useAuthStore, useUser } from "@/lib/store/authStore";
 
 const LINKS = [
@@ -58,6 +59,8 @@ export default function AccountMenu() {
   const logout = async () => {
     setOpen(false);
     try { await authApi.logout(); } catch { /* Clear local state even if the request fails. */ }
+    // Keep the user's theme preference across logout (mm_theme is not session data).
+    setThemeCookie(document.documentElement.dataset.theme || "light");
     clearAuth();
     router.replace("/");
   };

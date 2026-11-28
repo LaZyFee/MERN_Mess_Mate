@@ -38,7 +38,7 @@ export function middleware(request) {
     response = NextResponse.redirect(url);
   } else if (isAuthPage && hasSession) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     url.search = "";
     response = NextResponse.redirect(url);
   } else {

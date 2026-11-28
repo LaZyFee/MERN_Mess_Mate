@@ -13,7 +13,7 @@ export default async function SessionsPage() {
     throw error;
   }
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-9">
+    <main className="px-4 py-6 sm:px-6 sm:py-9">
       <header className="mb-6 rounded-3xl bg-(--brand-bg) px-5 py-7 text-(--brand-fg) sm:px-8">
         <p className="text-sm font-semibold text-(--brand-on)">Account security</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Device sessions</h1>

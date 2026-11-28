@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   LuUsers,
@@ -10,6 +10,7 @@ import {
   LuUtensilsCrossed,
   LuRefreshCw,
 } from "react-icons/lu";
+import PageHeader from "@/components/shared/PageHeader";
 import Button from "@/components/shared/Button";
 import Skeleton from "@/components/shared/Skeleton";
 import Badge from "@/components/shared/Badge";
@@ -140,30 +141,50 @@ export default function HomeClient({ initialGroups }) {
       : (a.name || "").localeCompare(b.name || ""));
 
   return (
-    <div>
-      {/* Header row */}
-      <div
-        className="mb-5 flex flex-col gap-4 rounded-2xl border border-(--bd) bg-(--bgs) p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
-      >
-        <div>
-          <h2 className="text-xl font-extrabold text-(--tp) sm:text-2xl">{t("shell.groups")}</h2>
-          <p className="mt-1 text-sm text-(--tm)">{t("home.groupsHint")}</p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          <Button size="sm" variant="outline" leftIcon={<LuRefreshCw size={15} />} onClick={refresh} isLoading={refreshing} className="w-full sm:w-fit">
-            {t("shell.refresh")}
-          </Button>
-          <Button variant="primary" size="sm" leftIcon={<LuPlus size={15} />} onClick={() => router.push("/groups/create")} className="w-full sm:w-fit">
-            {t("grp.create")}
-          </Button>
-          <Button size="sm" variant="outline" leftIcon={<LuLogIn size={15} />} onClick={() => router.push("/join")} className="col-span-2 w-full sm:w-fit">
-            {t("grp.join")}
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-[100dvh] bg-(--bg) overflow-x-hidden">
+      <PageHeader
+        as="div"
+        className="mb-4 sm:mb-6"
+        eyebrow={t("shell.builtFor")}
+        title={t("shell.groups")}
+        description={t("home.groupsHint")}
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<LuRefreshCw size={15} />}
+              onClick={refresh}
+              isLoading={refreshing}
+              className="w-full sm:w-fit"
+            >
+              {t("shell.refresh")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<LuPlus size={15} />}
+              onClick={() => router.push("/groups/create")}
+              className="w-full sm:w-fit"
+            >
+              {t("grp.create")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<LuLogIn size={15} />}
+              onClick={() => router.push("/join")}
+              className="w-full sm:w-fit"
+            >
+              {t("grp.join")}
+            </Button>
+          </>
+        }
+      />
 
-      {groups.length > 0 && (
-        <div className="mb-4 grid gap-3 rounded-2xl border border-(--bd) bg-(--bgs) p-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:p-4">
+      {/* Search & sort bar */}
+      {/* {groups.length > 0 && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] p-3 sm:p-4 sm:bg-(--bgs) sm:rounded-2xl sm:border sm:border-(--bd)">
           <Input
             label={t("home.searchGroups")}
             type="search"
@@ -184,7 +205,7 @@ export default function HomeClient({ initialGroups }) {
             ]}
           />
         </div>
-      )}
+      )} */}
 
       {refreshing ? (
         <div
@@ -206,7 +227,7 @@ export default function HomeClient({ initialGroups }) {
         </div>
       ) : (
         <div
-          className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3"
+          className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 pb-[calc(16px+env(safe-area-inset-bottom))]"
         >
           {filteredGroups.map((g) => (
             <GroupCard

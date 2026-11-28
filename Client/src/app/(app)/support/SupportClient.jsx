@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { LuLifeBuoy, LuPlus, LuRefreshCw, LuTicket } from "react-icons/lu";
+import { LuPlus, LuRefreshCw, LuTicket } from "react-icons/lu";
 import Button from "@/components/shared/Button";
 import Card from "@/components/shared/Card";
 import Input from "@/components/shared/Input";
@@ -139,22 +139,11 @@ export default function SupportClient({ initialTickets = [], initialHasMore = fa
 
   return (
     <div className="flex flex-col gap-4 px-4 py-6 sm:px-6 sm:py-9">
-      <div className="rounded-3xl bg-(--brand-bg) p-5 text-(--brand-fg) sm:p-7">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm font-semibold text-(--brand-on)">
-            <LuLifeBuoy size={17} /> MealMate support
-          </p>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Support
-          </h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-(--brand-mute)">Track tickets and replies from the MealMate team.</p>
-        </div>
-        <div className="mt-5 flex items-center gap-2">
-          <Button size="sm" variant="ghost" isRound ariaLabel="Refresh" isLoading={loading} onClick={() => load()}>
-            <LuRefreshCw size={15} />
-          </Button>
-          <Button variant="primary" size="sm" leftIcon={<LuPlus size={14} />} onClick={() => setCreating(true)}>New ticket</Button>
-        </div>
+      <div className="mt-5 flex items-center gap-2">
+        <Button size="sm" variant="outline" isRound ariaLabel="Refresh" isLoading={loading} onClick={() => load()}>
+          Refresh <LuRefreshCw size={15} />
+        </Button>
+        <Button variant="primary" size="sm" leftIcon={<LuPlus size={14} />} onClick={() => setCreating(true)}>New ticket</Button>
       </div>
 
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">

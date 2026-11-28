@@ -34,7 +34,7 @@ function DutyRow({ groupId, duty, onDone, canAct }) {
   };
 
   return (
-    <li className="flex min-h-11 items-center justify-between gap-2 rounded-md bg-(--bgs) px-2 py-1">
+    <li className="flex min-h-11 items-center justify-between gap-2 rounded-md bg-(--bgs) px-2 py-1.5">
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-(--tp)">{taskLabel(duty)}</span>
         <span className="block truncate text-[11px] text-(--tm)">
@@ -117,7 +117,7 @@ export default function BoardWidget({ groupId, initialBoard, canAct = true }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2">
         <div className="min-w-0">
           <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-(--tm)">Duties</p>
           {duties.length === 0 ? (

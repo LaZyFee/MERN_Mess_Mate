@@ -10,6 +10,7 @@ import Avatar from "./Avatar";
 import Button from "./Button";
 import { useT } from "@/lib/i18n/LangProvider";
 import { useUser, useAuthStore } from "@/lib/store/authStore";
+import { setThemeCookie } from "@/lib/store/uiStore";
 import { authApi } from "@/lib/api/auth";
 
 const PUBLIC_NAV = [
@@ -20,7 +21,7 @@ const PUBLIC_NAV = [
 ];
 
 const ACCOUNT_NAV = [
-  { href: "/dashboard", key: "home", icon: LuLayoutDashboard, label: "shell.home" },
+  { href: "/dashboard", key: "dashboard", icon: LuLayoutDashboard, label: "shell.dashboard" },
   { href: "/inbox", key: "inbox", icon: LuBell, label: "shell.inbox" },
   { href: "/profile", key: "profile", icon: LuUser, label: "shell.profile" },
   { href: "/profile/sessions", key: "sessions", icon: LuUsers, label: "shell.sessions" },
@@ -79,6 +80,8 @@ export default function Topbar() {
       // ignore logout errors — clear local state regardless
     }
     clearAuth();
+    // Keep the user's theme preference across logout (mm_theme is not session data).
+    setThemeCookie(document.documentElement.dataset.theme || "light");
     router.push("/");
   }, [clearAuth, router]);
 
@@ -164,13 +167,14 @@ export default function Topbar() {
               >
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   onClick={() => setDropdownOpen((d) => !d)}
                   aria-haspopup="menu"
                   aria-expanded={dropdownOpen}
                   aria-controls="account-menu"
                   className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold text-(--tp) no-underline transition-colors hover:bg-(--pale)"
                 >
+
                   <Avatar
                     name={user.username || user.email}
                     src={user.profilePic}
@@ -178,7 +182,7 @@ export default function Topbar() {
                     className="mr-1"
                   />
                   <span>{user.username || user.email}</span>
-                  <LuUser size={14} className="ml-1 opacity-60" />
+
                 </Button>
                 {dropdownOpen && (
                   <div
